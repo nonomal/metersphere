@@ -20,7 +20,6 @@
   import { editorUploadFile } from '@/api/modules/case-management/featureCase';
   import { useI18n } from '@/hooks/useI18n';
   import useLocale from '@/locale/useLocale';
-  import { useAppStore } from '@/store';
 
   import '@halo-dev/richtext-editor/dist/style.css';
   import ExtensionImage from './extensions/image/index';
@@ -55,6 +54,7 @@
     ExtensionStrike,
     ExtensionSubscript,
     ExtensionSuperscript,
+    ExtensionTable,
     ExtensionTaskList,
     ExtensionText,
     ExtensionTextAlign,
@@ -65,14 +65,12 @@
     PluginKey,
     RichTextEditor,
   } from '@halo-dev/richtext-editor';
+  import CharacterCount from '@tiptap/extension-character-count';
   import Mention from '@tiptap/extension-mention';
   import type { queueAsPromised } from 'fastq';
   import * as fastq from 'fastq';
 
-  const appStore = useAppStore();
   const { t } = useI18n();
-
-  // image drag and paste upload
   type Task = {
     file: File;
     process: (permalink: string, fileId: string) => void;
@@ -83,18 +81,24 @@
       raw?: string;
       uploadImage?: (file: File) => Promise<any>;
       maxHeight?: string;
+      autoHeight?: boolean;
       filedIds?: string[];
       commentIds?: string[];
       wrapperClass?: string;
       placeholder?: string;
       draggable?: boolean;
       previewUrl?: string;
+      editable?: boolean;
+      limitLength?: number;
+      autoFocus?: boolean;
     }>(),
     {
       raw: '',
       uploadImage: undefined,
       placeholder: 'editor.placeholder',
       draggable: false,
+      autoHeight: true,
+      editable: true,
     }
   );
 
@@ -105,6 +109,8 @@
     (event: 'update:filedIds', value: string[]): void;
     (event: 'update', value: string): void;
     (event: 'update:commentIds', value: string): void;
+    (event: 'blur', eveValue: FocusEvent): void;
+    (event: 'focus', eveValue: FocusEvent): void;
   }>();
 
   const imagesNodesIds = useVModel(props, 'filedIds', emit);
@@ -116,8 +122,7 @@
     }
     const uploadFileId = await props.uploadImage(arg.file);
     if (uploadFileId) {
-      // const permanentUrl = `${PreviewEditorImageUrl}/${appStore.currentProjectId}/${uploadFileId}/${true}`;
-      const permanentUrl = `${props.previewUrl}/${appStore.currentProjectId}/${uploadFileId}/${true}`;
+      const permanentUrl = `${props.previewUrl}/${uploadFileId}/${true}`;
       arg.process(permanentUrl, uploadFileId);
     }
   }
@@ -132,6 +137,27 @@
       if (props.raw !== editor.value?.getHTML()) {
         editor.value?.commands.setContent(props.raw);
       }
+    }
+  );
+
+  watch(
+    () => props.editable,
+    (val) => {
+      // 更新富文本的可编辑配置
+      editor.value?.setOptions({ editable: val });
+    },
+    {
+      immediate: true,
+    }
+  );
+
+  watch(
+    () => props.autoFocus,
+    (val) => {
+      editor.value?.setOptions({ autofocus: val });
+      if (val) {
+        editor.value?.chain().focus();
+      }
     },
     {
       immediate: true,
@@ -141,6 +167,12 @@
   const attachmentSelectorModal = ref(false);
   const selectedImagesNode = ref<string>();
   const selectedCommentNode = ref<string>();
+
+  // TODO deletedImagesIds 为解决后台富文本附件删除图片时，后台服务器也删除，目前不确定这个版本要不要替换，等后台协调
+  const previousImages = ref<string[]>([]);
+  const deletedImagesIds = ref<string[]>([]);
+  const addedImages = ref(new Set());
+  const removedImages = ref(new Set());
 
   onMounted(() => {
     const debounceOnUpdate = useDebounceFn(() => {
@@ -179,7 +211,7 @@
         ExtensionText,
         ExtensionImage.configure({
           inline: true,
-          allowBase64: true,
+          allowBase64: false,
           HTMLAttributes: {
             loading: 'lazy',
           },
@@ -203,6 +235,33 @@
                       // eslint-disable-next-line prefer-destructuring
                       selectedImagesNode.value = images[0];
                     }
+
+                    const currentImagesSet = new Set(images);
+
+                    // 检查被删除的图片
+                    const deletedImages = previousImages.value.filter((fileId) => !currentImagesSet.has(fileId));
+                    deletedImages.forEach((id) => {
+                      if (!deletedImagesIds.value.includes(id)) {
+                        deletedImagesIds.value.push(id);
+                        removedImages.value.add(id);
+                      }
+                    });
+
+                    // 检查被添加的图片（包含撤销删除则从删除里边移除掉）
+                    const addedImagesNow = (images || []).filter((fileId) => !previousImages.value.includes(fileId));
+                    addedImagesNow.forEach((id: string) => {
+                      if (deletedImagesIds.value.includes(id)) {
+                        const index = deletedImagesIds.value.indexOf(id);
+                        if (index > -1) {
+                          deletedImagesIds.value.splice(index, 1);
+                          removedImages.value.delete(id);
+                        }
+                      }
+                      addedImages.value.add(id);
+                    });
+
+                    previousImages.value = images;
+
                     return DecorationSet.empty;
                   },
                 },
@@ -240,14 +299,15 @@
         ExtensionLink.configure({
           autolink: false,
           openOnClick: false,
+          linkOnPaste: true,
         }),
         ExtensionTextAlign.configure({
           types: ['heading', 'paragraph'],
         }),
         ExtensionUnderline,
-        // ExtensionTable.configure({
-        //   resizable: true,
-        // }),
+        ExtensionTable.configure({
+          resizable: true,
+        }),
         ExtensionSubscript,
         ExtensionSuperscript,
         ExtensionPlaceholder.configure({
@@ -326,7 +386,6 @@
           HTMLAttributes: {
             class: 'mention',
           },
-          // TODO第一版本先按照初始化评论的人 不加userMap
           // @ts-ignore
           renderHTML({ options, node }) {
             return [
@@ -338,10 +397,23 @@
           },
           suggestion,
         }) as Extension<any, any>,
+        CharacterCount.configure({
+          limit: props.limitLength || null,
+        }) as Extension,
       ],
-      autofocus: false,
+      autofocus: props.autoFocus,
+      editable: props.editable,
       onUpdate: () => {
         debounceOnUpdate();
+      },
+      onBlur: ({ event }) => {
+        // 避免移动到菜单上触发失去焦点切换视图
+        if (!event.relatedTarget) {
+          emit('blur', event);
+        }
+      },
+      onFocus: ({ event }) => {
+        emit('focus', event);
       },
       editorProps: {
         handleDrop: (view, event: DragEvent, _, moved) => {
@@ -434,10 +506,14 @@
     editor.value?.destroy();
   });
 
+  function focus() {
+    editor.value?.chain().focus();
+  }
+
   const contentStyles = computed(() => {
     return {
-      maxHeight: props.maxHeight || '200px',
-      overflow: 'auto',
+      maxHeight: props.autoHeight ? '' : props.maxHeight || '260px',
+      overflow: props.autoHeight ? 'hidden' : 'auto',
     };
   });
 
@@ -499,6 +575,10 @@
       console.log(error);
     }
   }
+
+  defineExpose({
+    focus,
+  });
 </script>
 
 <template>
@@ -517,20 +597,23 @@
     }
     @apply relative overflow-hidden;
     :deep(.halo-rich-text-editor .ProseMirror) {
-      padding: 16px 24px !important;
-      height: 130px;
-      p:first-child {
+      padding: 16px !important;
+      padding-top: 30px !important;
+      min-height: 130px;
+      > p:first-child {
         margin-top: 0;
       }
     }
     :deep(.halo-rich-text-editor) {
-      padding: 16px 24px !important;
+      padding: 2px 16px 16px !important;
       .editor-header {
         .ms-scroll-bar();
 
         justify-content: start !important;
+        border-color: var(--color-text-n8);
+        background-color: var(--color-text-fff);
       }
-      p:first-child {
+      > p:first-child {
         margin-top: 0;
       }
     }
@@ -545,9 +628,40 @@
     svg {
       color: var(--color-text-3) !important;
     }
+    & + div {
+      div:first-of-type {
+        .ms-scroll-bar();
+      }
+      & > div {
+        overflow: visible;
+        .bubble-menu button {
+          padding: 3px;
+        }
+      }
+    }
   }
   :deep(.editor-content) {
     .ms-scroll-bar();
+
+    background: var(--color-text-fff);
+  }
+  :deep(.tableWrapper) {
+    .ms-scroll-bar();
+    table {
+      tr,
+      th {
+        background: var(--color-text-fff) !important;
+      }
+      tr {
+        th,
+        td {
+          padding: 8px;
+        }
+        p {
+          margin-top: 0 !important;
+        }
+      }
+    }
   }
 </style>
 

@@ -4,6 +4,7 @@ package io.metersphere.system.controller;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import io.metersphere.project.domain.Project;
+import io.metersphere.sdk.constants.EmailInviteSource;
 import io.metersphere.sdk.constants.PermissionConstants;
 import io.metersphere.sdk.constants.UserSource;
 import io.metersphere.system.domain.Organization;
@@ -49,7 +50,7 @@ import java.util.Map;
 @RequestMapping("/system/user")
 public class UserController {
     @Resource
-    private UserService userService;
+    private SimpleUserService simpleUserService;
     @Resource
     private UserToolService userToolService;
     @Resource
@@ -67,14 +68,14 @@ public class UserController {
     @Operation(summary = "通过email或id查找用户")
     @RequiresPermissions(PermissionConstants.SYSTEM_USER_READ)
     public UserDTO getUser(@PathVariable String keyword) {
-        return userService.getUserDTOByKeyword(keyword);
+        return simpleUserService.getUserDTOByKeyword(keyword);
     }
 
     @PostMapping("/add")
     @Operation(summary = "系统设置-系统-用户-添加用户")
     @RequiresPermissions(PermissionConstants.SYSTEM_USER_ADD)
     public UserBatchCreateResponse addUser(@Validated({Created.class}) @RequestBody UserBatchCreateRequest userCreateDTO) {
-        return userService.addUser(userCreateDTO, UserSource.LOCAL.name(), SessionUtils.getUserId());
+        return simpleUserService.addUser(userCreateDTO, UserSource.LOCAL.name(), SessionUtils.getUserId());
     }
 
     @PostMapping("/update")
@@ -82,7 +83,7 @@ public class UserController {
     @RequiresPermissions(PermissionConstants.SYSTEM_USER_UPDATE)
     @Log(type = OperationLogType.UPDATE, expression = "#msClass.updateLog(#request)", msClass = UserLogService.class)
     public UserEditRequest updateUser(@Validated({Updated.class}) @RequestBody UserEditRequest request) {
-        return userService.updateUser(request, SessionUtils.getUserId());
+        return simpleUserService.updateUser(request, SessionUtils.getUserId());
     }
 
     @PostMapping("/page")
@@ -91,7 +92,7 @@ public class UserController {
     public Pager<List<UserTableResponse>> list(@Validated @RequestBody BasePageRequest request) {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString("id")) ? request.getSortString("id") : "create_time desc,id desc");
-        return PageUtils.setPageInfo(page, userService.list(request));
+        return PageUtils.setPageInfo(page, simpleUserService.list(request));
     }
 
     @PostMapping("/update/enable")
@@ -99,14 +100,14 @@ public class UserController {
     @RequiresPermissions(PermissionConstants.SYSTEM_USER_UPDATE)
     @Log(type = OperationLogType.UPDATE, expression = "#msClass.batchUpdateEnableLog(#request)", msClass = UserLogService.class)
     public TableBatchProcessResponse updateUserEnable(@Validated @RequestBody UserChangeEnableRequest request) {
-        return userService.updateUserEnable(request, SessionUtils.getUserId(), SessionUtils.getUser().getName());
+        return simpleUserService.updateUserEnable(request, SessionUtils.getUserId(), SessionUtils.getUser().getName());
     }
 
     @PostMapping(value = "/import", consumes = {"multipart/form-data"})
     @Operation(summary = "系统设置-系统-用户-导入用户")
     @RequiresPermissions(PermissionConstants.SYSTEM_USER_IMPORT)
     public UserImportResponse importUser(@RequestPart(value = "file", required = false) MultipartFile excelFile) {
-        return userService.importByExcel(excelFile, UserSource.LOCAL.name(), SessionUtils.getUserId());
+        return simpleUserService.importByExcel(excelFile, UserSource.LOCAL.name(), SessionUtils.getUserId());
     }
 
     @PostMapping("/delete")
@@ -114,7 +115,7 @@ public class UserController {
     @Log(type = OperationLogType.DELETE, expression = "#msClass.deleteLog(#request)", msClass = UserLogService.class)
     @RequiresPermissions(PermissionConstants.SYSTEM_USER_DELETE)
     public TableBatchProcessResponse deleteUser(@Validated @RequestBody TableBatchProcessDTO request) {
-        return userService.deleteUser(request, SessionUtils.getUserId(), SessionUtils.getUser().getName());
+        return simpleUserService.deleteUser(request, SessionUtils.getUserId(), SessionUtils.getUser().getName());
     }
 
     @PostMapping("/reset/password")
@@ -122,12 +123,12 @@ public class UserController {
     @RequiresPermissions(PermissionConstants.SYSTEM_USER_UPDATE)
     @Log(type = OperationLogType.UPDATE, expression = "#msClass.resetPasswordLog(#request)", msClass = UserLogService.class)
     public TableBatchProcessResponse resetPassword(@Validated @RequestBody TableBatchProcessDTO request) {
-        return userService.resetPassword(request, SessionUtils.getUserId());
+        return simpleUserService.resetPassword(request, SessionUtils.getUserId());
     }
 
     @GetMapping("/get/global/system/role")
     @Operation(summary = "系统设置-系统-用户-查找系统级用户组")
-    @RequiresPermissions(PermissionConstants.SYSTEM_USER_ROLE_READ)
+    @RequiresPermissions(PermissionConstants.SYSTEM_USER_READ)
     public List<UserSelectOption> getGlobalSystemRole() {
         return globalUserRoleService.getGlobalSystemRoleList();
     }
@@ -186,18 +187,18 @@ public class UserController {
     @Operation(summary = "系统设置-系统-用户-邀请用户注册")
     @RequiresPermissions(PermissionConstants.SYSTEM_USER_INVITE)
     public UserInviteResponse invite(@Validated @RequestBody UserInviteRequest request) {
-        return userService.saveInviteRecord(request, SessionUtils.getUser());
+        return simpleUserService.saveInviteRecord(request, EmailInviteSource.SYSTEM.name(), SessionUtils.getUser());
     }
 
     @GetMapping("/check-invite/{inviteId}")
     @Operation(summary = "系统设置-系统-用户-用户接受注册邀请并创建账户")
     public void checkInviteNum(@PathVariable String inviteId) {
-        userService.getUserInviteAndCheckEfficient(inviteId);
+        simpleUserService.getUserInviteAndCheckEfficient(inviteId);
     }
 
     @PostMapping("/register-by-invite")
     @Operation(summary = "系统设置-系统-用户-用户接受注册邀请并创建账户")
     public String registerByInvite(@Validated @RequestBody UserRegisterRequest request) throws Exception {
-        return userService.registerByInvite(request);
+        return simpleUserService.registerByInvite(request);
     }
 }

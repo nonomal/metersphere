@@ -1,36 +1,43 @@
 <template>
   <div class="p-[16px]">
-    <div class="mb-4 flex items-center justify-between">
-      <a-radio-group v-model:model-value="showType" type="button" class="file-show-type" @change="changeShowType">
-        <a-radio value="All">{{ t('report.all') }}</a-radio>
-        <a-radio value="INDEPENDENT">{{ t('report.independent') }}</a-radio>
-        <a-radio value="INTEGRATED">{{ t('report.collection') }}</a-radio>
-      </a-radio-group>
-      <a-input-search
-        v-model:model-value="keyword"
-        :placeholder="t('project.menu.nameSearch')"
-        allow-clear
-        class="mx-[8px] w-[240px]"
-        @search="searchList"
-        @press-enter="searchList"
-        @clear="searchList"
-      />
-    </div>
+    <MsAdvanceFilter
+      ref="msAdvanceFilterRef"
+      v-model:keyword="keyword"
+      :view-type="ViewTypeEnum.TEST_PLAN_REPORT"
+      :filter-config-list="filterConfigList"
+      :search-placeholder="t('project.menu.nameSearch')"
+      @keyword-search="searchList()"
+      @adv-search="handleAdvSearch"
+      @refresh="initData()"
+    >
+      <template #left>
+        <a-radio-group v-model:model-value="showType" type="button" class="file-show-type" @change="changeShowType">
+          <a-radio value="All">{{ t('report.all') }}</a-radio>
+          <a-radio value="INDEPENDENT">{{ t('report.detail.testReport') }}</a-radio>
+          <a-radio value="INTEGRATED">{{ t('report.detail.testPlanGroupReport') }}</a-radio>
+        </a-radio-group>
+      </template>
+    </MsAdvanceFilter>
     <!-- 报告列表 -->
     <ms-base-table
       v-bind="propsRes"
       ref="tableRef"
+      class="mt-4"
       :action-config="tableBatchActions"
+      :not-show-table-filter="isAdvancedSearchMode"
       v-on="propsEvent"
       @batch-action="handleTableBatch"
+      @filter-change="filterChange"
     >
-      <template #name="{ record, rowIndex }">
-        <div
-          type="text"
-          class="one-line-text flex w-full text-[rgb(var(--primary-5))]"
-          @click="showReportDetail(record.id, rowIndex)"
-          >{{ characterLimit(record.name) }}</div
-        >
+      <template #name="{ record }">
+        <div class="one-line-text text-[rgb(var(--primary-5))]" @click="showReportDetail(record.id, record.integrated)">
+          {{ record.name }}
+        </div>
+      </template>
+      <template #integrated="{ record }">
+        <MsTag theme="light" :type="record.integrated ? 'primary' : undefined">
+          {{ record.integrated ? t('report.detail.testPlanGroupReport') : t('report.detail.testReport') }}
+        </MsTag>
       </template>
 
       <!-- 通过率 -->
@@ -47,21 +54,15 @@
       </template>
       <template #passRate="{ record }">
         <div class="text-[var(--color-text-1)]">
-          {{ `${record.passRate | 0}%` }}
+          {{ `${record.passRate || '0.00'}%` }}
         </div>
       </template>
       <!-- 执行状态筛选 -->
       <template #resultStatus="{ record }">
-        <ExecutionStatus :module-type="ReportStatusEnum.REPORT_STATUS" :status="record.resultStatus" />
-      </template>
-      <template #execStatus="{ record }">
-        <ExecutionStatus :module-type="ReportStatusEnum.EXEC_STATUS" :status="record.execStatus" />
-      </template>
-      <template #[FilterSlotNameEnum.TEST_PLAN_REPORT_EXEC_STATUS]="{ filterContent }">
-        <ExecutionStatus :module-type="ReportStatusEnum.EXEC_STATUS" :status="filterContent.value" />
+        <ExecutionStatus v-if="record.resultStatus !== '-'" :status="record.resultStatus" />
       </template>
       <template #[FilterSlotNameEnum.TEST_PLAN_STATUS_FILTER]="{ filterContent }">
-        <ExecutionStatus :module-type="ReportStatusEnum.REPORT_STATUS" :status="filterContent.value" />
+        <ExecutionStatus :status="filterContent.value" />
       </template>
       <template #triggerMode="{ record }">
         <span>{{ t(TriggerModeLabel[record.triggerMode as keyof typeof TriggerModeLabel]) }}</span>
@@ -70,38 +71,51 @@
         <span>{{ dayjs(record.operationTime).format('YYYY-MM-DD HH:mm:ss') }}</span>
       </template>
       <template #operation="{ record }">
+        <MsButton v-permission="['PROJECT_TEST_PLAN_REPORT:READ+DELETE']" @click="handleDelete(record.id, record.name)">
+          {{ t('ms.comment.delete') }}
+        </MsButton>
         <MsButton
-          v-permission="['PROJECT_TEST_PLAN_REPORT:READ+DELETE']"
+          v-permission="['PROJECT_TEST_PLAN_REPORT:READ+EXPORT']"
           class="!mr-0"
-          @click="handleDelete(record.id, record.name)"
-          >{{ t('ms.comment.delete') }}</MsButton
+          @click="() => exportPdf(record, record.integrated)"
         >
+          {{ t('common.export') }}
+        </MsButton>
       </template>
     </ms-base-table>
   </div>
 </template>
 
 <script setup lang="ts">
-  import { ref } from 'vue';
+  import { useRoute, useRouter } from 'vue-router';
   import { Message } from '@arco-design/web-vue';
   import dayjs from 'dayjs';
 
+  import MsAdvanceFilter from '@/components/pure/ms-advance-filter/index.vue';
+  import { FilterFormItem, FilterResult } from '@/components/pure/ms-advance-filter/type';
   import MsButton from '@/components/pure/ms-button/index.vue';
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import type { BatchActionParams, BatchActionQueryParams, MsTableColumn } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
+  import MsTag from '@/components/pure/ms-tag/ms-tag.vue';
+  // import ExecStatus from '@/views/test-plan/report/component/execStatus.vue';
   import ExecutionStatus from '@/views/test-plan/report/component/reportStatus.vue';
 
   import { reportBathDelete, reportDelete, reportList, reportRename } from '@/api/modules/test-plan/report';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
+  import useOpenNewPage from '@/hooks/useOpenNewPage';
   import { useTableStore } from '@/store';
   import useAppStore from '@/store/modules/app';
+  import useCacheStore from '@/store/modules/cache/cache';
   import { characterLimit } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { BatchApiParams } from '@/models/common';
-  import { PlanReportStatus, ReportStatusEnum, TriggerModeLabel } from '@/enums/reportEnum';
+  import { FilterType, ViewTypeEnum } from '@/enums/advancedFilterEnum';
+  // import { ReportExecStatus } from '@/enums/apiEnum';
+  import { PlanReportStatus, TriggerModeLabel } from '@/enums/reportEnum';
+  import { FullPageEnum, TestPlanRouteEnum } from '@/enums/routeEnum';
   import { ColumnEditTypeEnum, TableKeyEnum } from '@/enums/tableEnum';
   import { FilterSlotNameEnum } from '@/enums/tableFilterEnum';
 
@@ -109,26 +123,32 @@
 
   const appStore = useAppStore();
   const tableStore = useTableStore();
+  const cacheStore = useCacheStore();
+
   const { t } = useI18n();
   const keyword = ref<string>('');
+  const router = useRouter();
+  const route = useRoute();
+  const { openNewPage, openNewPageWithParams } = useOpenNewPage();
 
   type ReportShowType = 'All' | 'INDEPENDENT' | 'INTEGRATED';
-  const showType = ref<ReportShowType>('All');
+  const localSHowTypeKey = 'testPlanReportShowType';
+  const showType = ref<ReportShowType>((localStorage.getItem(localSHowTypeKey) as ReportShowType) || 'All');
 
-  const executeResultOptions = computed(() => {
-    return Object.keys(PlanReportStatus[ReportStatusEnum.EXEC_STATUS]).map((key) => {
-      return {
-        value: key,
-        label: PlanReportStatus[ReportStatusEnum.EXEC_STATUS][key].statusText,
-      };
-    });
-  });
+  // const executeResultOptions = computed(() => {
+  //   return Object.values(ReportExecStatus).map((e) => {
+  //     return {
+  //       value: e,
+  //       key: e,
+  //     };
+  //   });
+  // });
 
   const statusResultOptions = computed(() => {
-    return Object.keys(PlanReportStatus[ReportStatusEnum.REPORT_STATUS]).map((key) => {
+    return Object.keys(PlanReportStatus).map((key) => {
       return {
         value: key,
-        label: PlanReportStatus[ReportStatusEnum.REPORT_STATUS][key].statusText,
+        label: t(PlanReportStatus[key].label),
       };
     });
   });
@@ -165,9 +185,15 @@
         sortDirections: ['ascend', 'descend'],
         sorter: true,
       },
-      ellipsis: true,
       showDrag: false,
       columnSelectorDisabled: true,
+    },
+    {
+      title: 'report.type',
+      slotName: 'integrated',
+      dataIndex: 'integrated',
+      width: 150,
+      showDrag: true,
     },
     {
       title: 'report.plan.name',
@@ -176,28 +202,13 @@
       width: 200,
       showInTable: true,
       showTooltip: true,
-      ellipsis: true,
       showDrag: true,
       columnSelectorDisabled: true,
     },
     {
-      title: 'report.execStatus',
-      dataIndex: 'execStatus',
-      slotName: 'execStatus',
-      filterConfig: {
-        options: executeResultOptions.value,
-        filterSlotName: FilterSlotNameEnum.TEST_PLAN_REPORT_EXEC_STATUS,
-      },
-      showInTable: true,
-      width: 200,
-      showDrag: true,
-    },
-
-    {
       title: 'report.result',
       dataIndex: 'resultStatus',
       slotName: 'resultStatus',
-      titleSlotName: 'statusFilter',
       sortable: {
         sortDirections: ['ascend', 'descend'],
         sorter: true,
@@ -207,7 +218,7 @@
         filterSlotName: FilterSlotNameEnum.TEST_PLAN_STATUS_FILTER,
       },
       showInTable: true,
-      width: 200,
+      width: 150,
       showDrag: true,
     },
     {
@@ -239,8 +250,8 @@
     },
     {
       title: 'report.operating',
-      dataIndex: 'startTime',
-      slotName: 'startTime',
+      dataIndex: 'createTime',
+      slotName: 'createTime',
       width: 180,
       sortable: {
         sortDirections: ['ascend', 'descend'],
@@ -268,7 +279,18 @@
       return false;
     }
   };
-  const { propsRes, propsEvent, loadList, setLoadListParams, resetSelector } = useTable(
+  const {
+    propsRes,
+    propsEvent,
+    viewId,
+    advanceFilter,
+    setAdvanceFilter,
+    loadList,
+    setLoadListParams,
+    setPagination,
+    resetSelector,
+    resetFilterParams,
+  } = useTable(
     reportList,
     {
       tableKey: TableKeyEnum.TEST_PLAN_REPORT_TABLE,
@@ -283,19 +305,91 @@
     },
     (item) => ({
       ...item,
-      startTime: dayjs(item.startTime).format('YYYY-MM-DD HH:mm:ss'),
+      createTime: dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss'),
     }),
     rename
   );
 
-  function initData() {
+  const msAdvanceFilterRef = ref<InstanceType<typeof MsAdvanceFilter>>();
+  const isAdvancedSearchMode = computed(() => msAdvanceFilterRef.value?.isAdvancedSearchMode);
+
+  function initData(dataIndex?: string, value?: string[] | (string | number | boolean)[] | undefined) {
+    const filterParams = {
+      ...propsRes.value.filter,
+    };
+    if (dataIndex && value) {
+      filterParams[dataIndex] = value;
+    }
     setLoadListParams({
       keyword: keyword.value,
       projectId: appStore.currentProjectId,
-      filter: { ...propsRes.value.filter, integrated: integratedFilters.value },
+      filter: { ...filterParams, integrated: integratedFilters.value },
+      viewId: viewId.value,
+      combineSearch: advanceFilter,
     });
     loadList();
   }
+
+  function searchList() {
+    resetSelector();
+    initData();
+  }
+
+  const filterConfigList = computed<FilterFormItem[]>(() => [
+    {
+      title: 'report.name',
+      dataIndex: 'name',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'report.plan.name',
+      dataIndex: 'testPlanName',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'report.result',
+      dataIndex: 'resultStatus',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        options: statusResultOptions.value,
+      },
+    },
+    {
+      title: 'report.passRate',
+      dataIndex: 'passRate',
+      type: FilterType.NUMBER,
+      numberProps: {
+        min: 0,
+        suffix: '%',
+      },
+    },
+    {
+      title: 'report.trigger.mode',
+      dataIndex: 'triggerMode',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        options: triggerModeOptions.value,
+      },
+    },
+    {
+      title: 'common.creator',
+      dataIndex: 'createUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.createTime',
+      dataIndex: 'createTime',
+      type: FilterType.DATE_PICKER,
+    },
+  ]);
+  // 高级检索
+  const handleAdvSearch = async (filter: FilterResult, id: string) => {
+    keyword.value = '';
+    setAdvanceFilter(filter, id);
+    searchList(); // 基础筛选都清空
+  };
 
   const tableBatchActions = {
     baseAction: [
@@ -303,6 +397,11 @@
         label: 'common.delete',
         eventTag: 'batchStop',
         permission: ['PROJECT_TEST_PLAN_REPORT:READ+DELETE'],
+      },
+      {
+        label: 'common.export',
+        eventTag: 'batchExport',
+        permission: ['PROJECT_TEST_PLAN_REPORT:READ+EXPORT'],
       },
     ],
   };
@@ -322,40 +421,48 @@
       condition: {
         filter: { ...propsRes.value.filter, integrated: integratedFilters.value },
         keyword: keyword.value,
+        viewId: viewId.value,
+        combineSearch: advanceFilter,
       },
       projectId: appStore.currentProjectId,
     };
 
-    openModal({
-      type: 'error',
-      title: t('report.delete.tip', {
-        count: params?.currentSelectCount || params?.selectedIds?.length,
-      }),
-      content: '',
-      okText: t('common.confirmDelete'),
-      cancelText: t('common.cancel'),
-      okButtonProps: {
-        status: 'danger',
-      },
-      onBeforeOk: async () => {
-        try {
-          await reportBathDelete(batchParams.value);
-          Message.success(t('apiTestDebug.deleteSuccess'));
-          resetSelector();
-          initData();
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.log(error);
-        }
-      },
-      hideCancel: false,
-    });
+    if (event.eventTag === 'batchExport') {
+      openNewPageWithParams(
+        FullPageEnum.FULL_PAGE_TEST_PLAN_EXPORT_PDF,
+        {
+          type: showType.value,
+        },
+        batchParams.value
+      );
+    } else if (event.eventTag === 'batchStop') {
+      openModal({
+        type: 'error',
+        title: t('report.delete.tip', {
+          count: params?.currentSelectCount || params?.selectedIds?.length,
+        }),
+        content: '',
+        okText: t('common.confirmDelete'),
+        cancelText: t('common.cancel'),
+        okButtonProps: {
+          status: 'danger',
+        },
+        onBeforeOk: async () => {
+          try {
+            await reportBathDelete(batchParams.value);
+            Message.success(t('apiTestDebug.deleteSuccess'));
+            resetSelector();
+            initData();
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.log(error);
+          }
+        },
+        hideCancel: false,
+      });
+    }
   };
 
-  function searchList() {
-    resetSelector();
-    initData();
-  }
   const handleDelete = async (id: string, currentName: string) => {
     openModal({
       type: 'error',
@@ -380,26 +487,58 @@
     });
   };
 
-  onBeforeMount(() => {
-    initData();
-  });
-
   function changeShowType(val: string | number | boolean) {
     showType.value = val as ReportShowType;
-    resetSelector();
-    console.log(propsRes.value);
-    propsRes.value.filter = {
-      integrated: integratedFilters.value,
-    };
-    initData();
+    localStorage.setItem(localSHowTypeKey, val as string);
+    resetFilterParams();
+    // 重置分页
+    setPagination({
+      current: 1,
+    });
+    searchList();
+  }
+
+  function filterChange(dataIndex: string, value: string[] | (string | number | boolean)[] | undefined) {
+    initData(dataIndex, value);
   }
 
   /**
    * 报告详情 showReportDetail
    */
-  function showReportDetail(id: string, rowIndex: number) {
-    // 待处理
+  function showReportDetail(id: string, type: boolean) {
+    router.push({
+      name: TestPlanRouteEnum.TEST_PLAN_REPORT_DETAIL,
+      query: {
+        id,
+        type: type ? 'GROUP' : 'TEST_PLAN',
+      },
+    });
   }
+
+  function exportPdf(record: any, type: boolean) {
+    openNewPage(FullPageEnum.FULL_PAGE_TEST_PLAN_EXPORT_PDF, {
+      id: record.id,
+      type: type ? 'GROUP' : 'TEST_PLAN',
+    });
+  }
+
+  const isActivated = computed(() => cacheStore.cacheViews.includes(TestPlanRouteEnum.TEST_PLAN_REPORT));
+
+  onBeforeMount(() => {
+    if (route.query.id) {
+      showReportDetail(route.query.id as string, route.query.type === 'GROUP');
+    }
+    initData();
+  });
+
+  onActivated(() => {
+    if (isActivated.value) {
+      if (route.query.id) {
+        showReportDetail(route.query.id as string, route.query.type === 'GROUP');
+      }
+      initData();
+    }
+  });
 </script>
 
 <style lang="less" scoped>

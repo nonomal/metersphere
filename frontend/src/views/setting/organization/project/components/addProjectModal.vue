@@ -6,6 +6,7 @@
     unmount-on-close
     :mask-closable="false"
     @cancel="handleCancel(false)"
+    @close="handleCancel(false)"
   >
     <template #title>
       <span v-if="isEdit" class="flex">
@@ -74,8 +75,25 @@
         </a-form-item>
         <a-form-item
           v-if="showPool"
-          field="resourcePoolIds"
+          field="allResourcePool"
+          class="!mb-0"
           :label="t('system.project.resourcePool')"
+          asterisk-position="end"
+          :rules="[{ required: showPool, message: t('system.project.poolIsNotNull') }]"
+        >
+          <!-- TOTO 等待联调 -->
+          <a-radio-group v-model="form.allResourcePool" class="mb-[16px]">
+            <a-radio :value="true">
+              {{ t('system.project.allResPool') }}
+            </a-radio>
+            <a-radio :value="false">{{ t('system.project.specifyResPool') }}</a-radio>
+          </a-radio-group>
+        </a-form-item>
+        <a-form-item
+          v-if="!form.allResourcePool"
+          field="resourcePoolIds"
+          hide-asterisk
+          hide-label
           asterisk-position="end"
           :rules="[{ required: showPool, message: t('system.project.poolIsNotNull') }]"
         >
@@ -86,7 +104,7 @@
             :is-org="true"
           />
         </a-form-item>
-        <a-form-item field="description" :label="t('system.organization.description')">
+        <a-form-item field="description" :label="t('common.desc')">
           <a-textarea
             v-model="form.description"
             :max-length="1000"
@@ -139,6 +157,7 @@
 
   import { CreateOrUpdateSystemProjectParams, SystemOrgOption } from '@/models/setting/system/orgAndProject';
 
+  import { showUpdateOrCreateMessage } from '@/views/setting/utils';
   import type { FormInstance, ValidatedError } from '@arco-design/web-vue';
 
   defineOptions({
@@ -187,7 +206,7 @@
 
   const allModuleIds = ['bugManagement', 'caseManagement', 'apiTest', 'testPlan'];
 
-  const showPoolModuleIds = ['apiTest'];
+  const showPoolModuleIds = ['apiTest', 'testPlan'];
 
   const form = reactive<CreateOrUpdateSystemProjectParams>({
     name: '',
@@ -197,6 +216,7 @@
     resourcePoolIds: [],
     enable: true,
     moduleIds: allModuleIds,
+    allResourcePool: true,
   });
 
   const currentVisible = defineModel<boolean>('visible', {
@@ -221,7 +241,12 @@
     pause();
   };
   const handleModuleChange = (value: (string | number | boolean)[]) => {
-    if (props.currentProject?.id && timer.value === 5 && props.currentProject.moduleIds?.length) {
+    if (
+      value.length < (props.currentProject?.moduleIds || []).length &&
+      props.currentProject?.id &&
+      timer.value === 5 &&
+      props.currentProject.moduleIds?.length
+    ) {
       if (props.currentProject.moduleIds.some((item) => value.includes(item))) {
         resume();
         Message.warning({
@@ -236,6 +261,7 @@
     }
   };
   const handleCancel = (shouldSearch: boolean) => {
+    formRef.value?.resetFields();
     emit('cancel', shouldSearch);
   };
 
@@ -246,10 +272,8 @@
       }
       try {
         loading.value = true;
-        await createOrUpdateProjectByOrg({ id: isEdit.value ? props.currentProject?.id : '', ...form });
-        Message.success(
-          isEdit.value ? t('system.project.updateProjectSuccess') : t('system.project.createProjectSuccess')
-        );
+        const res = await createOrUpdateProjectByOrg({ id: isEdit.value ? props.currentProject?.id : '', ...form });
+        showUpdateOrCreateMessage(isEdit.value, res.id);
         appStore.initProjectList();
         handleCancel(true);
       } catch (error) {
@@ -283,6 +307,7 @@
         form.organizationId = props.currentProject.organizationId;
         form.moduleIds = props.currentProject.moduleIds;
         form.resourcePoolIds = props.currentProject.resourcePoolIds;
+        form.allResourcePool = props.currentProject.allResourcePool;
       }
     } else {
       // 新建

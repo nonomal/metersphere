@@ -2,6 +2,7 @@ package io.metersphere.api.mapper;
 
 import io.metersphere.api.domain.ApiScenarioBlob;
 import io.metersphere.api.domain.ApiScenarioReport;
+import io.metersphere.api.dto.ApiExecResultDTO;
 import io.metersphere.api.dto.definition.ApiReportBatchRequest;
 import io.metersphere.api.dto.definition.ApiReportPageRequest;
 import io.metersphere.api.dto.definition.ExecuteReportDTO;
@@ -11,13 +12,16 @@ import io.metersphere.system.dto.sdk.ApiReportMessageDTO;
 import io.metersphere.system.dto.taskcenter.TaskCenterDTO;
 import io.metersphere.system.dto.taskcenter.request.TaskCenterBatchRequest;
 import io.metersphere.system.dto.taskcenter.request.TaskCenterPageRequest;
+import io.metersphere.system.interceptor.BaseConditionFilter;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
 public interface ExtApiScenarioReportMapper {
+    @BaseConditionFilter
     List<ApiScenarioReport> list(@Param("request") ApiReportPageRequest request);
 
+    @BaseConditionFilter
     List<String> getIds(@Param("request") ApiReportBatchRequest request);
 
     List<ApiScenarioReport> selectApiReportByIds(@Param("ids") List<String> ids);
@@ -51,10 +55,14 @@ public interface ExtApiScenarioReportMapper {
 
     void updateApiScenario(List<String> ids);
 
-    List<ApiScenarioReportStepDTO> selectStepDetailByReportId(String id);
+    List<ApiScenarioReportStepDTO> selectStepDetailByReportId(@Param("id") String id);
 
     List<ApiReportMessageDTO> getNoticeList(@Param("ids") List<String> ids);
 
 
     List<ExecuteReportDTO> getHistoryDeleted(@Param("ids") List<String> ids);
+
+    List<ExecuteReportDTO> getTestPlanNum(@Param("ids") List<String> ids);
+
+    List<ApiExecResultDTO> selectExecResultByScenarioIds(@Param("ids") List<String> scenarioIds);
 }

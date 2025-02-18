@@ -20,10 +20,10 @@ public class ApiScenarioReport implements Serializable {
     @Size(min = 1, max = 300, message = "{api_scenario_report.name.length_range}", groups = {Created.class, Updated.class})
     private String name;
 
-    @Schema(description = "测试计划id", requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotBlank(message = "{api_scenario_report.test_plan_id.not_blank}", groups = {Created.class})
-    @Size(min = 1, max = 50, message = "{api_scenario_report.test_plan_id.length_range}", groups = {Created.class, Updated.class})
-    private String testPlanId;
+    @Schema(description = "测试计划关联场景表ID", requiredMode = Schema.RequiredMode.REQUIRED)
+    @NotBlank(message = "{api_scenario_report.test_plan_scenario_id.not_blank}", groups = {Created.class})
+    @Size(min = 1, max = 50, message = "{api_scenario_report.test_plan_scenario_id.length_range}", groups = {Created.class, Updated.class})
+    private String testPlanScenarioId;
 
     @Schema(description = "创建人")
     private String createUser;
@@ -142,12 +142,21 @@ public class ApiScenarioReport implements Serializable {
     @Schema(description = "等待时间")
     private Long waitingTime;
 
+    @Schema(description = "执行状态", requiredMode = Schema.RequiredMode.REQUIRED)
+    @NotBlank(message = "{api_scenario_report.exec_status.not_blank}", groups = {Created.class})
+    @Size(min = 1, max = 20, message = "{api_scenario_report.exec_status.length_range}", groups = {Created.class, Updated.class})
+    private String execStatus;
+
+    @Schema(description = "是否是测试计划整体执行", requiredMode = Schema.RequiredMode.REQUIRED)
+    @NotNull(message = "{api_scenario_report.plan.not_blank}", groups = {Created.class})
+    private Boolean plan;
+
     private static final long serialVersionUID = 1L;
 
     public enum Column {
         id("id", "id", "VARCHAR", false),
         name("name", "name", "VARCHAR", true),
-        testPlanId("test_plan_id", "testPlanId", "VARCHAR", false),
+        testPlanScenarioId("test_plan_scenario_id", "testPlanScenarioId", "VARCHAR", false),
         createUser("create_user", "createUser", "VARCHAR", false),
         deleteTime("delete_time", "deleteTime", "BIGINT", false),
         deleteUser("delete_user", "deleteUser", "VARCHAR", false),
@@ -176,7 +185,9 @@ public class ApiScenarioReport implements Serializable {
         requestPassRate("request_pass_rate", "requestPassRate", "VARCHAR", false),
         assertionPassRate("assertion_pass_rate", "assertionPassRate", "VARCHAR", false),
         scriptIdentifier("script_identifier", "scriptIdentifier", "VARCHAR", false),
-        waitingTime("waiting_time", "waitingTime", "BIGINT", false);
+        waitingTime("waiting_time", "waitingTime", "BIGINT", false),
+        execStatus("exec_status", "execStatus", "VARCHAR", false),
+        plan("plan", "plan", "BIT", true);
 
         private static final String BEGINNING_DELIMITER = "`";
 

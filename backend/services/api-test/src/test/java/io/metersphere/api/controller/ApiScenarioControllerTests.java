@@ -26,9 +26,14 @@ import io.metersphere.api.service.definition.ApiTestCaseService;
 import io.metersphere.api.service.scenario.ApiScenarioReportService;
 import io.metersphere.api.service.scenario.ApiScenarioService;
 import io.metersphere.api.utils.ApiDataUtils;
+import io.metersphere.plan.domain.TestPlanApiScenario;
+import io.metersphere.plan.domain.TestPlanExample;
+import io.metersphere.plan.mapper.TestPlanApiScenarioMapper;
+import io.metersphere.plan.mapper.TestPlanMapper;
 import io.metersphere.plugin.api.spi.AbstractMsTestElement;
 import io.metersphere.project.api.assertion.MsResponseCodeAssertion;
 import io.metersphere.project.api.assertion.MsScriptAssertion;
+import io.metersphere.project.domain.FileMetadata;
 import io.metersphere.project.domain.ProjectVersion;
 import io.metersphere.project.dto.environment.variables.CommonVariables;
 import io.metersphere.project.dto.filemanagement.request.FileUploadRequest;
@@ -46,6 +51,7 @@ import io.metersphere.sdk.file.FileRequest;
 import io.metersphere.sdk.mapper.EnvironmentGroupMapper;
 import io.metersphere.sdk.mapper.EnvironmentMapper;
 import io.metersphere.sdk.util.BeanUtils;
+import io.metersphere.sdk.util.CommonBeanFactory;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.system.base.BaseTest;
 import io.metersphere.system.controller.handler.ResultHolder;
@@ -71,6 +77,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.context.jdbc.SqlConfig;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
@@ -94,6 +102,8 @@ public class ApiScenarioControllerTests extends BaseTest {
     private static final String BASE_PATH = "/api/scenario/";
     private static final String TRASH_PAGE = "trash/page";
     private static final String BATCH_EDIT = "batch-operation/edit";
+    private static final String STATISTICS = "/statistics";
+
     private static final String FOLLOW = "follow/";
     protected static final String UPLOAD_TEMP_FILE = "upload/temp/file";
     protected static final String DELETE_TO_GC = "delete-to-gc/{0}";
@@ -175,6 +185,12 @@ public class ApiScenarioControllerTests extends BaseTest {
     private UserMapper userMapper;
     @Resource
     private ApiScenarioReportService scenarioReportService;
+    @Resource
+    private ApiScenarioCsvStepMapper apiScenarioCsvStepMapper;
+    @Resource
+    private TestPlanMapper testPlanMapper;
+    @Resource
+    private TestPlanApiScenarioMapper testPlanApiScenarioMapper;
 
     private static String fileMetadataId;
     private static String fileMetadataStepId;
@@ -261,9 +277,10 @@ public class ApiScenarioControllerTests extends BaseTest {
                 schedule.setValue("0 0 0/1 * * ? ");
             } else {
                 apiScenario.setGrouped(false);
-                apiScenario.setEnvironmentId(environments.get(0).getId());
+                apiScenario.setEnvironmentId(environments.getFirst().getId());
                 schedule.setValue("1111");
             }
+            schedule.setNum(1231L);
             scheduleMapper.insertSelective(schedule);
             apiScenarioMapper.insertSelective(apiScenario);
         }
@@ -275,7 +292,7 @@ public class ApiScenarioControllerTests extends BaseTest {
         scenarioReport.setStartTime(System.currentTimeMillis());
         scenarioReport.setCreateUser("admin");
         scenarioReport.setUpdateUser("admin");
-        scenarioReport.setStatus(ApiReportStatus.SUCCESS.name());
+        scenarioReport.setStatus(ResultStatus.SUCCESS.name());
         scenarioReport.setUpdateTime(System.currentTimeMillis());
         scenarioReport.setPoolId("api-pool-id");
         scenarioReport.setEnvironmentId("api-environment-id");
@@ -340,20 +357,11 @@ public class ApiScenarioControllerTests extends BaseTest {
         initTestData();
 
         // @@请求成功
-        ApiScenarioAddRequest request = new ApiScenarioAddRequest();
-        request.setProjectId(DEFAULT_PROJECT_ID);
-        request.setDescription("desc");
-        request.setName("test name");
-        request.setModuleId("default");
-        request.setGrouped(false);
-        request.setEnvironmentId(envId);
-        request.setTags(List.of("tag1", "tag2"));
-        request.setPriority("P0");
-        request.setStatus(ApiScenarioStatus.COMPLETED.name());
+        ApiScenarioAddRequest request = getApiScenarioAddRequest();
         List<ApiScenarioStepRequest> steps = getApiScenarioStepRequests();
         Map<String, Object> steptDetailMap = new HashMap<>();
         steptDetailMap.put(steps.get(1).getId(), getMsHttpElementParam());
-        steptDetailMap.put(steps.get(0).getId(), getMsHttpElementParam());
+        steptDetailMap.put(steps.getFirst().getId(), getMsHttpElementParam());
         request.setSteps(steps);
         request.setStepDetails(steptDetailMap);
         request.setScenarioConfig(getScenarioConfig());
@@ -400,6 +408,20 @@ public class ApiScenarioControllerTests extends BaseTest {
         requestPostPermissionTest(PermissionConstants.PROJECT_API_SCENARIO_ADD, DEFAULT_ADD, request);
     }
 
+    public static ApiScenarioAddRequest getApiScenarioAddRequest() {
+        ApiScenarioAddRequest request = new ApiScenarioAddRequest();
+        request.setProjectId(DEFAULT_PROJECT_ID);
+        request.setDescription("desc");
+        request.setName("test name");
+        request.setModuleId("default");
+        request.setGrouped(false);
+        request.setEnvironmentId(envId);
+        request.setTags(List.of("tag1", "tag2"));
+        request.setPriority("P0");
+        request.setStatus(ApiScenarioStatus.COMPLETED.name());
+        return request;
+    }
+
     private Object getMsHttpElementParam() {
         return getMsHttpElementStr(MsHTTPElementTest.getMsHttpElement());
     }
@@ -443,7 +465,15 @@ public class ApiScenarioControllerTests extends BaseTest {
         }
     }
 
-    private ScenarioConfig getScenarioConfig() {
+    public ScenarioConfig getScenarioConfig() {
+        ScenarioConfig scenarioConfig = getSimpleScenarioConfig();
+        ScenarioVariable scenarioVariable = new ScenarioVariable();
+        scenarioVariable.setCsvVariables(getCsvVariables());
+        scenarioConfig.setVariable(scenarioVariable);
+        return scenarioConfig;
+    }
+
+    public ScenarioConfig getSimpleScenarioConfig() {
         ScenarioConfig scenarioConfig = new ScenarioConfig();
         MsAssertionConfig msAssertionConfig = new MsAssertionConfig();
         MsScriptAssertion scriptAssertion = new MsScriptAssertion();
@@ -459,9 +489,6 @@ public class ApiScenarioControllerTests extends BaseTest {
         scenarioOtherConfig.setFailureStrategy(ScenarioOtherConfig.FailureStrategy.CONTINUE.name());
         scenarioOtherConfig.setEnableCookieShare(true);
         scenarioConfig.setOtherConfig(scenarioOtherConfig);
-        ScenarioVariable scenarioVariable = new ScenarioVariable();
-        scenarioVariable.setCsvVariables(getCsvVariables());
-        scenarioConfig.setVariable(scenarioVariable);
         return scenarioConfig;
     }
 
@@ -477,7 +504,7 @@ public class ApiScenarioControllerTests extends BaseTest {
         fileMetadataId = fileMetadataService.upload(fileUploadRequest, "admin", file);
     }
 
-    public List<CsvVariable> getCsvVariables() {
+    public static List<CsvVariable> getCsvVariables() {
         List<CsvVariable> csvVariables = new ArrayList<>();
         CsvVariable csvVariable = new CsvVariable();
         csvVariable.setId(UUID.randomUUID().toString());
@@ -495,7 +522,9 @@ public class ApiScenarioControllerTests extends BaseTest {
         csvVariable.setName("csv-关联的");
         file = new ApiFile();
         file.setFileId(fileMetadataId);
-        file.setFileName("test.jbc");
+        FileMetadataService fileMetadataService = CommonBeanFactory.getBean(FileMetadataService.class);
+        FileMetadata fileMetadata = fileMetadataService.selectById(fileMetadataId);
+        file.setFileName(fileMetadata.getOriginalName());
         file.setLocal(false);
         csvVariable.setScope(CsvVariable.CsvVariableScope.SCENARIO.name());
         csvVariable.setFile(file);
@@ -619,6 +648,8 @@ public class ApiScenarioControllerTests extends BaseTest {
         request.setPriority("P0 update");
         request.setStatus(ApiScenarioStatus.DEPRECATED.name());
         List<ApiScenarioStepRequest> steps = getApiScenarioStepRequests();
+        ApiScenarioBlob apiScenarioBlob = apiScenarioBlobMapper.selectByPrimaryKey(addApiScenario.getId());
+        request.setScenarioConfig(JSON.parseObject(new String(apiScenarioBlob.getConfig()), ScenarioConfig.class));
 
         // 验证修改基础信息
         this.requestPostWithOk(DEFAULT_UPDATE, request);
@@ -635,9 +666,10 @@ public class ApiScenarioControllerTests extends BaseTest {
         Map<String, Object> steptDetailMap = new HashMap<>();
         MsHTTPElement msHttpElement = MsHTTPElementTest.getMsHttpElement();
         msHttpElement.setBody(ApiDebugControllerTests.addBodyLinkFile(msHttpElement.getBody(), fileMetadataId));
-        steptDetailMap.put(steps.get(0).getId(), getMsHttpElementStr(msHttpElement));
-        steptDetailMap.put(steps.get(1).getId(), getMsHttpElementStr(msHttpElement));
-        fileMetadataStepId = steps.get(0).getId();
+        for (ApiScenarioStepRequest step : steps) {
+            steptDetailMap.put(step.getId(), getMsHttpElementStr(msHttpElement));
+        }
+        fileMetadataStepId = steps.getFirst().getId();
 
         request.setSteps(steps);
         request.setStepDetails(steptDetailMap);
@@ -650,10 +682,10 @@ public class ApiScenarioControllerTests extends BaseTest {
         List<ApiScenarioCsv> apiScenarioCsv = apiScenarioCsvMapper.selectByExample(apiScenarioCsvExample);
         Map<String, ApiScenarioCsv> collect = apiScenarioCsv.stream().collect(Collectors.toMap(ApiScenarioCsv::getFileId, t -> t));
         // 验证修改步骤
-        steps.get(0).setName("test name update");
-        CsvVariable csvVariable = request.getScenarioConfig().getVariable().getCsvVariables().get(0);
-        request.getScenarioConfig().getVariable().getCsvVariables().get(0).setId(collect.get(csvVariable.getFile().getFileId()).getId());
-        CsvVariable csvVariable1 = request.getScenarioConfig().getVariable().getCsvVariables().get(0);
+        steps.getFirst().setName("test name update");
+        CsvVariable csvVariable = request.getScenarioConfig().getVariable().getCsvVariables().getFirst();
+        request.getScenarioConfig().getVariable().getCsvVariables().getFirst().setId(collect.get(csvVariable.getFile().getFileId()).getId());
+        CsvVariable csvVariable1 = request.getScenarioConfig().getVariable().getCsvVariables().getFirst();
         request.getScenarioConfig().getVariable().getCsvVariables().get(1).setId(collect.get(csvVariable1.getFile().getFileId()).getId());
         this.requestPostWithOk(DEFAULT_UPDATE, request);
         assertUpdateSteps(steps, steptDetailMap);
@@ -837,7 +869,7 @@ public class ApiScenarioControllerTests extends BaseTest {
         apiFileResourceExample.createCriteria().andResourceIdEqualTo(addApiScenario.getId());
         List<ApiFileResource> apiFileResources = apiFileResourceMapper.selectByExample(apiFileResourceExample);
         Assertions.assertFalse(apiFileResources.isEmpty());
-        apiTransferRequest.setFileId(apiFileResources.get(0).getFileId());
+        apiTransferRequest.setFileId(apiFileResources.getFirst().getFileId());
         apiTransferRequest.setFileName("test-scenario-file-1");
         apiTransferRequest.setOriginalName("test-scenario-file-1.txt");
         this.requestPost(TRANSFER, apiTransferRequest).andExpect(status().isOk());
@@ -848,7 +880,7 @@ public class ApiScenarioControllerTests extends BaseTest {
     public void testStepTransfer() throws Exception {
         this.requestGetWithOk(TRANSFER_OPTIONS, DEFAULT_PROJECT_ID);
         ApiTransferRequest apiTransferRequest = new ApiTransferRequest();
-        apiTransferRequest.setSourceId(addApiScenarioSteps.get(0).getId());
+        apiTransferRequest.setSourceId(addApiScenarioSteps.getFirst().getId());
         apiTransferRequest.setProjectId(DEFAULT_PROJECT_ID);
         apiTransferRequest.setModuleId("root");
         apiTransferRequest.setLocal(true);
@@ -1172,9 +1204,10 @@ public class ApiScenarioControllerTests extends BaseTest {
         requestGetPermissionTest(PermissionConstants.PROJECT_API_SCENARIO_EXECUTE, RUN_REAL_TIME, addApiScenario.getId(), "reportId");
     }
 
+    @Test
     @Order(6)
     public void batchRun() throws Exception {
-        mockPost("/api/run", "");
+        mockPost("/api/batch/run", "");
 
         ApiScenarioBatchRunRequest request = new ApiScenarioBatchRunRequest();
         List<String> ids = new ArrayList<>();
@@ -1235,8 +1268,12 @@ public class ApiScenarioControllerTests extends BaseTest {
         Assertions.assertEquals(apiScenarioDetail.getCreateUserName(), userMapper.selectByPrimaryKey(apiScenarioDetail.getCreateUser()).getName());
         Assertions.assertEquals(apiScenarioDetail.getUpdateUserName(), userMapper.selectByPrimaryKey(apiScenarioDetail.getUpdateUser()).getName());
         Assertions.assertFalse(apiScenarioDetail.getFollow());
+
         // 验证数据
         assertGetApiScenarioSteps(this.addApiScenarioSteps, apiScenarioDetail.getSteps());
+
+        // 校验csv数据
+        assertCsvFiles(apiScenarioDetail);
 
         apiScenarioService.follow(anOtherAddApiScenario.getId(), "admin");
         mvcResult = this.requestGetWithOkAndReturn(DEFAULT_GET, anOtherAddApiScenario.getId());
@@ -1247,6 +1284,21 @@ public class ApiScenarioControllerTests extends BaseTest {
         Assertions.assertEquals(this.anOtherAddApiScenarioSteps.size(), apiScenarioDetail.getSteps().size());
         // @@校验权限
         requestGetPermissionTest(PermissionConstants.PROJECT_API_SCENARIO_READ, DEFAULT_GET, addApiScenario.getId());
+    }
+
+    private void assertCsvFiles(ApiScenarioDetailDTO apiScenarioDetail) {
+        List<CsvVariable> csvVariables = apiScenarioDetail.getScenarioConfig().getVariable().getCsvVariables();
+        ApiScenarioCsvExample example = new ApiScenarioCsvExample();
+        example.createCriteria().andScenarioIdEqualTo(this.addApiScenario.getId());
+        List<ApiScenarioCsv> csvList = apiScenarioCsvMapper.selectByExample(example);
+        Assertions.assertEquals(csvVariables.size(), csvList.size());
+        for (CsvVariable csvVariable : csvVariables) {
+            if (!csvVariable.getFile().getLocal()) {
+                FileMetadata fileMetadata = fileMetadataService.selectById(csvVariable.getFile().getFileId());
+                Assertions.assertEquals(fileMetadata.getName() + "." + fileMetadata.getType(), csvVariable.getFile().getFileAlias());
+                Assertions.assertEquals(fileMetadata.getOriginalName(), csvVariable.getFile().getFileName());
+            }
+        }
     }
 
     @Test
@@ -1327,6 +1379,13 @@ public class ApiScenarioControllerTests extends BaseTest {
         for (int i = 0; i < addApiScenarioSteps.size(); i++) {
             ApiScenarioStepRequest stepRequest = (ApiScenarioStepRequest) addApiScenarioSteps.get(i);
             ApiScenarioStepDTO stepDTO = (ApiScenarioStepDTO) steps.get(i);
+            ApiScenarioCsvStepExample example = new ApiScenarioCsvStepExample();
+            example.createCriteria().andStepIdEqualTo(stepDTO.getId());
+            List<String> csvIds = apiScenarioCsvStepMapper.selectByExample(example).stream().map(ApiScenarioCsvStep::getFileId).collect(Collectors.toList());
+            stepRequest.setCsvIds(csvIds);
+            if (stepDTO.getCsvIds() == null) {
+                stepDTO.setCsvIds(List.of());
+            }
             Assertions.assertEquals(BeanUtils.copyBean(new ApiScenarioStepCommonDTO(), stepRequest), BeanUtils.copyBean(new ApiScenarioStepCommonDTO(), stepDTO));
             assertGetApiScenarioSteps(stepRequest.getChildren(), stepDTO.getChildren());
         }
@@ -1402,6 +1461,10 @@ public class ApiScenarioControllerTests extends BaseTest {
         Assertions.assertEquals(returnPager.getCurrent(), pageRequest.getCurrent());
         //返回的数据量不超过规定要返回的数据量相同
         Assertions.assertTrue(((List<ApiScenarioDTO>) returnPager.getList()).size() <= pageRequest.getPageSize());
+
+        // 查统计数据
+        List<String> apiScenarioIds = Collections.singletonList("api-scenario-id1");
+        requestPostWithOk(STATISTICS, apiScenarioIds);
 
         //查询api-scenario-id1的数据
         pageRequest.setScenarioId("api-scenario-id1");
@@ -1567,23 +1630,50 @@ public class ApiScenarioControllerTests extends BaseTest {
         request.setProjectId(DEFAULT_PROJECT_ID);
         request.setType("Tags");
         request.setAppend(true);
+        request.setClear(false);
         request.setSelectAll(true);
         request.setTags(new LinkedHashSet<>(List.of("tag1", "tag3", "tag4")));
         requestPostAndReturn(BATCH_EDIT, request);
         ApiScenarioExample example = new ApiScenarioExample();
         List<String> ids = extApiScenarioMapper.getIds(request, false);
         example.createCriteria().andProjectIdEqualTo(DEFAULT_PROJECT_ID).andDeletedEqualTo(false).andIdIn(ids);
-        apiScenarioMapper.selectByExample(example).forEach(apiTestCase -> {
-            Assertions.assertTrue(apiTestCase.getTags().contains("tag1"));
-            Assertions.assertTrue(apiTestCase.getTags().contains("tag3"));
-            Assertions.assertTrue(apiTestCase.getTags().contains("tag4"));
+        List<ApiScenario> scenarioList = apiScenarioMapper.selectByExample(example);
+        scenarioList.forEach(scenario -> {
+            Assertions.assertTrue(scenario.getTags().contains("tag1"));
+            Assertions.assertTrue(scenario.getTags().contains("tag3"));
+            Assertions.assertTrue(scenario.getTags().contains("tag4"));
         });
+        //接着追加超过10个，判断是否只有前10个
+        request.setTags(new LinkedHashSet<>(List.of("tag11", "tag12", "tag13", "tag14", "tag15", "tag16", "tag17", "tag18", "tag19", "tag20", "tag21")));
+        requestPostAndReturn(BATCH_EDIT, request);
+        scenarioList = apiScenarioMapper.selectByExample(example);
+        scenarioList.forEach(scenario -> {
+            Assertions.assertEquals(10, CollectionUtils.size(scenario.getTags()));
+            Assertions.assertTrue(scenario.getTags().contains("tag1"));
+            Assertions.assertTrue(scenario.getTags().contains("tag3"));
+            Assertions.assertTrue(scenario.getTags().contains("tag4"));
+            Assertions.assertTrue(scenario.getTags().contains("tag11"));
+            Assertions.assertTrue(scenario.getTags().contains("tag12"));
+            Assertions.assertTrue(scenario.getTags().contains("tag13"));
+            Assertions.assertTrue(scenario.getTags().contains("tag14"));
+            Assertions.assertTrue(scenario.getTags().contains("tag15"));
+            Assertions.assertTrue(scenario.getTags().contains("tag16"));
+            //有些用例含有其余的标签，追加情况下无法被覆盖，所以只判断前几个
+        });
+
         //覆盖标签
         request.setTags(new LinkedHashSet<>(List.of("tag1")));
         request.setAppend(false);
+        request.setClear(false);
         requestPostAndReturn(BATCH_EDIT, request);
         apiScenarioMapper.selectByExample(example).forEach(scenario -> {
             Assertions.assertEquals(scenario.getTags(), List.of("tag1"));
+        });
+        request.setAppend(false);
+        request.setClear(true);
+        requestPostAndReturn(BATCH_EDIT, request);
+        apiScenarioMapper.selectByExample(example).forEach(scenario -> {
+            Assertions.assertTrue(CollectionUtils.isEmpty(scenario.getTags()));
         });
         //标签为空  报错
         request.setTags(new LinkedHashSet<>());
@@ -1640,11 +1730,11 @@ public class ApiScenarioControllerTests extends BaseTest {
         EnvironmentExample environmentExample = new EnvironmentExample();
         environmentExample.createCriteria().andProjectIdEqualTo(DEFAULT_PROJECT_ID).andMockEqualTo(true);
         List<Environment> environments = environmentMapper.selectByExample(environmentExample);
-        request.setEnvId(environments.get(0).getId());
+        request.setEnvId(environments.getFirst().getId());
         requestPostAndReturn(BATCH_EDIT, request);
-        //判断数据的环境是不是environments.get(0).getId()
+        //判断数据的环境是不是environments.getFirst().getId()
         apiScenarios = apiScenarioMapper.selectByExample(example);
-        apiScenarios.forEach(apiTestCase -> Assertions.assertEquals(apiTestCase.getEnvironmentId(), environments.get(0).getId()));
+        apiScenarios.forEach(apiTestCase -> Assertions.assertEquals(apiTestCase.getEnvironmentId(), environments.getFirst().getId()));
 
         //环境数据为空
         request.setEnvId(null);
@@ -1947,7 +2037,7 @@ public class ApiScenarioControllerTests extends BaseTest {
         resultHolder = JSON.parseObject(result.getResponse().getContentAsString(StandardCharsets.UTF_8), ResultHolder.class);
         resultResponse = JSON.parseObject(JSON.toJSONString(resultHolder.getData()), ApiScenarioBatchOperationResponse.class);
         Assertions.assertEquals(resultResponse.getSuccess(), 0);
-       // Assertions.assertEquals(resultResponse.getError(), 250);
+        // Assertions.assertEquals(resultResponse.getError(), 250);
 
         //指定具体id移动回_251,  再指定moduleId为_default移动回_200
         request = new ApiScenarioBatchCopyMoveRequest();
@@ -2020,6 +2110,7 @@ public class ApiScenarioControllerTests extends BaseTest {
     @Order(23)
     void scheduleTest() throws Exception {
         String testUrl = "/schedule-config";
+        String batchUrl = "/batch-operation/schedule-config";
         String deleteUrl = "/schedule-config-delete/";
 
         if (CollectionUtils.isEmpty(BATCH_OPERATION_SCENARIO_ID)) {
@@ -2030,14 +2121,18 @@ public class ApiScenarioControllerTests extends BaseTest {
         String scenarioId = BATCH_OPERATION_SCENARIO_ID.getLast();
         deleteUrl += scenarioId;
         ApiScenarioScheduleConfigRequest request = new ApiScenarioScheduleConfigRequest();
-
         request.setScenarioId(scenarioId);
         request.setEnable(true);
         request.setCron("0 0 0 * * ?");
-
+        ApiScenarioBatchScheduleConfigRequest batchRequest = new ApiScenarioBatchScheduleConfigRequest();
+        batchRequest.setEnable(false);
+        batchRequest.setCron("0 0 0 * * ?");
+        batchRequest.setProjectId(DEFAULT_PROJECT_ID);
+        batchRequest.setSelectIds(List.of(BATCH_OPERATION_SCENARIO_ID.getFirst()));
         //先测试一下没有开启模块时接口能否使用
         apiScenarioBatchOperationTestService.removeApiModule(DEFAULT_PROJECT_ID);
         this.requestPost(testUrl, request).andExpect(status().is5xxServerError());
+        this.requestPost(batchUrl, batchRequest).andExpect(status().is5xxServerError());
         this.requestGet(deleteUrl, request).andExpect(status().is5xxServerError());
         //恢复
         apiScenarioBatchOperationTestService.resetProjectModule(DEFAULT_PROJECT_ID);
@@ -2046,11 +2141,30 @@ public class ApiScenarioControllerTests extends BaseTest {
         String scheduleId = resultHolder.getData().toString();
         apiScenarioBatchOperationTestService.checkSchedule(scheduleId, scenarioId, request.isEnable());
 
+        this.requestPostWithOk(batchUrl, batchRequest);
+        apiScenarioBatchOperationTestService.checkSchedule(BATCH_OPERATION_SCENARIO_ID.getFirst(), batchRequest.isEnable());
+        batchRequest.setEnable(false);
+        this.requestPostWithOk(batchUrl, batchRequest);
+        apiScenarioBatchOperationTestService.checkSchedule(BATCH_OPERATION_SCENARIO_ID.getFirst(), batchRequest.isEnable());
+
+        // 仅仅是开启/关闭
+        batchRequest = new ApiScenarioBatchScheduleConfigRequest();
+        batchRequest.setProjectId(DEFAULT_PROJECT_ID);
+        batchRequest.setSelectIds(List.of(BATCH_OPERATION_SCENARIO_ID.getFirst()));
+        batchRequest.setEnable(true);
+        this.requestPostWithOk(batchUrl, batchRequest);
+        apiScenarioBatchOperationTestService.checkSchedule(BATCH_OPERATION_SCENARIO_ID.getFirst(), batchRequest.isEnable());
+        batchRequest.setEnable(false);
+        this.requestPostWithOk(batchUrl, batchRequest);
+        apiScenarioBatchOperationTestService.checkSchedule(BATCH_OPERATION_SCENARIO_ID.getFirst(), batchRequest.isEnable());
+
         //增加日志检查
         LOG_CHECK_LIST.add(
                 new CheckLogModel(scenarioId, OperationLogType.UPDATE, "/api/scenario/schedule-config")
         );
-
+        LOG_CHECK_LIST.add(
+                new CheckLogModel(BATCH_OPERATION_SCENARIO_ID.getFirst(), OperationLogType.UPDATE, "/api/scenario/batch-operation/schedule-config")
+        );
         //关闭
         request.setEnable(false);
         result = this.requestPostAndReturn(testUrl, request);
@@ -2121,17 +2235,13 @@ public class ApiScenarioControllerTests extends BaseTest {
         //校验权限
         this.requestPostPermissionTest(PermissionConstants.PROJECT_API_SCENARIO_EXECUTE, testUrl, request);
 
+
         //反例：scenarioId不存在
         request = new ApiScenarioScheduleConfigRequest();
         request.setCron("0 0 0 * * ?");
         this.requestPost(testUrl, request).andExpect(status().isBadRequest());
         request.setScenarioId(IDGenerator.nextStr());
         this.requestPost(testUrl, request).andExpect(status().is5xxServerError());
-
-        //反例：不配置cron表达式
-        request = new ApiScenarioScheduleConfigRequest();
-        request.setScenarioId(scenarioId);
-        this.requestPost(testUrl, request).andExpect(status().isBadRequest());
 
         //反例：配置错误的cron表达式，测试是否会关闭定时任务
         request = new ApiScenarioScheduleConfigRequest();
@@ -2506,7 +2616,7 @@ public class ApiScenarioControllerTests extends BaseTest {
                 apiScenario.setEnvironmentId("scenario-environment-group-id");
             } else if (i <= 100) {
                 apiScenario.setGrouped(false);
-                apiScenario.setEnvironmentId(environments.get(0).getId());
+                apiScenario.setEnvironmentId(environments.getFirst().getId());
             } else if (i <= 150) {
                 //带blob
                 ApiScenarioBlob apiScenarioBlob = new ApiScenarioBlob();
@@ -2596,10 +2706,25 @@ public class ApiScenarioControllerTests extends BaseTest {
 
     @Test
     @Order(10)
+    @Sql(scripts = {"/dml/init_exec_history_test.sql"}, config = @SqlConfig(encoding = "utf-8", transactionMode = SqlConfig.TransactionMode.ISOLATED))
     public void testExecuteList() throws Exception {
         ApiScenario first = apiScenarioMapper.selectByExample(new ApiScenarioExample()).getFirst();
         List<ApiScenarioReport> reports = new ArrayList<>();
         List<ApiScenarioRecord> records = new ArrayList<>();
+
+        String planId = testPlanMapper.selectByExample(new TestPlanExample()).getFirst().getId();
+        TestPlanApiScenario testPlanApiScenario = new TestPlanApiScenario();
+        testPlanApiScenario.setTestPlanId(first.getId());
+        testPlanApiScenario.setId(IDGenerator.nextStr());
+        testPlanApiScenario.setApiScenarioId(first.getId());
+        testPlanApiScenario.setCreateUser("admin");
+        testPlanApiScenario.setCreateTime(System.currentTimeMillis());
+        testPlanApiScenario.setLastExecTime(System.currentTimeMillis());
+        testPlanApiScenario.setLastExecReportId(IDGenerator.nextStr());
+        testPlanApiScenario.setLastExecResult(ResultStatus.SUCCESS.name());
+        testPlanApiScenario.setPos(1024l);
+        testPlanApiScenario.setTestPlanCollectionId(planId);
+        testPlanApiScenarioMapper.insert(testPlanApiScenario);
         for (int i = 0; i < 10; i++) {
             ApiScenarioReport apiReport = new ApiScenarioReport();
             apiReport.setId(IDGenerator.nextStr());
@@ -2613,9 +2738,10 @@ public class ApiScenarioControllerTests extends BaseTest {
             apiReport.setEnvironmentId("api-environment-id" + i);
             apiReport.setRunMode("api-run-mode" + i);
             if (i % 2 == 0) {
-                apiReport.setStatus(ApiReportStatus.SUCCESS.name());
+                apiReport.setStatus(ResultStatus.SUCCESS.name());
             } else {
-                apiReport.setStatus(ApiReportStatus.ERROR.name());
+                apiReport.setTestPlanScenarioId(testPlanApiScenario.getId());
+                apiReport.setStatus(ResultStatus.ERROR.name());
             }
             apiReport.setTriggerMode("api-trigger-mode" + i);
             reports.add(apiReport);
@@ -2626,7 +2752,7 @@ public class ApiScenarioControllerTests extends BaseTest {
         }
         apiScenarioReportService.insertApiScenarioReport(reports, records);
         ExecutePageRequest request = new ExecutePageRequest();
-        request.setId(first.getId());
+        request.setId("1");
         request.setPageSize(10);
         request.setCurrent(1);
         MvcResult mvcResult = responsePost(BASE_PATH + "execute/page", request);
@@ -2634,7 +2760,7 @@ public class ApiScenarioControllerTests extends BaseTest {
         //返回值不为空
         Assertions.assertNotNull(returnPager);
         request.setFilter(new HashMap<>() {{
-            put("status", List.of(ApiReportStatus.SUCCESS.name()));
+            put("status", List.of(ResultStatus.SUCCESS.name()));
         }});
         request.setSort(new HashMap<>() {{
             put("startTime", "desc");
@@ -2646,7 +2772,7 @@ public class ApiScenarioControllerTests extends BaseTest {
         Assertions.assertTrue(((List<ApiReport>) returnPager.getList()).size() <= request.getPageSize());
         List<ExecuteReportDTO> reportDTOS = JSON.parseArray(JSON.toJSONString(returnPager.getList()), ExecuteReportDTO.class);
         reportDTOS.forEach(apiReport -> {
-            Assertions.assertEquals(apiReport.getStatus(), ApiReportStatus.SUCCESS.name());
+            Assertions.assertEquals(apiReport.getStatus(), ResultStatus.SUCCESS.name());
         });
         request.setId("data-is-null");
         responsePost(BASE_PATH + "execute/page", request);
@@ -2765,6 +2891,9 @@ public class ApiScenarioControllerTests extends BaseTest {
             apiTestCase.setApiDefinitionId("system-api-id");
             apiTestCase.setVersionId("1.0");
             apiTestCase.setLastReportStatus("未执行");
+            apiTestCase.setApiChange(false);
+            apiTestCase.setIgnoreApiChange(false);
+            apiTestCase.setIgnoreApiDiff(false);
             apiTestCases.add(apiTestCase);
         }
         apiTestCaseMapper.batchInsert(apiTestCases);
@@ -2798,9 +2927,19 @@ public class ApiScenarioControllerTests extends BaseTest {
 
         ScenarioSystemRequest scenarioSystemRequest = new ScenarioSystemRequest();
         scenarioSystemRequest.setProjectId(DEFAULT_PROJECT_ID);
-        scenarioSystemRequest.setProtocol("HTTP");
+        scenarioSystemRequest.setProtocols(List.of("HTTP"));
         scenarioSystemRequest.setModuleIds(List.of("test-default"));
         ApiScenarioSystemRequest apiScenarioSystemRequest = new ApiScenarioSystemRequest();
+        apiScenarioSystemRequest.setApiRequest(scenarioSystemRequest);
+        apiScenarioSystemRequest.setCaseRequest(scenarioSystemRequest);
+        apiScenarioSystemRequest.setScenarioRequest(scenarioSystemRequest);
+        apiScenarioSystemRequest.setRefType(ApiScenarioStepRefType.COPY.name());
+        this.requestPostWithOkAndReturn("/get/system-request", apiScenarioSystemRequest);
+
+        scenarioSystemRequest = new ScenarioSystemRequest();
+        scenarioSystemRequest.setProjectId(DEFAULT_PROJECT_ID);
+        scenarioSystemRequest.setModuleIds(List.of("test-default"));
+        apiScenarioSystemRequest = new ApiScenarioSystemRequest();
         apiScenarioSystemRequest.setApiRequest(scenarioSystemRequest);
         apiScenarioSystemRequest.setCaseRequest(scenarioSystemRequest);
         apiScenarioSystemRequest.setScenarioRequest(scenarioSystemRequest);

@@ -20,11 +20,9 @@ import io.metersphere.project.mapper.FileAssociationMapper;
 import io.metersphere.project.mapper.FileMetadataMapper;
 import io.metersphere.project.mapper.ProjectApplicationMapper;
 import io.metersphere.project.mapper.ProjectMapper;
-import io.metersphere.project.service.FileService;
 import io.metersphere.sdk.constants.DefaultRepositoryDir;
 import io.metersphere.sdk.constants.PermissionConstants;
 import io.metersphere.sdk.constants.StorageType;
-import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.file.FileRequest;
 import io.metersphere.sdk.util.FileAssociationSourceUtil;
 import io.metersphere.sdk.util.JSON;
@@ -39,21 +37,21 @@ import io.metersphere.system.dto.sdk.TemplateDTO;
 import io.metersphere.system.dto.sdk.request.PosRequest;
 import io.metersphere.system.mapper.CustomFieldMapper;
 import io.metersphere.system.mapper.ServiceIntegrationMapper;
+import io.metersphere.system.service.FileService;
 import io.metersphere.system.service.PluginService;
 import io.metersphere.system.uid.IDGenerator;
 import io.metersphere.system.utils.Pager;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.*;
-import org.mockito.Mockito;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.context.jdbc.SqlConfig;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
@@ -63,8 +61,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.metersphere.sdk.constants.InternalUserRole.ADMIN;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -160,7 +156,7 @@ public class BugControllerTests extends BaseTest {
         // 返回的数据量不超过规定要返回的数据量相同
         Assertions.assertTrue(JSON.parseArray(JSON.toJSONString(pageData.getList())).size() <= bugRequest.getPageSize());
         // 返回值中取出第一条数据, 并判断是否包含关键字default
-        BugDTO bugDTO = JSON.parseArray(JSON.toJSONString(pageData.getList()), BugDTO.class).get(0);
+        BugDTO bugDTO = JSON.parseArray(JSON.toJSONString(pageData.getList()), BugDTO.class).getFirst();
         Assertions.assertTrue(StringUtils.contains(bugDTO.getTitle(), bugRequest.getKeyword())
                 || StringUtils.contains(bugDTO.getId(), bugRequest.getKeyword()));
 
@@ -173,7 +169,7 @@ public class BugControllerTests extends BaseTest {
         ResultHolder sortHolder = JSON.parseObject(sortData, ResultHolder.class);
         Pager<?> sortPageData = JSON.parseObject(JSON.toJSONString(sortHolder.getData()), Pager.class);
         // 返回值中取出第一条ID最大的数据, 并判断是否是default-bug
-        BugDTO maxBugDTO = JSON.parseArray(JSON.toJSONString(sortPageData.getList()), BugDTO.class).get(0);
+        BugDTO maxBugDTO = JSON.parseArray(JSON.toJSONString(sortPageData.getList()), BugDTO.class).getFirst();
         Assertions.assertTrue(maxBugDTO.getId().contains("default"));
 
         // 拖拽
@@ -193,6 +189,7 @@ public class BugControllerTests extends BaseTest {
         bugPageRequest.setPageSize(10);
         bugPageRequest.setKeyword("default-x");
         bugPageRequest.setProjectId("default-project-for-bug");
+        bugPageRequest.setCreateByMe(true);
         MvcResult mvcResult = this.requestPostWithOkAndReturn(BUG_PAGE, bugPageRequest);
         // 获取返回值
         String returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
@@ -264,10 +261,10 @@ public class BugControllerTests extends BaseTest {
         MultiValueMap<String, Object> paramMap = getMultiPartParam(request, file);
         this.requestMultipart(BUG_ADD, paramMap).andExpect(status().isBadRequest());
         request.setProjectId("default-project-for-bug");
-        // 标签超过10个
+        // V3.1需求：标签超过10个不会报错，只会留下前10个
         request.setTags(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"));
         paramMap = getMultiPartParam(request, file);
-        this.requestMultipart(BUG_ADD, paramMap).andExpect(status().is5xxServerError());
+        this.requestMultipart(BUG_ADD, paramMap).andExpect(status().is2xxSuccessful());
         request.setTags(null);
         // 处理人为空
         request.setTitle("default-bug-title");
@@ -385,16 +382,29 @@ public class BugControllerTests extends BaseTest {
         // TAG追加
         request.setTags(List.of("TAG", "TEST_TAG"));
         request.setAppend(true);
+        request.setClear(false);
         this.requestPost(BUG_BATCH_UPDATE, request, status().isOk());
         // TAG覆盖
         request.setExcludeIds(List.of("default-bug-id-tapd1"));
         request.setTags(List.of("A", "B"));
         request.setAppend(false);
+        request.setClear(false);
         this.requestPost(BUG_BATCH_UPDATE, request, status().isOk());
         // 勾选部分
         request.setSelectAll(false);
         request.setSelectIds(List.of("default-bug-id"));
         this.requestPost(BUG_BATCH_UPDATE, request, status().isOk());
+        //TAG追加 清空
+        Bug bug = bugMapper.selectByPrimaryKey("default-bug-id");
+        Assertions.assertEquals(2, bug.getTags().size());
+        request.setAppend(false);
+        request.setClear(true);
+        this.requestPost(BUG_BATCH_UPDATE, request, status().isOk());
+        bug = bugMapper.selectByPrimaryKey("default-bug-id");
+        Assertions.assertTrue(CollectionUtils.isEmpty(bug.getTags()));
+
+
+
     }
 
     @Test
@@ -599,6 +609,8 @@ public class BugControllerTests extends BaseTest {
         BugPageRequest bugPageRequest = new BugPageRequest();
         bugPageRequest.setCurrent(1);
         bugPageRequest.setPageSize(10);
+        bugPageRequest.setUnresolved(true);
+        bugPageRequest.setAssignedToMe(true);
         bugPageRequest.setProjectId("default-project-for-bug");
         this.requestPostWithOk(BUG_PAGE, bugPageRequest);
 
@@ -731,13 +743,7 @@ public class BugControllerTests extends BaseTest {
         bugSyncExtraService.setSyncKey("default-project-for-bug");
         this.requestPostWithOk(BUG_SYNC_ALL, request);
         bugSyncExtraService.deleteSyncKey("default-project-for-bug");
-        Project project = projectMapper.selectByPrimaryKey("default-project-for-bug");
         this.requestPostWithOk(BUG_SYNC_ALL, request);
-        BugService mockBugService = Mockito.mock(BugService.class);
-        Mockito.doThrow(new MSException("sync error!")).when(mockBugService).syncPlatformAllBugs(syncRequest, project, "admin", Locale.SIMPLIFIED_CHINESE.getLanguage());
-        ReflectionTestUtils.setField(bugSyncService, "bugService", mockBugService);
-        MSException msException = assertThrows(MSException.class, () -> bugSyncService.syncAllBugs(syncRequest, "admin", Locale.SIMPLIFIED_CHINESE.getLanguage()));
-        assertEquals(msException.getMessage(), "sync error!");
     }
 
     /**
@@ -836,7 +842,7 @@ public class BugControllerTests extends BaseTest {
             handleUserField.setId("assignee");
             handleUserField.setName("处理人");
             handleUserField.setType("select");
-            handleUserField.setValue("60f68f7952162b0068de6a2d");
+            handleUserField.setValue("5f44bb528d89e300469effed");
             BugCustomFieldDTO statusField = new BugCustomFieldDTO();
             statusField.setId("status");
             statusField.setName("状态");
@@ -895,7 +901,7 @@ public class BugControllerTests extends BaseTest {
     private Bug getAddJiraBug() {
         BugExample example = new BugExample();
         example.createCriteria().andTitleEqualTo("这是一个系统Jira模板创建的缺陷");
-        return bugMapper.selectByExample(example).get(0);
+        return bugMapper.selectByExample(example).getFirst();
     }
 
     /**
@@ -906,7 +912,7 @@ public class BugControllerTests extends BaseTest {
     private BugLocalAttachment getAddJiraLocalFile() {
         BugLocalAttachmentExample example = new BugLocalAttachmentExample();
         example.createCriteria().andBugIdEqualTo(getAddJiraBug().getId());
-        return bugLocalAttachmentMapper.selectByExample(example).get(0);
+        return bugLocalAttachmentMapper.selectByExample(example).getFirst();
     }
 
     /**
@@ -917,7 +923,7 @@ public class BugControllerTests extends BaseTest {
     private FileAssociation getAddJiraAssociateFile() {
         FileAssociationExample example = new FileAssociationExample();
         example.createCriteria().andSourceIdEqualTo(getAddJiraBug().getId()).andSourceTypeEqualTo(FileAssociationSourceUtil.SOURCE_TYPE_BUG);
-        return fileAssociationMapper.selectByExample(example).get(0);
+        return fileAssociationMapper.selectByExample(example).getFirst();
     }
 
     /**

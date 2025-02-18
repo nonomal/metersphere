@@ -2,7 +2,7 @@
   <MsDetailDrawer
     ref="detailDrawerRef"
     v-model:visible="showDrawerVisible"
-    :width="1200"
+    :width="850"
     :footer="false"
     :title="t('bugManagement.detail.title', { id: detailInfo?.num, name: detailInfo?.title })"
     :tooltip-text="(detailInfo && detailInfo.title) || null"
@@ -17,6 +17,7 @@
     :mask="false"
     @loading-detail="setDetailLoading"
     @loaded="loadedBug"
+    @get-detail="getDetail"
   >
     <template #titleLeft>
       <div class="flex items-center">
@@ -52,7 +53,7 @@
           :disabled="loading"
           @click="shareHandler"
         >
-          <MsIcon type="icon-icon_share1" class="mr-1 font-[16px]" />
+          <MsIcon type="icon-icon_link-copy_outlined" class="mr-1 font-[16px]" />
           {{ t('caseManagement.featureCase.share') }}
         </MsButton>
         <MsButton
@@ -70,19 +71,32 @@
           />
           {{ t('caseManagement.featureCase.follow') }}
         </MsButton>
-        <MsButton type="icon" status="secondary" class="mr-2 !rounded-[var(--border-radius-small)]">
+        <MsButton
+          v-permission="['PROJECT_BUG:READ+ADD', 'PROJECT_BUG:READ+DELETE']"
+          type="icon"
+          status="secondary"
+          class="mr-2 !rounded-[var(--border-radius-small)]"
+        >
           <a-dropdown position="br" :hide-on-select="false">
             <div>
               <icon-more class="mr-1" />
               <span> {{ t('caseManagement.featureCase.more') }}</span>
             </div>
             <template #content>
-              <a-doption :disabled="props.currentPlatform !== detailInfo.platform" @click="handleCopy">
+              <a-doption
+                v-permission="['PROJECT_BUG:READ+ADD']"
+                :disabled="props.currentPlatform !== detailInfo.platform"
+                @click="handleCopy"
+              >
                 <MsIcon type="icon-icon_copy_filled" class="font-[16px]" />
                 {{ t('common.copy') }}
               </a-doption>
-              <a-doption class="error-6 text-[rgb(var(--danger-6))]" @click="deleteHandler">
-                <MsIcon type="icon-icon_delete-trash_outlined" class="font-[16px] text-[rgb(var(--danger-6))]" />
+              <a-doption
+                v-permission="['PROJECT_BUG:READ+DELETE']"
+                class="error-6 text-[rgb(var(--danger-6))]"
+                @click="deleteHandler"
+              >
+                <MsIcon type="icon-icon_delete-trash_outlined1" class="font-[16px] text-[rgb(var(--danger-6))]" />
                 {{ t('common.delete') }}
               </a-doption>
             </template>
@@ -90,20 +104,8 @@
         </MsButton>
       </div>
     </template>
-    <template #default="{ loading }">
-      <div
-        ref="wrapperRef"
-        :class="[
-          `${
-            activeTab === 'comment' && hasAnyPermission(['PROJECT_BUG:READ+COMMENT']) && !commentInputIsActive
-              ? 'h-[calc(100%-72px)]'
-              : commentInputIsActive
-              ? 'h-[calc(100%-286px)]'
-              : 'h-full'
-          }`,
-          'bg-white',
-        ]"
-      >
+    <template #default>
+      <div ref="wrapperRef" class="bg-[var(--color-text-fff)]">
         <div class="header relative h-[48px] pl-2">
           <MsTab
             v-model:active-key="activeTab"
@@ -112,140 +114,86 @@
             class="no-content relative border-b"
           />
         </div>
-        <MsSplitBox
-          expand-direction="right"
-          :size="0.8"
-          :max="0.7"
-          :min="0.6"
-          direction="horizontal"
-          class="!h-[calc(100%-48px)]"
-          :class="{ 'left-bug-detail': activeTab === 'comment' }"
+        <div
+          :class="`${!commentInputIsActive ? 'h-[calc(100vh-174px)]' : 'h-[calc(100vh-378px)]'} content-wrapper w-full`"
         >
-          <template #first>
-            <div class="leftWrapper h-full">
-              <a-spin :loading="detailLoading" class="w-full">
-                <div class="tab-pane-container p-4">
-                  <BugDetailTab
-                    v-if="activeTab === 'detail'"
-                    ref="bugDetailTabRef"
-                    :form-item="formItem"
-                    :allow-edit="hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])"
-                    :detail-info="detailInfo"
-                    :is-platform-default-template="isPlatformDefaultTemplate"
-                    :platform-system-fields="platformSystemFields"
-                    :current-platform="props.currentPlatform"
-                    @update-success="detailDrawerRef?.initDetail()"
-                  />
+          <a-spin :loading="detailLoading" class="h-full w-full">
+            <div class="tab-pane-container">
+              <BugDetailTab
+                v-if="activeTab === 'detail'"
+                ref="bugDetailTabRef"
+                :allow-edit="hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])"
+                :detail-info="detailInfo"
+                :current-custom-fields="currentCustomFields"
+                :is-platform-default-template="isPlatformDefaultTemplate"
+                :platform-system-fields="platformSystemFields"
+                :current-platform="props.currentPlatform"
+                @update-success="updateSuccessHandler"
+              />
+              <BasicInfo
+                v-if="activeTab === 'basicInfo'"
+                v-model:tags="tags"
+                :form-rule="formRules"
+                :detail="detailInfo"
+                :current-custom-fields="currentCustomFields"
+                :current-platform="props.currentPlatform"
+                :is-platform-default-template="isPlatformDefaultTemplate"
+                :loading="rightLoading"
+                :platform-system-fields="platformSystemFields"
+                @update-success="loadList"
+              />
 
-                  <BugCaseTab
-                    v-else-if="activeTab === 'case'"
-                    :bug-id="detailInfo.id"
-                    @update-case-success="updateSuccess"
-                  />
+              <BugCaseTab
+                v-else-if="activeTab === 'case'"
+                :bug-id="detailInfo.id"
+                @update-case-success="updateSuccess"
+              />
 
-                  <CommentTab v-else-if="activeTab === 'comment'" ref="commentRef" :bug-id="detailInfo.id" />
+              <CommentTab v-else-if="activeTab === 'comment'" ref="commentRef" :bug-id="detailInfo.id" />
 
-                  <BugHistoryTab v-else-if="activeTab === 'history'" :bug-id="detailInfo.id" />
-                </div>
-              </a-spin>
+              <BugHistoryTab v-else-if="activeTab === 'history'" :bug-id="detailInfo.id" />
             </div>
-          </template>
-          <template #second>
-            <a-spin :loading="rightLoading" class="w-full">
-              <!-- 所属平台一致, 详情展示 -->
-              <div v-if="props.currentPlatform === detailInfo.platform" class="rightWrapper h-full p-4">
-                <!-- 自定义字段开始 -->
-                <div class="inline-block w-full break-words">
-                  <a-skeleton v-if="rightLoading" class="w-full" :loading="rightLoading" :animation="true">
-                    <a-space direction="vertical" class="w-[100%]" size="large">
-                      <a-skeleton-line :rows="14" :line-height="30" :line-spacing="30" />
-                    </a-space>
-                  </a-skeleton>
-                  <div v-if="!rightLoading" class="mb-4 font-medium">
-                    <strong>
-                      {{ t('bugManagement.detail.basicInfo') }}
-                    </strong>
-                  </div>
-                  <MsFormCreate
-                    v-if="!rightLoading"
-                    ref="formCreateRef"
-                    v-model:form-item="formItem"
-                    v-model:api="fApi"
-                    :form-rule="formRules"
-                    class="w-full"
-                    :option="options"
-                    @change="handelFormCreateChange"
-                  />
-                  <!-- 自定义字段结束 -->
-                  <div
-                    v-if="!isPlatformDefaultTemplate && hasAnyPermission(['PROJECT_BUG:READ+UPDATE']) && !loading"
-                    class="baseItem"
-                  >
-                    <a-form
-                      :model="{}"
-                      :label-col-props="{
-                        span: 9,
-                      }"
-                      :wrapper-col-props="{
-                        span: 15,
-                      }"
-                      label-align="left"
-                      content-class="tags-class"
-                    >
-                      <a-form-item field="tags" :label="t('system.orgTemplate.tags')">
-                        <MsTagsInput
-                          v-model:model-value="tags"
-                          :disabled="!hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])"
-                          @blur="changeTag"
-                        />
-                      </a-form-item>
-                    </a-form>
-                  </div>
-                </div>
-
-                <!-- 内置基础信息结束 -->
-              </div>
-              <!-- 所属平台不一致, 详情不展示, 展示空面板 -->
-              <div v-else>
-                <a-empty> {{ $t('messageBox.noContent') }} </a-empty>
-              </div>
-            </a-spin>
-          </template>
-        </MsSplitBox>
+          </a-spin>
+        </div>
       </div>
       <CommentInput
         v-if="activeTab === 'comment' && hasAnyPermission(['PROJECT_BUG:READ+COMMENT'])"
         ref="commentInputRef"
         v-model:notice-user-ids="noticeUserIds"
+        v-model:filed-ids="uploadFileIds"
         :content="commentContent"
         is-show-avatar
         :upload-image="handleUploadImage"
         is-use-bottom
-        :preview-url="EditorPreviewFileUrl"
+        :preview-url="`${EditorPreviewFileUrl}/${appStore.currentProjectId}`"
         @publish="publishHandler"
       />
     </template>
   </MsDetailDrawer>
+  <DeleteModal
+    :id="props.detailId"
+    v-model:visible="deleteVisible"
+    :name="detailInfo.title"
+    :remote-func="deleteSingleBug"
+    @submit="handleSingleDelete"
+  />
 </template>
 
 <script setup lang="ts">
-  import { defineModel, ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
+  import { useClipboard } from '@vueuse/core';
   import { Message } from '@arco-design/web-vue';
-  import { debounce } from 'lodash-es';
 
   import MsButton from '@/components/pure/ms-button/index.vue';
-  import MsFormCreate from '@/components/pure/ms-form-create/ms-form-create.vue';
-  import type { FormItem, FormRuleItem } from '@/components/pure/ms-form-create/types';
+  import type { FormItem } from '@/components/pure/ms-form-create/types';
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
-  import MsSplitBox from '@/components/pure/ms-split-box/index.vue';
   import MsTab from '@/components/pure/ms-tab/index.vue';
   import type { MsPaginationI } from '@/components/pure/ms-table/type';
   import MsTag from '@/components/pure/ms-tag/ms-tag.vue';
-  import MsTagsInput from '@/components/pure/ms-tags-input/index.vue';
   import CommentInput from '@/components/business/ms-comment/input.vue';
   import { CommentParams } from '@/components/business/ms-comment/types';
   import MsDetailDrawer from '@/components/business/ms-detail-drawer/index.vue';
+  import BasicInfo from './basicInfo.vue';
   import BugCaseTab from './bugCaseTab.vue';
   import BugDetailTab from './bugDetailTab.vue';
   import BugHistoryTab from './bugHistoryTab.vue';
@@ -264,12 +212,13 @@
   import useModal from '@/hooks/useModal';
   import { useAppStore } from '@/store';
   import useUserStore from '@/store/modules/user';
-  import { characterLimit } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import type { CustomFieldItem } from '@/models/bug-management';
   import { BugEditCustomField, BugEditFormObject } from '@/models/bug-management';
-  import { RouteEnum } from '@/enums/routeEnum';
+  import { BugManagementRouteEnum, RouteEnum } from '@/enums/routeEnum';
+
+  const DeleteModal = defineAsyncComponent(() => import('@/views/bug-management/components/deleteModal.vue'));
 
   const router = useRouter();
   const route = useRoute();
@@ -278,6 +227,7 @@
 
   const { t } = useI18n();
   const { openDeleteModal } = useModal();
+  const { copy, isSupported } = useClipboard({ legacy: true });
 
   const emit = defineEmits<{
     (e: 'submit'): void;
@@ -286,11 +236,11 @@
   const props = defineProps<{
     visible: boolean;
     detailId: string; // 详情 id
-    detailIndex: number; // 详情 下标
+    detailIndex?: number; // 详情 下标
     detailDefaultTab: string; // 详情默认 tab
-    tableData: any[]; // 表格数据
-    pagination: MsPaginationI; // 分页器对象
-    pageChange: (page: number) => Promise<void>; // 分页变更函数
+    tableData?: any[]; // 表格数据
+    pagination?: MsPaginationI; // 分页器对象
+    pageChange?: (page: number) => Promise<void>; // 分页变更函数
     currentPlatform: string;
   }>();
   const caseCount = ref(0);
@@ -298,9 +248,8 @@
   const commentContent = ref('');
   const commentRef = ref();
   const noticeUserIds = ref<string[]>([]); // 通知人ids
-  const fApi = ref();
   const formRules = ref<FormItem[]>([]); // 表单规则
-  const formItem = ref<FormRuleItem[]>([]); // 表单项
+
   const currentProjectId = computed(() => appStore.currentProjectId);
   const showDrawerVisible = defineModel<boolean>('visible', { default: false });
   const bugDetailTabRef = ref();
@@ -308,6 +257,7 @@
   const rightLoading = ref(false);
   const detailLoading = ref(false);
   const activeTab = ref<string>('detail');
+  const currentDetailId = ref(props.detailId);
 
   const commentInputRef = ref<InstanceType<typeof CommentInput>>();
   const commentInputIsActive = computed(() => commentInputRef.value?.isActive);
@@ -362,6 +312,7 @@
   };
   // TODO:: Record<string, any>
   async function loadedBug(detail: BugEditFormObject) {
+    currentDetailId.value = detail.id;
     // 是否平台默认模板
     isPlatformDefaultTemplate.value = detail.platformDefault;
     // 关闭loading
@@ -371,6 +322,7 @@
       id: detail.templateId,
       fromStatusId: detail.status,
       platformBugKey: detail.platformBugId,
+      showLocal: detail.platform === 'Local',
     });
     // 详情信息, TAG赋值
     detailInfo.value = { ...detail };
@@ -401,9 +353,11 @@
         } else if (item.type === 'INT' || item.type === 'FLOAT') {
           tmpObj[item.id] = Number(item.value);
         } else if (item.type === 'CASCADER') {
-          const arr = JSON.parse(item.value);
-          if (arr && arr instanceof Array && arr.length > 0) {
-            tmpObj[item.id] = arr[arr.length - 1];
+          if (item.value !== '') {
+            const arr = JSON.parse(item.value);
+            if (arr && arr instanceof Array && arr.length > 0) {
+              tmpObj[item.id] = arr[arr.length - 1];
+            }
           }
         } else if (SINGLE_TYPE.includes(item.type)) {
           const multipleOptions = getOptionFromTemplate(
@@ -421,6 +375,7 @@
     platformSystemFields.value.forEach((item) => {
       item.defaultValue = tmpObj[item.fieldId];
     });
+
     getFormRules(
       customFieldsRes.customFields.filter((field: Record<string, any>) => !field.platformSystemField),
       tmpObj
@@ -454,11 +409,21 @@
 
   const editLoading = ref<boolean>(false);
 
+  async function getDetail() {
+    const res = await getBugDetail(props.detailId);
+    loadedBug(res);
+  }
+
   function updateSuccess() {
+    getDetail();
     emit('submit');
   }
 
   const tabList = [
+    {
+      value: 'basicInfo',
+      label: t('bugManagement.detail.basicInfo'),
+    },
     {
       value: 'detail',
       label: t('bugManagement.detail.detail'),
@@ -498,28 +463,23 @@
     });
   }
 
+  function loadList() {
+    detailDrawerRef.value?.initDetail();
+    emit('submit');
+  }
+
   const shareLoading = ref<boolean>(false);
 
   function shareHandler() {
-    const { origin } = window.location;
-    const url = `${origin}/#${route.path}?id=${detailInfo.value.id}&pId=${appStore.currentProjectId}&orgId=${appStore.currentOrgId}`;
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(url).then(
-        () => {
-          Message.info(t('bugManagement.detail.shareTip'));
-        },
-        (e) => {
-          Message.error(e);
-        }
-      );
-    } else {
-      const input = document.createElement('input');
-      input.value = url;
-      document.body.appendChild(input);
-      input.select();
-      document.execCommand('copy');
-      document.body.removeChild(input);
+    const url = `${window.location.origin}#${
+      router.resolve({ name: BugManagementRouteEnum.BUG_MANAGEMENT_INDEX }).fullPath
+    }?
+      id=${detailInfo.value.id}&orgId=${appStore.currentOrgId}&pId=${appStore.currentProjectId}`;
+    if (isSupported) {
+      copy(url);
       Message.info(t('bugManagement.detail.shareTip'));
+    } else {
+      Message.error(t('common.copyNotSupport'));
     }
   }
 
@@ -529,13 +489,13 @@
     followLoading.value = true;
     try {
       await followBug(detailInfo.value.id, detailInfo.value.followFlag);
-      updateSuccess();
       Message.success(
         detailInfo.value.followFlag
           ? t('caseManagement.featureCase.cancelFollowSuccess')
           : t('caseManagement.featureCase.followSuccess')
       );
       detailInfo.value.followFlag = !detailInfo.value.followFlag;
+      emit('submit');
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -543,31 +503,21 @@
       followLoading.value = false;
     }
   }
+  const deleteVisible = ref(false);
 
   // 删除用例
   function deleteHandler() {
-    const { id, name } = detailInfo.value;
-    openDeleteModal({
-      title: t('bugManagement.detail.deleteTitle', { name: characterLimit(name) }),
-      content: t('bugManagement.detail.deleteContent'),
-      onBeforeOk: async () => {
-        try {
-          const params = {
-            id,
-            deleteAll: false,
-            projectId: currentProjectId.value,
-          };
-          await deleteSingleBug(params);
-          Message.success(t('common.deleteSuccess'));
-          updateSuccess();
-          detailDrawerRef.value?.openPrevDetail();
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.log(error);
-        }
-      },
-    });
+    deleteVisible.value = true;
   }
+
+  const handleSingleDelete = () => {
+    emit('submit');
+    if (!props.pagination && !props.tableData) {
+      showDrawerVisible.value = false;
+    } else {
+      detailDrawerRef.value?.openNextDetail();
+    }
+  };
   // 复制bug
   function handleCopy() {
     router.push({
@@ -581,55 +531,7 @@
     });
   }
 
-  /**
-   * 单独更新字段
-   */
-  async function updateFieldHandler() {
-    try {
-      rightLoading.value = true;
-      await bugDetailTabRef.value?.handleSave();
-      rightLoading.value = false;
-    } catch (error) {
-      console.log(error);
-    } finally {
-      rightLoading.value = false;
-    }
-  }
-
-  const handelFormCreateChange = debounce(() => {
-    updateFieldHandler();
-  }, 300);
-
-  const changeTag = debounce(() => {
-    detailInfo.value.tags = tags.value;
-    updateFieldHandler();
-  }, 300);
-
-  // 表单配置项
-  const options = {
-    resetBtn: false, // 不展示默认配置的重置和提交
-    submitBtn: false,
-    on: false, // 取消绑定on事件
-    form: {
-      layout: 'horizontal',
-      labelAlign: 'left',
-      labelColProps: {
-        span: 9,
-      },
-      wrapperColProps: {
-        span: 15,
-      },
-    },
-    // 暂时默认
-    row: {
-      gutter: 0,
-    },
-    wrap: {
-      'asterisk-position': 'end',
-      'validate-trigger': ['change'],
-    },
-  };
-
+  const uploadFileIds = ref<string[]>([]);
   async function publishHandler(currentContent: string) {
     try {
       const params = {
@@ -639,6 +541,7 @@
         parentId: '',
         content: currentContent,
         event: noticeUserIds.value.join(';') ? 'AT' : 'COMMENT', // 任务事件(仅评论: ’COMMENT‘; 评论并@: ’AT‘; 回复评论/回复并@: ’REPLY‘;)
+        uploadFileIds: uploadFileIds.value,
       };
       await createOrUpdateComment(params as CommentParams);
       Message.success(t('common.publishSuccessfully'));
@@ -655,6 +558,15 @@
     });
     return data;
   }
+
+  async function updateSuccessHandler() {
+    if (props.pagination) {
+      detailDrawerRef.value?.initDetail();
+    } else {
+      updateSuccess();
+    }
+  }
+
   watch(
     () => showDrawerVisible.value,
     (val) => {
@@ -664,12 +576,6 @@
         } else {
           activeTab.value = 'detail';
         }
-      } else {
-        const query = { ...route.query };
-        delete query.id;
-        router.replace({
-          query,
-        });
       }
     }
   );
@@ -681,6 +587,10 @@
       padding: 0 16px;
       border-bottom: 1px solid var(--color-text-n8);
     }
+  }
+  .content-wrapper {
+    @apply overflow-y-auto overflow-x-hidden;
+    .ms-scroll-bar();
   }
   .rightWrapper {
     .baseItem {
@@ -786,21 +696,13 @@
       color: rgb(var(--danger-6));
     }
   }
-  :deep(.active .arco-badge-text) {
-    background: rgb(var(--primary-5));
-  }
   :deep(.tags-class .arco-form-item-label-col) {
     justify-content: flex-start !important;
   }
   .tab-pane-container {
-    @apply flex-1 overflow-y-auto px-4;
+    @apply flex-1 overflow-y-auto p-4;
     .ms-scroll-bar();
   }
-  //:deep(.w-full .arco-form-item-label) {
-  //  display: inline-block;
-  //  width: 100%;
-  //  word-wrap: break-word;
-  //}
   :deep(.arco-form-item-content) {
     overflow-wrap: anywhere;
   }

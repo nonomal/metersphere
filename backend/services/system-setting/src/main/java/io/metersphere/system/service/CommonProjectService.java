@@ -1,5 +1,7 @@
 package io.metersphere.system.service;
 
+import io.metersphere.functional.domain.ExportTaskExample;
+import io.metersphere.functional.mapper.ExportTaskMapper;
 import io.metersphere.project.domain.Project;
 import io.metersphere.project.domain.ProjectExample;
 import io.metersphere.project.domain.ProjectTestResourcePool;
@@ -17,6 +19,7 @@ import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.domain.*;
 import io.metersphere.system.dto.*;
 import io.metersphere.system.dto.request.ProjectAddMemberBatchRequest;
+import io.metersphere.system.dto.request.ProjectAddMemberRequest;
 import io.metersphere.system.dto.request.ProjectPoolRequest;
 import io.metersphere.system.dto.sdk.OptionDTO;
 import io.metersphere.system.dto.user.UserExtendDTO;
@@ -39,7 +42,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -48,6 +50,8 @@ public class CommonProjectService {
 
     @Resource
     private ProjectMapper projectMapper;
+    @Resource
+    private ExportTaskMapper exportTaskMapper;
     @Resource
     private UserMapper userMapper;
     @Resource
@@ -67,14 +71,17 @@ public class CommonProjectService {
     private OrganizationMapper organizationMapper;
     @Resource
     private TestResourcePoolMapper testResourcePoolMapper;
-    @Resource
-    private TestResourcePoolOrganizationMapper testResourcePoolOrganizationMapper;
+
     @Resource
     private ProjectTestResourcePoolMapper projectTestResourcePoolMapper;
     @Resource
     private TestResourcePoolService testResourcePoolService;
+    @Resource
+    private CommonProjectPoolService commonProjectPoolService;
+
     public static final Integer DEFAULT_REMAIN_DAY_COUNT = 30;
     public static final String API_TEST = "apiTest";
+    public static final String TEST_PLAN = "testPlan";
 
     @Autowired
     public CommonProjectService(ProjectServiceInvoker serviceInvoker) {
@@ -87,10 +94,10 @@ public class CommonProjectService {
         List<Project> project = projectMapper.selectByExample(example);
         ProjectDTO projectDTO = new ProjectDTO();
         if (CollectionUtils.isNotEmpty(project)) {
-            BeanUtils.copyBean(projectDTO, project.get(0));
+            BeanUtils.copyBean(projectDTO, project.getFirst());
             projectDTO.setOrganizationName(organizationMapper.selectByPrimaryKey(projectDTO.getOrganizationId()).getName());
             List<ProjectDTO> projectDTOS = buildUserInfo(List.of(projectDTO));
-            projectDTO = projectDTOS.get(0);
+            projectDTO = projectDTOS.getFirst();
         } else {
             return null;
         }
@@ -117,6 +124,7 @@ public class CommonProjectService {
         project.setUpdateUser(createUser);
         project.setCreateUser(createUser);
         project.setEnable(addProjectDTO.getEnable());
+        project.setAllResourcePool(addProjectDTO.isAllResourcePool());
         project.setDescription(addProjectDTO.getDescription());
         addProjectDTO.setId(project.getId());
         BeanUtils.copyBean(projectDTO, project);
@@ -276,6 +284,7 @@ public class CommonProjectService {
         project.setDescription(updateProjectDto.getDescription());
         project.setOrganizationId(updateProjectDto.getOrganizationId());
         project.setEnable(updateProjectDto.getEnable());
+        project.setAllResourcePool(updateProjectDto.isAllResourcePool());
         project.setUpdateUser(updateUser);
         project.setCreateUser(null);
         project.setCreateTime(null);
@@ -347,7 +356,7 @@ public class CommonProjectService {
             project.setModuleSetting(JSON.toJSONString(updateProjectDto.getModuleIds()));
             projectDTO.setModuleIds(updateProjectDto.getModuleIds());
         } else {
-            project.setModuleSetting(null);
+            project.setModuleSetting(JSON.toJSONString(new ArrayList<>()));
             projectDTO.setModuleIds(new ArrayList<>());
         }
         project.setOrganizationId(null);
@@ -392,7 +401,7 @@ public class CommonProjectService {
         List<UserRoleRelation> userRoleRelations = new ArrayList<>();
         request.getProjectIds().forEach(projectId -> {
             Project project = projectMapper.selectByPrimaryKey(projectId);
-            Map<String, String> nameMap = addUserPre(request, createUser, path, module, projectId, project);
+            Map<String, String> nameMap = addUserPre(request.getUserIds(), createUser, path, module, projectId, project);
             request.getUserIds().forEach(userId -> {
                 UserRoleRelationExample userRoleRelationExample = new UserRoleRelationExample();
                 userRoleRelationExample.createCriteria().andUserIdEqualTo(userId)
@@ -422,17 +431,17 @@ public class CommonProjectService {
         operationLogService.batchAdd(logDTOList);
     }
 
-    private Map<String, String> addUserPre(ProjectAddMemberBatchRequest request, String createUser, String path, String module, String projectId, Project project) {
+    public Map<String, String> addUserPre(List<String> userIds, String createUser, String path, String module, String projectId, Project project) {
         checkProjectNotExist(projectId);
         UserExample userExample = new UserExample();
-        userExample.createCriteria().andIdIn(request.getUserIds()).andDeletedEqualTo(false);
+        userExample.createCriteria().andIdIn(userIds).andDeletedEqualTo(false);
         List<User> users = userMapper.selectByExample(userExample);
-        if (request.getUserIds().size() != users.size()) {
+        if (userIds.size() != users.size()) {
             throw new MSException(Translator.get("user_not_exist"));
         }
         //把id和名称放一个map中
         Map<String, String> userMap = users.stream().collect(Collectors.toMap(User::getId, User::getName));
-        this.checkOrgRoleExit(request.getUserIds(), project.getOrganizationId(), createUser, userMap, path, module);
+        this.checkOrgRoleExit(userIds, project.getOrganizationId(), createUser, userMap, path, module);
         return userMap;
     }
 
@@ -452,7 +461,7 @@ public class CommonProjectService {
         List<UserRoleRelation> userRoleRelations = new ArrayList<>();
         request.getProjectIds().forEach(projectId -> {
             Project project = projectMapper.selectByPrimaryKey(projectId);
-            Map<String, String> userMap = addUserPre(request, createUser, path, module, projectId, project);
+            Map<String, String> userMap = addUserPre(request.getUserIds(), createUser, path, module, projectId, project);
             request.getUserIds().forEach(userId -> {
                 UserRoleRelationExample userRoleRelationExample = new UserRoleRelationExample();
                 userRoleRelationExample.createCriteria().andUserIdEqualTo(userId)
@@ -549,6 +558,10 @@ public class CommonProjectService {
             ProjectTestResourcePoolExample projectTestResourcePoolExample = new ProjectTestResourcePoolExample();
             projectTestResourcePoolExample.createCriteria().andProjectIdEqualTo(project.getId());
             projectTestResourcePoolMapper.deleteByExample(projectTestResourcePoolExample);
+            //删除导出任务
+            ExportTaskExample exportTaskExample = new ExportTaskExample();
+            exportTaskExample.createCriteria().andProjectIdEqualTo(project.getId());
+            exportTaskMapper.deleteByExample(exportTaskExample);
             // delete project
             projectMapper.deleteByPrimaryKey(project.getId());
             LogDTO logDTO = new LogDTO(OperationLogConstants.SYSTEM, project.getOrganizationId(), project.getId(), Translator.get("scheduled_tasks"), OperationLogType.DELETE.name(), OperationLogModule.SETTING_ORGANIZATION_PROJECT, Translator.get("delete") + Translator.get("project") + ": " + project.getName());
@@ -594,7 +607,7 @@ public class CommonProjectService {
      * @param method     请求方法
      * @param logDTOList 日志集合
      */
-    private void setLog(LogDTO dto, String path, String method, List<LogDTO> logDTOList) {
+    public void setLog(LogDTO dto, String path, String method, List<LogDTO> logDTOList) {
         dto.setPath(path);
         dto.setMethod(method);
         dto.setOriginalValue(JSON.toJSONBytes(StringUtils.EMPTY));
@@ -624,28 +637,11 @@ public class CommonProjectService {
     public List<OptionDTO> getTestResourcePoolOptions(ProjectPoolRequest request) {
         List<OptionDTO> optionDTOS = new ArrayList<>();
         //获取制定组织的资源池  和全部组织的资源池
-        List<TestResourcePool> testResourcePools = new ArrayList<>();
-        if (StringUtils.isNotBlank(request.getOrganizationId())) {
-            TestResourcePoolOrganizationExample example = new TestResourcePoolOrganizationExample();
-            example.createCriteria().andOrgIdEqualTo(request.getOrganizationId());
-            List<TestResourcePoolOrganization> orgPools = testResourcePoolOrganizationMapper.selectByExample(example);
-            if (CollectionUtils.isNotEmpty(orgPools)) {
-                List<String> poolIds = orgPools.stream().map(TestResourcePoolOrganization::getTestResourcePoolId).toList();
-                TestResourcePoolExample poolExample = new TestResourcePoolExample();
-                poolExample.createCriteria().andIdIn(poolIds).andEnableEqualTo(true).andDeletedEqualTo(false);
-                testResourcePools.addAll(testResourcePoolMapper.selectByExample(poolExample));
-            }
-        }
-        //获取应用全部组织的资源池
-        TestResourcePoolExample poolExample = new TestResourcePoolExample();
-        poolExample.createCriteria().andAllOrgEqualTo(true).andEnableEqualTo(true).andDeletedEqualTo(false);
-        testResourcePools.addAll(testResourcePoolMapper.selectByExample(poolExample));
-
-        testResourcePools = testResourcePools.stream().filter(Objects::nonNull).distinct().collect(Collectors.toList());
+        List<TestResourcePool> testResourcePools = commonProjectPoolService.getOrgTestResourcePools(request.getOrganizationId(), true);
         //这里需要获取项目开启的模块   判断资源池开启的使用范围的模块是否在项目开启的模块中
         List<String> moduleIds = request.getModulesIds();
         testResourcePools.forEach(pool -> {
-            if (moduleIds.contains(API_TEST)) {
+            if (moduleIds.contains(API_TEST) || moduleIds.contains(TEST_PLAN)) {
                 OptionDTO optionDTO = new OptionDTO();
                 optionDTO.setId(pool.getId());
                 optionDTO.setName(pool.getName());
@@ -676,14 +672,16 @@ public class CommonProjectService {
      * @return
      */
     public boolean validateProjectResourcePool(TestResourcePool resourcePool, String projectId) {
-        ProjectTestResourcePoolExample example = new ProjectTestResourcePoolExample();
-        example.createCriteria()
-                .andProjectIdEqualTo(projectId)
-                .andTestResourcePoolIdEqualTo(resourcePool.getId());
-        if (projectTestResourcePoolMapper.countByExample(example) < 1) {
-            return false;
-        }
         Project project = projectMapper.selectByPrimaryKey(projectId);
+        if (!project.getAllResourcePool()) {
+            ProjectTestResourcePoolExample example = new ProjectTestResourcePoolExample();
+            example.createCriteria()
+                    .andProjectIdEqualTo(projectId)
+                    .andTestResourcePoolIdEqualTo(resourcePool.getId());
+            if (projectTestResourcePoolMapper.countByExample(example) < 1) {
+                return false;
+            }
+        }
         // 校验组织是否有权限
         return testResourcePoolService.validateOrgResourcePool(resourcePool, project.getOrganizationId());
     }
@@ -710,5 +708,35 @@ public class CommonProjectService {
         long remainDays = (System.currentTimeMillis() - deleteTime) / (1000 * 3600 * 24);
         int remainDayCount = DEFAULT_REMAIN_DAY_COUNT - (int) remainDays;
         return remainDayCount > 0 ? remainDayCount : 1;
+    }
+
+    public void addProjectUser(ProjectAddMemberRequest request, String createUser, String path, String type, String content, String module) {
+        List<LogDTO> logDTOList = new ArrayList<>();
+        List<UserRoleRelation> userRoleRelations = new ArrayList<>();
+        Project project = projectMapper.selectByPrimaryKey(request.getProjectId());
+        Map<String, String> userMap = addUserPre(request.getUserIds(), createUser, path, module, request.getProjectId(), project);
+        request.getUserIds().forEach(userId -> {
+            request.getUserRoleIds().forEach(userRoleId -> {
+                UserRoleRelation userRoleRelation = new UserRoleRelation();
+                userRoleRelation.setId(IDGenerator.nextStr());
+                userRoleRelation.setUserId(userId);
+                userRoleRelation.setSourceId(request.getProjectId());
+                userRoleRelation.setRoleId(userRoleId);
+                userRoleRelation.setCreateTime(System.currentTimeMillis());
+                userRoleRelation.setCreateUser(createUser);
+                userRoleRelation.setOrganizationId(project.getOrganizationId());
+                userRoleRelations.add(userRoleRelation);
+                String logProjectId = OperationLogConstants.SYSTEM;
+                if (StringUtils.equals(module, OperationLogModule.SETTING_ORGANIZATION_PROJECT)) {
+                    logProjectId = OperationLogConstants.ORGANIZATION;
+                }
+                LogDTO logDTO = new LogDTO(logProjectId, OperationLogConstants.SYSTEM, userRoleRelation.getId(), createUser, type, module, content + Translator.get("project_member") + ": " + userMap.get(userId));
+                setLog(logDTO, path, HttpMethodConstants.POST.name(), logDTOList);
+            });
+        });
+        if (CollectionUtils.isNotEmpty(userRoleRelations)) {
+            userRoleRelationMapper.batchInsert(userRoleRelations);
+        }
+        operationLogService.batchAdd(logDTOList);
     }
 }

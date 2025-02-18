@@ -16,7 +16,7 @@
     @loaded="loadedReport"
   >
     <template #titleRight="{ loading }">
-      <div class="rightButtons flex items-center">
+      <div class="ms-drawer-right-operation-button flex items-center">
         <a-dropdown position="br" @select="shareHandler">
           <MsButton
             v-permission="['PROJECT_API_REPORT:READ+SHARE']"
@@ -27,7 +27,7 @@
             :loading="shareLoading"
             @click="shareHandler"
           >
-            <MsIcon type="icon-icon_share1" class="mr-2 font-[16px]" />
+            <MsIcon type="icon-icon_link-copy_outlined" class="mr-2 font-[16px]" />
             {{ t('common.share') }}
           </MsButton>
           <template #content>
@@ -37,17 +37,16 @@
             </a-doption>
           </template>
         </a-dropdown>
-        <!-- <MsButton
+        <MsButton
+          v-permission="['PROJECT_API_REPORT:READ+EXPORT']"
           type="icon"
           status="secondary"
           class="mr-4 !rounded-[var(--border-radius-small)]"
-          :disabled="loading"
-          :loading="exportLoading"
           @click="exportHandler"
         >
-          <MsIcon type="icon-icon_move_outlined" class="mr-2 font-[16px]" />
+          <MsIcon type="icon-icon_into-item_outlined" class="mr-2 font-[16px]" />
           {{ t('common.export') }}
-        </MsButton> -->
+        </MsButton>
       </div>
     </template>
     <template #default="{ loading }">
@@ -60,6 +59,7 @@
 
 <script setup lang="ts">
   import { ref } from 'vue';
+  import { useClipboard } from '@vueuse/core';
   import { Message } from '@arco-design/web-vue';
   import { cloneDeep } from 'lodash-es';
 
@@ -70,14 +70,17 @@
 
   import { getShareInfo, reportCaseDetail } from '@/api/modules/api-test/report';
   import { useI18n } from '@/hooks/useI18n';
+  import useOpenNewPage from '@/hooks/useOpenNewPage';
   import { useAppStore } from '@/store';
 
   import type { ReportDetail } from '@/models/apiTest/report';
-  import { RouteEnum } from '@/enums/routeEnum';
+  import { FullPageEnum, RouteEnum } from '@/enums/routeEnum';
+  import { ExecuteStatusEnum } from '@/enums/taskCenter';
 
   const appStore = useAppStore();
-
+  const { copy, isSupported } = useClipboard({ legacy: true });
   const { t } = useI18n();
+  const { openNewPage } = useOpenNewPage();
 
   const props = defineProps<{
     visible: boolean;
@@ -118,7 +121,7 @@
     startTime: 0, // 开始时间/同创建时间一致
     endTime: 0, //  结束时间/报告执行完成
     requestDuration: 0, // 请求总耗时
-    status: '', // 报告状态/SUCCESS/ERROR
+    status: ExecuteStatusEnum.PENDING, // 报告状态/SUCCESS/ERROR
     triggerMode: '', // 触发方式
     runMode: '', // 执行模式
     poolId: '', // 资源池
@@ -165,23 +168,11 @@
 
       const { origin } = window.location;
       shareLink.value = `${origin}/#/${RouteEnum.SHARE}/${RouteEnum.SHARE_REPORT_CASE}${shareId}`;
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareLink.value).then(
-          () => {
-            Message.info(t('bugManagement.detail.shareTip'));
-          },
-          (e) => {
-            Message.error(e);
-          }
-        );
-      } else {
-        const input = document.createElement('input');
-        input.value = shareLink.value;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
+      if (isSupported) {
+        copy(shareLink.value);
         Message.info(t('bugManagement.detail.shareTip'));
+      } else {
+        Message.error(t('common.copyNotSupport'));
       }
     } catch (error) {
       console.log(error);
@@ -203,6 +194,12 @@
       }
     }
   );
+
+  function exportHandler() {
+    openNewPage(FullPageEnum.FULL_PAGE_API_CASE_EXPORT_PDF, {
+      id: props.reportId,
+    });
+  }
 </script>
 
 <style scoped lang="less">
@@ -214,13 +211,17 @@
       padding: 0 16px;
       height: 54px;
       border-radius: 4px;
-      background: white;
-      @apply mb-4 bg-white;
+      background: var(--color-text-fff);
+      @apply mb-4;
+
+      background-color: var(--color-text-fff);
     }
     .analyze {
       height: 196px;
       border-radius: 4px;
-      @apply mb-4 flex justify-between  bg-white;
+      @apply mb-4 flex justify-between;
+
+      background-color: var(--color-text-fff);
       .request-analyze {
         @apply flex h-full flex-1 flex-col p-4;
         .chart-legend {
@@ -270,7 +271,7 @@
     .report-info {
       padding: 16px;
       border-radius: 4px;
-      @apply bg-white;
+      background-color: var(--color-text-fff);
     }
   }
   .block-title {

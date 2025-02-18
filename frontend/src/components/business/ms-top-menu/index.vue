@@ -1,12 +1,12 @@
 <template>
   <a-menu
-    v-show="appStore.topMenus.length > 0"
+    v-show="appStore.getTopMenus.length > 0"
     v-model:selected-keys="activeMenus"
     class="bg-transparent"
     mode="horizontal"
     @menu-item-click="menuClickHandler"
   >
-    <a-menu-item v-for="menu of appStore.topMenus" :key="(menu.name as string)" @click="jumpPath(menu.name)">
+    <a-menu-item v-for="menu of appStore.getTopMenus" :key="(menu.name as string)">
       {{ t(menu.meta?.locale || '') }}
     </a-menu-item>
   </a-menu>
@@ -15,7 +15,7 @@
 <script setup lang="ts">
   import { Ref, ref, watch } from 'vue';
   import { RouteRecordName, RouteRecordRaw, useRouter } from 'vue-router';
-  import { cloneDeep } from 'lodash-es';
+  import { cloneDeep, debounce } from 'lodash-es';
 
   import { useI18n } from '@/hooks/useI18n';
   import usePermission from '@/hooks/usePermission';
@@ -36,7 +36,7 @@
 
   function checkAuthMenu() {
     const topMenus = appStore.getTopMenus;
-    if (appStore.packageType === 'community') {
+    if (appStore.getPackageType === 'community') {
       appStore.setTopMenus(topMenus.filter((item) => item.name !== RouteEnum.SETTING_SYSTEM_AUTHORIZED_MANAGEMENT));
     } else {
       appStore.setTopMenus(topMenus);
@@ -94,12 +94,15 @@
             );
           }
 
-          const filterMenuTopRouter =
+          let filterMenuTopRouter =
             currentParent?.children?.filter((item: any) => permission.accessRouter(item) && item.meta?.isTopMenu) || [];
-
+          if (appStore.getPackageType === 'community') {
+            filterMenuTopRouter = filterMenuTopRouter.filter(
+              (item) => item.name !== RouteEnum.SETTING_SYSTEM_AUTHORIZED_MANAGEMENT
+            );
+          }
           appStore.setTopMenus(filterMenuTopRouter);
           setCurrentTopMenu(name as string);
-
           return;
         }
       }
@@ -109,18 +112,16 @@
     setCurrentTopMenu('');
   }, true);
 
-  function jumpPath(route: RouteRecordName | undefined) {
-    router.push({ name: route });
-  }
-  function menuClickHandler() {
+  const menuClickHandler = debounce((route: RouteRecordName | undefined) => {
     activeMenus.value = [appStore.getCurrentTopMenu?.name || ''];
-  }
+    router.push({ name: route });
+  }, 150);
 
   watch(
     () => appStore.currentOrgId,
     async () => {
       await appStore.initSystemPackage();
-      if (appStore.packageType === 'enterprise') {
+      if (appStore.getPackageType === 'enterprise') {
         licenseStore.getValidateLicense();
       }
     },
@@ -130,8 +131,8 @@
   );
 
   watch(
-    () => appStore.packageType,
-    (val) => {
+    () => appStore.getPackageType,
+    () => {
       checkAuthMenu();
     }
   );
@@ -140,11 +141,13 @@
 <style lang="less" scoped>
   :deep(.arco-menu-inner) {
     overflow-y: hidden;
-    padding: 12px 16px 12px 8px;
+    padding: 12px 16px 12px 0;
     .arco-menu-item {
       @apply !bg-transparent;
-      &:not(:first-child) {
-        margin-left: 8px;
+
+      margin-left: 8px;
+      &:nth-child(2) {
+        margin-left: 0;
       }
       &:hover {
         color: rgb(var(--primary-4));

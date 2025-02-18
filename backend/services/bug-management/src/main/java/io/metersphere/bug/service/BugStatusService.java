@@ -12,15 +12,14 @@ import io.metersphere.sdk.util.LogUtils;
 import io.metersphere.system.service.BaseStatusFlowSettingService;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
 
 @Service
-@Transactional(rollbackFor = Exception.class)
 public class BugStatusService {
     @Resource
     private BugMapper bugMapper;
@@ -68,9 +67,9 @@ public class BugStatusService {
      * @param platformBugKey 平台缺陷Key
      * @return 选项集合
      */
-   public List<SelectOption> getToStatusItemOption(String projectId, String fromStatusId, String platformBugKey) {
+   public List<SelectOption> getToStatusItemOption(String projectId, String fromStatusId, String platformBugKey, Boolean showLocal) {
        String platformName = projectApplicationService.getPlatformName(projectId);
-       if (StringUtils.equals(platformName, BugPlatform.LOCAL.getName())) {
+       if (StringUtils.equals(platformName, BugPlatform.LOCAL.getName()) || BooleanUtils.isTrue(showLocal)) {
            // Local状态流
            return getToStatusItemOptionOnLocal(projectId, fromStatusId);
        } else {
@@ -107,13 +106,18 @@ public class BugStatusService {
        return baseStatusFlowSettingService.getAllStatusOption(projectId, TemplateScene.BUG.name());
    }
 
+    /**
+     * 获取当前项目最新的Jira平台缺陷Key (表头状态筛选需要)
+     * @param projectId 项目ID
+     * @return JiraKey
+     */
    public String getJiraPlatformBugKeyLatest(String projectId) {
        BugExample example = new BugExample();
        example.createCriteria().andPlatformEqualTo(BugPlatform.JIRA.name()).andProjectIdEqualTo(projectId);
        example.setOrderByClause("create_time desc");
        List<Bug> bugs = bugMapper.selectByExample(example);
        if (CollectionUtils.isNotEmpty(bugs)) {
-           return bugs.get(0).getPlatformBugId();
+           return bugs.getFirst().getPlatformBugId();
        } else {
            return StringUtils.EMPTY;
        }

@@ -35,6 +35,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -78,8 +79,6 @@ public class CaseReviewService {
     private ExtFunctionalCaseMapper extFunctionalCaseMapper;
     @Resource
     private BaseCaseProvider provider;
-    @Resource
-    private ExtCaseReviewHistoryMapper extCaseReviewHistoryMapper;
     @Resource
     private UserLoginService userLoginService;
 
@@ -133,6 +132,7 @@ public class CaseReviewService {
             caseReviewDTO.setReReviewedCount(0);
             caseReviewDTO.setUnderReviewedCount(0);
             caseReviewDTO.setReviewedCount(0);
+            caseReviewDTO.setUnReviewCount(0);
         } else {
             buildAboutCaseCount(caseReviewDTO, caseReviewFunctionalCaseList);
         }
@@ -155,6 +155,9 @@ public class CaseReviewService {
         }
         caseReviewDTO.setPassCount(passList.size());
 
+        BigDecimal passRate = BigDecimal.valueOf(caseReviewDTO.getPassCount()).divide(BigDecimal.valueOf(caseReviewDTO.getCaseCount()), 2, RoundingMode.HALF_UP);
+        caseReviewDTO.setPassRate(passRate.multiply(BigDecimal.valueOf(100)));
+
         List<CaseReviewFunctionalCase> unPassList = statusCaseMap.get(FunctionalCaseReviewStatus.UN_PASS.toString());
         if (unPassList == null) {
             unPassList = new ArrayList<>();
@@ -174,6 +177,13 @@ public class CaseReviewService {
         caseReviewDTO.setUnderReviewedCount(underReviewedList.size());
 
         caseReviewDTO.setReviewedCount(caseReviewDTO.getPassCount() + caseReviewDTO.getUnPassCount());
+
+        List<CaseReviewFunctionalCase> unReviewList = statusCaseMap.get(FunctionalCaseReviewStatus.UN_REVIEWED.toString());
+        if (unReviewList == null) {
+            unReviewList = new ArrayList<>();
+        }
+        caseReviewDTO.setUnReviewCount(unReviewList.size());
+
     }
 
     /**
@@ -608,8 +618,6 @@ public class CaseReviewService {
 
     public void deleteCaseReview(String reviewId, String projectId) {
         deleteCaseReviewService.deleteCaseReviewResource(List.of(reviewId), projectId);
-        //将评审历史状态置为true
-        extCaseReviewHistoryMapper.updateDelete(new ArrayList<>(), reviewId, true);
     }
 
     public void disassociate(String reviewId, String caseId, String userId) {

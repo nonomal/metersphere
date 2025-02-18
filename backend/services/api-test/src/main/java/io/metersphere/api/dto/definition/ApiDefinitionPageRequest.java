@@ -1,6 +1,5 @@
 package io.metersphere.api.dto.definition;
 
-import io.metersphere.sdk.constants.ModuleConstants;
 import io.metersphere.system.dto.sdk.BasePageRequest;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
@@ -8,6 +7,7 @@ import jakarta.validation.constraints.Size;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -21,14 +21,12 @@ public class ApiDefinitionPageRequest extends BasePageRequest {
     @Size(min = 1, max = 50, message = "{api_definition.id.length_range}")
     private String id;
 
-    @Schema(description =  "接口名称")
+    @Schema(description = "接口名称")
     @Size(min = 1, max = 255, message = "{api_definition.name.length_range}")
     private String name;
 
-    @Schema(description =  "接口协议", requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotBlank(message = "{api_definition.protocol.not_blank}")
-    @Size(min = 1, max = 20, message = "{api_definition.protocol.length_range}")
-    private String protocol = ModuleConstants.NODE_PROTOCOL_HTTP;
+    @Schema(description = "接口协议", requiredMode = Schema.RequiredMode.REQUIRED)
+    private List<String> protocols = new ArrayList<>();
 
     @Schema(description = "项目ID", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "{api_definition.project_id.not_blank}")
@@ -48,4 +46,10 @@ public class ApiDefinitionPageRequest extends BasePageRequest {
 
     @Schema(description = "删除状态(状态为 1 时为回收站数据)")
     private Boolean deleted = false;
+
+    @Schema(description = "本次查询包含的ID(一般由后台计算后得出)")
+    private List<String> includeIds = new ArrayList<>();
+
+    @Schema(description = "本次查询不包含的ID(一般由后台计算后得出)")
+    private List<String> excludeIds = new ArrayList<>();
 }

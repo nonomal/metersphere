@@ -27,7 +27,7 @@
             :max-length="255"
           ></a-input>
         </a-form-item>
-        <a-form-item field="remark" :label="t('system.orgTemplate.description')" asterisk-position="end">
+        <a-form-item field="remark" :label="t('common.desc')" asterisk-position="end">
           <a-textarea
             v-model="fieldForm.remark"
             :max-length="1000"
@@ -212,7 +212,7 @@
 
   // 批量表单-1.仅选项情况
   const onlyOptions: Ref<FormItemModel> = ref({
-    filed: 'text',
+    field: 'text',
     type: 'input',
     label: '',
     rules: [
@@ -227,7 +227,7 @@
   // 批量表单-2 缺陷情况
   const bugBatchFormRules = ref<FormItemModel[]>([
     {
-      filed: 'text',
+      field: 'text',
       type: 'input',
       label: '',
       rules: [
@@ -239,7 +239,7 @@
       hideLabel: true,
     },
     {
-      filed: 'value',
+      field: 'value',
       type: 'input',
       label: '',
       rules: [
@@ -273,7 +273,6 @@
   const confirmHandler = async (isContinue = false) => {
     try {
       drawerLoading.value = true;
-      console.log(fieldForm.value);
       const formCopy = cloneDeep(fieldForm.value);
 
       formCopy.scene = route.query.type;

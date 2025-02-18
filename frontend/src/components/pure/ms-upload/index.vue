@@ -41,7 +41,7 @@
                 {{
                   t(props.subText || 'ms.upload.importModalFileTip', {
                     type: UploadAcceptEnum[props.accept],
-                    size: props.maxSize || defaultMaxSize,
+                    size: props.maxSize || appStore.getFileMaxSize,
                   })
                 }}
               </slot>
@@ -69,6 +69,7 @@
   import { FileIconMap, getFileEnum, getFileIcon } from '@/components/pure/ms-upload/iconMap';
 
   import { useI18n } from '@/hooks/useI18n';
+  import useAppStore from '@/store/modules/app';
   import { formatFileSize } from '@/utils';
 
   import { UploadAcceptEnum, UploadStatus } from '@/enums/uploadEnum';
@@ -107,11 +108,12 @@
     isAllScreen: false,
     cutHeight: 110,
     allowRepeat: false,
+    sizeUnit: 'MB',
   });
 
   const emit = defineEmits(['update:fileList', 'change']);
 
-  const defaultMaxSize = 50;
+  const appStore = useAppStore();
 
   const innerFileList = defineModel<MsFileItem[]>('fileList', {
     default: () => [],
@@ -137,10 +139,10 @@
         }
       }
     }
-    const maxSize = props.maxSize || defaultMaxSize;
+    const maxSize = props.maxSize || appStore.getFileMaxSize;
     const _maxSize = props.sizeUnit === 'MB' ? maxSize * 1024 * 1024 : maxSize * 1024;
     if (props.isLimit && file.size > _maxSize) {
-      Message.warning(t('ms.upload.overSize'));
+      Message.warning(t('ms.upload.overSize', { size: maxSize, unit: props.sizeUnit }));
       return Promise.resolve(false);
     }
     if (!props.multiple) {
@@ -251,12 +253,13 @@
 
     @apply flex flex-col items-center justify-center;
     .ms-upload-icon-box {
-      @apply rounded-full bg-white;
+      @apply rounded-full;
 
       margin-bottom: 16px;
       padding: 8px;
       width: 48px;
       height: 48px;
+      background-color: var(--color-text-fff);
       .ms-upload-icon {
         @apply h-full w-full bg-cover bg-no-repeat;
         &--default {

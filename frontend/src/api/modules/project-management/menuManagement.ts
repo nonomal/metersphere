@@ -63,6 +63,9 @@ export function postUpdateMenu(data: MenuTableListParams, suffix: string) {
     case MenuEnum.uiTest:
       suffixUrl = 'ui';
       break;
+    case MenuEnum.taskCenter:
+      suffixUrl = 'task';
+      break;
     default:
       suffixUrl = 'performance-test';
       break;
@@ -90,6 +93,9 @@ export function getConfigByMenuItem(data: MenuTableListParams) {
       break;
     case MenuEnum.uiTest:
       suffix = 'ui';
+      break;
+    case MenuEnum.taskCenter:
+      suffix = 'task';
       break;
     default:
       suffix = 'performance-test';
@@ -176,7 +182,13 @@ export function getBugSyncInfo(projectId: string) {
 
 // 用例管理-获取关联需求信息
 export function getCaseRelatedInfo(projectId: string) {
-  return MSR.get<{ demand_platform_config: string; platform_key: string; case_enable: string }>({
+  return MSR.get<{
+    demand_platform_config: string;
+    platform_key: string;
+    case_enable: string;
+    sync_enable: string;
+    cron_expression: string;
+  }>({
     url: `${Url.getCaseRelatedInfoUrl}${projectId}`,
   });
 }

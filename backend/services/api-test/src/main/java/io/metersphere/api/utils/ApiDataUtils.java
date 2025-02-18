@@ -13,6 +13,7 @@ import com.fasterxml.jackson.databind.jsontype.NamedType;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.type.CollectionType;
 import io.metersphere.api.dto.request.MsCommonElement;
+import io.metersphere.api.dto.request.MsJMeterComponent;
 import io.metersphere.api.dto.request.controller.*;
 import io.metersphere.api.dto.request.http.MsHTTPElement;
 import io.metersphere.sdk.exception.MSException;
@@ -42,6 +43,7 @@ public class ApiDataUtils {
         namedTypes.add(new NamedType(MsOnceOnlyController.class, MsOnceOnlyController.class.getSimpleName()));
         namedTypes.add(new NamedType(MsConstantTimerController.class, MsConstantTimerController.class.getSimpleName()));
         namedTypes.add(new NamedType(MsScriptElement.class, MsScriptElement.class.getSimpleName()));
+        namedTypes.add(new NamedType(MsJMeterComponent.class, MsJMeterComponent.class.getSimpleName()));
         setObjectMapper(objectMapper);
         namedTypes.forEach(objectMapper::registerSubtypes);
     }
@@ -163,6 +165,14 @@ public class ApiDataUtils {
             return objectMapper.convertValue(jsonNode, valueType);
         } catch (Exception e) {
             throw new MSException(e);
+        }
+    }
+
+    public static byte[] toJSONBytes(Object value) {
+        try {
+            return objectMapper.writeValueAsBytes(value);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 }

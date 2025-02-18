@@ -8,6 +8,7 @@ import io.metersphere.functional.mapper.*;
 import io.metersphere.functional.request.*;
 import io.metersphere.functional.result.CaseManagementResultCode;
 import io.metersphere.sdk.constants.SessionConstants;
+import io.metersphere.sdk.dto.CombineSearch;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.system.base.BaseTest;
 import io.metersphere.system.controller.handler.ResultHolder;
@@ -87,7 +88,7 @@ public class CaseReviewControllerTests extends BaseTest {
         checkLog(caseReview.getId(), OperationLogType.ADD);
         List<CaseReview> caseReviews = getCaseReviews("创建评审1");
         Assertions.assertEquals(1, caseReviews.size());
-        String caseReviewId = caseReviews.get(0).getId();
+        String caseReviewId = caseReviews.getFirst().getId();
         CaseReviewUserExample caseReviewUserExample = new CaseReviewUserExample();
         caseReviewUserExample.createCriteria().andReviewIdEqualTo(caseReviewId);
         List<CaseReviewUser> caseReviewUsers = caseReviewUserMapper.selectByExample(caseReviewUserExample);
@@ -131,7 +132,7 @@ public class CaseReviewControllerTests extends BaseTest {
          list = caseReviews.stream().map(CaseReview::getId).distinct().toList();
         Assertions.assertEquals(1, list.size());
         caseReviewFunctionalCaseExample = new CaseReviewFunctionalCaseExample();
-        caseReviewFunctionalCaseExample.createCriteria().andReviewIdEqualTo(caseReviews.get(0).getId());
+        caseReviewFunctionalCaseExample.createCriteria().andReviewIdEqualTo(caseReviews.getFirst().getId());
         caseReviewFunctionalCases = caseReviewFunctionalCaseMapper.selectByExample(caseReviewFunctionalCaseExample);
         FunctionalCaseExample functionalCaseExample = new FunctionalCaseExample();
         functionalCaseExample.createCriteria().andProjectIdEqualTo(baseAssociateCaseRequest.getProjectId());
@@ -194,7 +195,7 @@ public class CaseReviewControllerTests extends BaseTest {
         this.requestPostWithOk(ADD_CASE_REVIEW, caseReviewRequest);
         List<CaseReview> caseReviews = getCaseReviews("创建评审2");
         Assertions.assertEquals(1, caseReviews.size());
-        String caseReviewId = caseReviews.get(0).getId();
+        String caseReviewId = caseReviews.getFirst().getId();
         CaseReviewUserExample caseReviewUserExample = new CaseReviewUserExample();
         caseReviewUserExample.createCriteria().andReviewIdEqualTo(caseReviewId);
         List<CaseReviewUser> caseReviewUsers = caseReviewUserMapper.selectByExample(caseReviewUserExample);
@@ -213,8 +214,8 @@ public class CaseReviewControllerTests extends BaseTest {
         this.requestPostWithOk(ADD_CASE_REVIEW, caseReviewRequest);
         List<CaseReview> caseReviews = getCaseReviews("创建评审3");
         Assertions.assertEquals(1, caseReviews.size());
-        String caseReviewId = caseReviews.get(0).getId();
-        Assertions.assertNotNull(caseReviews.get(0).getTags());
+        String caseReviewId = caseReviews.getFirst().getId();
+        Assertions.assertNotNull(caseReviews.getFirst().getTags());
         CaseReviewUserExample caseReviewUserExample = new CaseReviewUserExample();
         caseReviewUserExample.createCriteria().andReviewIdEqualTo(caseReviewId);
         List<CaseReviewUser> caseReviewUsers = caseReviewUserMapper.selectByExample(caseReviewUserExample);
@@ -245,7 +246,7 @@ public class CaseReviewControllerTests extends BaseTest {
     @Order(5)
     public void followCaseReview() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审1");
-        CaseReview caseReview = caseReviews.get(0);
+        CaseReview caseReview = caseReviews.getFirst();
         CaseReviewFollowerRequest caseReviewFollowerRequest = new CaseReviewFollowerRequest();
         caseReviewFollowerRequest.setCaseReviewId(caseReview.getId());
         caseReviewFollowerRequest.setUserId("admin");
@@ -276,14 +277,14 @@ public class CaseReviewControllerTests extends BaseTest {
     @Order(7)
     public void editCaseReviewSuccess() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审1");
-        CaseReview caseReview = caseReviews.get(0);
+        CaseReview caseReview = caseReviews.getFirst();
         CaseReviewRequest caseReviewRequest = getCaseReviewAddRequest("创建评审更新1", CaseReviewPassRule.SINGLE.toString(), null, true, true, caseReview.getId());
         this.requestPostWithOk(EDIT_CASE_REVIEW, caseReviewRequest);
         List<CaseReview> updateCaseReviews = getCaseReviews("创建评审更新1");
         Assertions.assertEquals(1, updateCaseReviews.size());
 
         List<CaseReview> caseReviews2 = getCaseReviews("创建评审2");
-        CaseReview caseReview2 = caseReviews2.get(0);
+        CaseReview caseReview2 = caseReviews2.getFirst();
         CaseReviewRequest caseReviewRequest2 = getCaseReviewAddRequest("创建评审更新2", CaseReviewPassRule.SINGLE.toString(), null, false, true, caseReview2.getId());
         this.requestPostWithOk(EDIT_CASE_REVIEW, caseReviewRequest2);
         List<CaseReview> updateCaseReviews2 = getCaseReviews("创建评审更新2");
@@ -299,7 +300,7 @@ public class CaseReviewControllerTests extends BaseTest {
         caseReviewRequest = getCaseReviewAddRequest("创建评审更新1", CaseReviewPassRule.SINGLE.toString(), null, true, true, "XXX");
         this.requestPost(EDIT_CASE_REVIEW, caseReviewRequest).andExpect(status().is5xxServerError());
         List<CaseReview> caseReviews = getCaseReviews("创建评审1");
-        CaseReview caseReview = caseReviews.get(0);
+        CaseReview caseReview = caseReviews.getFirst();
         CaseReviewRequest caseReviewRequestWidthStartTime = getCaseReviewAddRequest("创建评审更新1", CaseReviewPassRule.SINGLE.toString(), caseReview.getId(), true, true, null);
         caseReviewRequestWidthStartTime.setStartTime(1678188043000L);
         caseReviewRequestWidthStartTime.setEndTime(1678188103000L);
@@ -324,7 +325,7 @@ public class CaseReviewControllerTests extends BaseTest {
     public void associateCaseSuccess() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审更新1");
         Assertions.assertEquals(1, caseReviews.size());
-        String caseReviewId = caseReviews.get(0).getId();
+        String caseReviewId = caseReviews.getFirst().getId();
         CaseReviewAssociateRequest caseReviewAssociateRequest = new CaseReviewAssociateRequest();
         caseReviewAssociateRequest.setProjectId(projectId);
         caseReviewAssociateRequest.setReviewId(caseReviewId);
@@ -350,7 +351,7 @@ public class CaseReviewControllerTests extends BaseTest {
         Assertions.assertTrue(userIdList.contains("gyq_review_test"));
         Assertions.assertTrue(userIdList.contains("gyq_review_test2"));
         List<CaseReview> caseReviews2 = getCaseReviews("创建评审更新1");
-        Assertions.assertTrue( caseReviews.get(0).getCaseCount()<caseReviews2.get(0).getCaseCount());
+        Assertions.assertTrue( caseReviews.getFirst().getCaseCount()<caseReviews2.getFirst().getCaseCount());
     }
 
     @Test
@@ -371,7 +372,7 @@ public class CaseReviewControllerTests extends BaseTest {
         List<CaseReview> caseReviews = getCaseReviews("创建评审更新1");
         caseReviewAssociateRequest = new CaseReviewAssociateRequest();
         caseReviewAssociateRequest.setProjectId(projectId);
-        caseReviewAssociateRequest.setReviewId(caseReviews.get(0).getId());
+        caseReviewAssociateRequest.setReviewId(caseReviews.getFirst().getId());
         baseAssociateCaseRequest = new BaseAssociateCaseRequest();
         baseAssociateCaseRequest.setProjectId(projectId);
         baseAssociateCaseRequest.setSelectAll(false);
@@ -385,7 +386,7 @@ public class CaseReviewControllerTests extends BaseTest {
 
         caseReviewAssociateRequest = new CaseReviewAssociateRequest();
         caseReviewAssociateRequest.setProjectId(projectId);
-        caseReviewAssociateRequest.setReviewId(caseReviews.get(0).getId());
+        caseReviewAssociateRequest.setReviewId(caseReviews.getFirst().getId());
         baseAssociateCaseRequest = new BaseAssociateCaseRequest();
         baseAssociateCaseRequest.setProjectId("project-gyq-case-review-testYY");
         baseAssociateCaseRequest.setSelectAll(true);
@@ -408,7 +409,11 @@ public class CaseReviewControllerTests extends BaseTest {
         Map<String, List<String>> filters = new HashMap<>();
         filters.put("status", Arrays.asList("PREPARED", "UNDERWAY", "COMPLETED", "ARCHIVED"));
         request.setFilter(filters);
-        request.setCombine(caseReviewCombine);
+        CombineSearch combineSearch = new CombineSearch();
+        combineSearch.setSearchMode("AND");
+        combineSearch.setConditions(new ArrayList<>());
+        request.setCombineSearch(combineSearch);
+        request.setViewId("my_follow");
         request.setProjectId(projectId);
         request.setKeyword("评审更新");
         request.setReviewByMe("admin");
@@ -453,7 +458,7 @@ public class CaseReviewControllerTests extends BaseTest {
         Assertions.assertTrue(moduleCount.containsKey("all"));
 
         CaseReviewFunctionalCaseExample caseReviewFunctionalCaseExample = new CaseReviewFunctionalCaseExample();
-        caseReviewFunctionalCaseExample.createCriteria().andReviewIdEqualTo(caseReviews.get(0).getId());
+        caseReviewFunctionalCaseExample.createCriteria().andReviewIdEqualTo(caseReviews.getFirst().getId());
         List<CaseReviewFunctionalCase> caseReviewFunctionalCases = caseReviewFunctionalCaseMapper.selectByExample(caseReviewFunctionalCaseExample);
         Map<String, CaseReviewFunctionalCase> caseReviewFunctionalCaseMap = caseReviewFunctionalCases.stream().collect(Collectors.toMap(CaseReviewFunctionalCase::getCaseId, t -> t));
         caseReviewFunctionalCaseMap.forEach((k, v) -> {
@@ -491,11 +496,11 @@ public class CaseReviewControllerTests extends BaseTest {
         Assertions.assertTrue(JSON.parseArray(JSON.toJSONString(pageData.getList())).size() <= request.getPageSize());
         List<CaseReviewDTO> caseReviewDTOS = JSON.parseArray(JSON.toJSONString(pageData.getList()), CaseReviewDTO.class);
         List<CaseReviewDTO> caseReviewOne = caseReviewDTOS.stream().filter(t -> StringUtils.equals(t.getName(), "创建评审更新1")).toList();
-        Assertions.assertTrue(caseReviewOne.get(0).getPassCount() > 0);
-        Assertions.assertTrue(caseReviewOne.get(0).getUnPassCount() > 0);
-        Assertions.assertTrue(caseReviewOne.get(0).getUnderReviewedCount() > 0);
-        Assertions.assertTrue(caseReviewOne.get(0).getReReviewedCount() > 0);
-        Assertions.assertTrue(caseReviewOne.get(0).getReviewedCount() > 0);
+        Assertions.assertTrue(caseReviewOne.getFirst().getPassCount() > 0);
+        Assertions.assertTrue(caseReviewOne.getFirst().getUnPassCount() > 0);
+        Assertions.assertTrue(caseReviewOne.getFirst().getUnderReviewedCount() > 0);
+        Assertions.assertTrue(caseReviewOne.getFirst().getReReviewedCount() > 0);
+        Assertions.assertTrue(caseReviewOne.getFirst().getReviewedCount() > 0);
 
         request = new CaseReviewPageRequest();
         filters = new HashMap<>();
@@ -551,26 +556,26 @@ public class CaseReviewControllerTests extends BaseTest {
     public void testPos() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审更新1");
         List<CaseReview> caseReviews2 = getCaseReviews("创建评审更新2");
-        Long pos = caseReviews.get(0).getPos();
-        Long pos2 = caseReviews2.get(0).getPos();
+        Long pos = caseReviews.getFirst().getPos();
+        Long pos2 = caseReviews2.getFirst().getPos();
         PosRequest posRequest = new PosRequest();
         posRequest.setProjectId(projectId);
-        posRequest.setTargetId(caseReviews.get(0).getId());
-        posRequest.setMoveId(caseReviews2.get(0).getId());
+        posRequest.setTargetId(caseReviews.getFirst().getId());
+        posRequest.setMoveId(caseReviews2.getFirst().getId());
         posRequest.setMoveMode("AFTER");
         this.requestPostWithOkAndReturn(EDIT_POS_CASE_REVIEW_URL, posRequest);
         caseReviews = getCaseReviews("创建评审更新1");
         caseReviews2 = getCaseReviews("创建评审更新2");
-        Long pos3 = caseReviews.get(0).getPos();
-        Long pos4 = caseReviews2.get(0).getPos();
+        Long pos3 = caseReviews.getFirst().getPos();
+        Long pos4 = caseReviews2.getFirst().getPos();
         Assertions.assertTrue(Objects.equals(pos, pos3));
         Assertions.assertTrue(pos2 > pos4);
         posRequest.setMoveMode("BEFORE");
         this.requestPostWithOkAndReturn(EDIT_POS_CASE_REVIEW_URL, posRequest);
         caseReviews = getCaseReviews("创建评审更新1");
         caseReviews2 = getCaseReviews("创建评审更新2");
-        Long pos5 = caseReviews.get(0).getPos();
-        Long pos6 = caseReviews2.get(0).getPos();
+        Long pos5 = caseReviews.getFirst().getPos();
+        Long pos6 = caseReviews2.getFirst().getPos();
         Assertions.assertTrue(Objects.equals(pos5, pos3));
         Assertions.assertTrue(pos6 > pos4);
     }
@@ -579,7 +584,7 @@ public class CaseReviewControllerTests extends BaseTest {
     @Order(14)
     public void testFunctionalCaseDetail() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审更新1");
-        String id = caseReviews.get(0).getId();
+        String id = caseReviews.getFirst().getId();
         assertErrorCode(this.requestGet(DETAIL_CASE_REVIEW + "ERROR_TEST_FUNCTIONAL_CASE_ID"), CaseManagementResultCode.CASE_REVIEW_NOT_FOUND);
         MvcResult mvcResult = this.requestGetWithOkAndReturn(DETAIL_CASE_REVIEW + id);
         // 获取返回值
@@ -593,17 +598,17 @@ public class CaseReviewControllerTests extends BaseTest {
     @Order(15)
     public void testBatchMove() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审更新1");
-        String moduleId = caseReviews.get(0).getModuleId();
+        String moduleId = caseReviews.getFirst().getModuleId();
         CaseReviewBatchRequest request = new CaseReviewBatchRequest();
         request.setProjectId(projectId);
         request.setMoveModuleId("CASE_REVIEW_REAL_MODULE_ID2");
         request.setSelectAll(false);
         this.requestPostWithOkAndReturn(BATCH_MOVE_CASE_REVIEW, request);
         request.setSelectAll(true);
-        request.setExcludeIds(List.of(caseReviews.get(0).getId()));
+        request.setExcludeIds(List.of(caseReviews.getFirst().getId()));
         this.requestPostWithOkAndReturn(BATCH_MOVE_CASE_REVIEW, request);
         caseReviews = getCaseReviews("创建评审更新1");
-        String moduleIdNew = caseReviews.get(0).getModuleId();
+        String moduleIdNew = caseReviews.getFirst().getModuleId();
         Assertions.assertTrue(StringUtils.equals(moduleId, moduleIdNew));
         request = new CaseReviewBatchRequest();
         request.setProjectId(projectId);
@@ -611,7 +616,7 @@ public class CaseReviewControllerTests extends BaseTest {
         request.setSelectAll(false);
         this.requestPostWithOkAndReturn(BATCH_MOVE_CASE_REVIEW, request);
         caseReviews = getCaseReviews("创建评审更新1");
-        String moduleIdNewOne = caseReviews.get(0).getModuleId();
+        String moduleIdNewOne = caseReviews.getFirst().getModuleId();
         Assertions.assertTrue(StringUtils.equals(moduleIdNewOne, moduleIdNew));
         request.setMoveModuleId(null);
         request.setSelectAll(false);
@@ -622,8 +627,46 @@ public class CaseReviewControllerTests extends BaseTest {
     @Order(16)
     public void testDelete() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审更新2");
-        delCaseReview(caseReviews.get(0).getId());
+        delCaseReview(caseReviews.getFirst().getId());
+        CaseReview caseReview = new CaseReview();
+        String id = UUID.randomUUID().toString();
+        caseReview.setId(id);
+        caseReview.setNum(1001L);
+        caseReview.setPos(1020L);
+        caseReview.setCaseCount(2);
+        caseReview.setStatus(FunctionalCaseReviewStatus.UN_REVIEWED.toString());
+        caseReview.setPassRate(BigDecimal.ZERO);
+        caseReview.setName("dddd");
+        caseReview.setModuleId("root");
+        caseReview.setProjectId(DEFAULT_PROJECT_ID );
+        caseReview.setReviewPassRule(CaseReviewPassRule.SINGLE.toString());
+        caseReview.setCreateUser("Gyq");
+        caseReview.setCreateTime(System.currentTimeMillis());
+        caseReview.setUpdateTime(System.currentTimeMillis());
+        caseReview.setUpdateUser("Gyq");
+        caseReviewMapper.insert(caseReview);
+        CaseReviewFunctionalCase caseReviewFunctionalCase = new CaseReviewFunctionalCase();
+        caseReviewFunctionalCase.setCaseId("CASE_REVIEW_TEST_GYQ_ID2");
+        caseReviewFunctionalCase.setReviewId(id);
+        caseReviewFunctionalCase.setId(UUID.randomUUID().toString());
+        caseReviewFunctionalCase.setStatus(FunctionalCaseReviewStatus.PASS.name());
+        caseReviewFunctionalCase.setPos(110L);
+        caseReviewFunctionalCase.setCreateUser("Gyq");
+        caseReviewFunctionalCase.setCreateTime(System.currentTimeMillis());
+        caseReviewFunctionalCase.setUpdateTime(System.currentTimeMillis());
+        caseReviewFunctionalCaseMapper.insert(caseReviewFunctionalCase);
 
+        caseReviewFunctionalCase = new CaseReviewFunctionalCase();
+        caseReviewFunctionalCase.setId(UUID.randomUUID().toString());
+        caseReviewFunctionalCase.setCaseId("CASE_REVIEW_TEST_GYQ_ID3");
+        caseReviewFunctionalCase.setReviewId(id);
+        caseReviewFunctionalCase.setStatus(FunctionalCaseReviewStatus.PASS.name());
+        caseReviewFunctionalCase.setPos(110L);
+        caseReviewFunctionalCase.setCreateUser("Gyq");
+        caseReviewFunctionalCase.setCreateTime(System.currentTimeMillis());
+        caseReviewFunctionalCase.setUpdateTime(System.currentTimeMillis());
+        caseReviewFunctionalCaseMapper.insert(caseReviewFunctionalCase);
+        delCaseReview(id);
         delCaseReview("caseReviewIdX");
     }
 
@@ -633,7 +676,7 @@ public class CaseReviewControllerTests extends BaseTest {
     public void testDisassociate() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审更新1");
         Assertions.assertEquals(1, caseReviews.size());
-        String caseReviewId = caseReviews.get(0).getId();
+        String caseReviewId = caseReviews.getFirst().getId();
         CaseReviewFunctionalCaseExample caseReviewFunctionalCaseExample = new CaseReviewFunctionalCaseExample();
         caseReviewFunctionalCaseExample.createCriteria().andReviewIdEqualTo(caseReviewId).andCaseIdEqualTo("CASE_REVIEW_TEST_GYQ_ID6");
         List<CaseReviewFunctionalCase> caseReviewFunctionalCases = caseReviewFunctionalCaseMapper.selectByExample(caseReviewFunctionalCaseExample);
@@ -651,7 +694,7 @@ public class CaseReviewControllerTests extends BaseTest {
 
         caseReviews = getCaseReviews("创建评审3");
         Assertions.assertEquals(1, caseReviews.size());
-        caseReviewId = caseReviews.get(0).getId();
+        caseReviewId = caseReviews.getFirst().getId();
         CaseReviewAssociateRequest caseReviewAssociateRequest = new CaseReviewAssociateRequest();
         caseReviewAssociateRequest.setProjectId(projectId);
         caseReviewAssociateRequest.setReviewId(caseReviewId);
@@ -680,7 +723,7 @@ public class CaseReviewControllerTests extends BaseTest {
     @Order(18)
     public void testDisassociateFalse() throws Exception {
         List<CaseReview> caseReviews = getCaseReviews("创建评审更新1");
-        String caseReviewId = caseReviews.get(0).getId();
+        String caseReviewId = caseReviews.getFirst().getId();
         mockMvc.perform(MockMvcRequestBuilders.get(DISASSOCIATE_CASE_REVIEW+caseReviewId+"/CASE_REVIEW_TEST_GYQ_IDXX").header(SessionConstants.HEADER_TOKEN, sessionId)
                         .header(SessionConstants.CSRF_TOKEN, csrfToken)
                         .header(SessionConstants.CURRENT_PROJECT, projectId)
@@ -702,7 +745,7 @@ public class CaseReviewControllerTests extends BaseTest {
     }
 
     private void delCaseReview(String reviewId) throws Exception {
-        mockMvc.perform(MockMvcRequestBuilders.get(DELETE_CASE_REVIEW+reviewId+"/"+projectId).header(SessionConstants.HEADER_TOKEN, sessionId)
+        mockMvc.perform(MockMvcRequestBuilders.get(DELETE_CASE_REVIEW+projectId+"/"+reviewId).header(SessionConstants.HEADER_TOKEN, sessionId)
                         .header(SessionConstants.CSRF_TOKEN, csrfToken)
                         .header(SessionConstants.CURRENT_PROJECT, projectId)
                         .contentType(MediaType.APPLICATION_JSON))

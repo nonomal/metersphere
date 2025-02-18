@@ -58,11 +58,6 @@
     color: rgb(var(--primary-3)) !important;
     cursor: not-allowed;
   }
-  .ms-button-text {
-    @apply p-0;
-
-    color: rgb(var(--primary-5));
-  }
   .ms-button-icon {
     padding: 4px;
     color: var(--color-text-4);
@@ -80,6 +75,11 @@
       background-color: var(--color-text-n8);
     }
   }
+  .ms-button-text {
+    @apply p-0;
+
+    color: rgb(var(--primary-5));
+  }
   .ms-button--secondary {
     color: var(--color-text-2);
     &:not(.ms-button-text, .ms-button--disabled):hover {
@@ -93,10 +93,12 @@
     }
   }
   .ms-button--danger {
-    color: rgb(var(--danger-6));
+    color: rgb(var(--danger-6)) !important;
     &:not(.ms-button-text, .ms-button--disabled):hover {
-      color: rgb(var(--danger-6));
       background-color: rgb(var(--danger-1));
+    }
+    &:hover {
+      color: rgb(var(--danger-6));
     }
   }
   .ms-button--disabled {

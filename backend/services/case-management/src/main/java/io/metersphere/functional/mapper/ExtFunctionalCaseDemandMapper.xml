@@ -17,4 +17,17 @@
         </if>
     </select>
 
+    <select id="selectDemandByProjectId" resultType="io.metersphere.functional.domain.FunctionalCaseDemand">
+        select functional_case_demand.id, functional_case_demand.demand_id, functional_case_demand.case_id
+        from functional_case_demand
+                 left join functional_case on functional_case.id = functional_case_demand.case_id
+        where functional_case.project_id = #{projectId} and functional_case_demand.demand_platform=#{platform}
+    </select>
+
+    <select id="selectDemandIdsByCaseId" resultType="java.lang.String">
+        select demand_id
+        from functional_case_demand
+        where case_id = #{caseId} and demand_platform=#{platform}
+    </select>
+
 </mapper>

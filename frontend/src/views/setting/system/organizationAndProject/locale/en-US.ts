@@ -11,6 +11,7 @@ export default {
   'system.organization.addMember': 'Add Member',
   'system.organization.addMemberTitle': 'Add Member',
   'system.organization.addMemberPlaceholder': 'Please select member',
+  'system.organization.searchByNameOrEmailPlaceholder': 'Search by Name/Email',
   'system.organization.addMemberRequired': 'Please select member',
   'system.organization.searchPlaceholder': 'Please enter the organization name to query',
   'system.organization.addOrganization': 'Add organization',
@@ -23,7 +24,6 @@ export default {
   'system.organization.organizationAdmin': 'Organization administrator',
   'system.organization.organizationAdminPlaceholder':
     'The organization administrator defaults to the person who created the organization',
-  'system.organization.description': 'Description',
   'system.organization.descriptionPlaceholder': 'Please describe the organization',
   'system.organization.ID': 'ID',
   'system.organization.name': 'Name',
@@ -77,10 +77,12 @@ export default {
   'system.project.revokeDeleteToolTip': 'The project will be deleted automatically after {count} days',
   'system.project.removeTip': "Remove it, and you'll lose access to the project.",
   'system.organization.projectIsDisabled': 'The project has ended and can be opened in the project list.',
-  'system.project.searchPlaceholder': 'Search by name or id',
+  'system.project.searchPlaceholder': 'Search by name/id',
   'system.project.afterModule':
     'After the module is canceled, users will be unable to access the specified module, and existing data will remain intact',
   'system.project.projectAdminIsNotNull': 'Project administrator cannot be empty',
   'system.project.pleaseSelectAdmin': 'Please select project administrator',
   'system.project.poolIsNotNull': 'Resource pool cannot be empty',
+  'system.project.enterOrganization': 'Enter the organization',
+  'system.memberList': 'Member list',
 };

@@ -17,50 +17,52 @@
             </li>
             <li>
               <span>{{ t('system.authorized.authorizationTime') }}</span>
-              <div
-                ><span>{{ licenseInfo?.license?.expired }}</span></div
-              >
+              <div>
+                <span>{{ licenseInfo?.license?.expired }}</span>
+              </div>
             </li>
             <li>
               <span>{{ t('system.authorized.productName') }}</span>
-              <div
-                ><span>{{ licenseInfo?.license?.product }}</span></div
-              >
+              <div>
+                <span>{{ licenseInfo?.license?.product }}</span>
+              </div>
             </li>
             <li>
               <span>{{ t('system.authorized.productionVersion') }}</span>
-              <div
-                ><span>{{ licenseInfo?.license?.edition }}</span></div
-              >
+              <div>
+                <span>{{ licenseInfo?.license?.edition }}</span>
+              </div>
             </li>
             <li>
               <span>{{ t('system.authorized.authorizedVersion') }}</span>
               <div>
-                <span>{{ licenseInfo?.license?.licenseVersion }}</span></div
-              >
+                <span> v3 </span>
+              </div>
             </li>
             <li>
               <span>{{ t('system.authorized.authorizationsCount') }}</span>
-              <div
-                ><span>{{ addCommasToNumber(licenseInfo?.license?.count || 0) }}</span></div
-              >
+              <div>
+                <span>{{ addCommasToNumber(licenseInfo?.license?.count || 0) }}</span>
+              </div>
             </li>
             <li>
               <span>{{ t('system.authorized.authorizationStatus') }}</span>
-              <div
-                ><span>{{
-                  licenseInfo?.status === 'valid'
-                    ? t('system.authorized.valid')
-                    : licenseInfo?.status === 'expired'
-                    ? t('system.authorized.invalid')
-                    : t('system.authorized.failure')
-                }}</span></div
-              >
+              <div>
+                <span
+                  >{{
+                    licenseInfo?.status === 'valid'
+                      ? t('system.authorized.valid')
+                      : licenseInfo?.status === 'expired'
+                      ? t('system.authorized.invalid')
+                      : t('system.authorized.failure')
+                  }}
+                </span>
+              </div>
             </li>
             <li>
-              <MsButton v-permission="['SYSTEM_AUTH:READ+UPDATE']" class="font-medium" @click="authChecking">{{
-                t('system.authorized.authorityChecking')
-              }}</MsButton>
+              <MsButton v-permission="['SYSTEM_AUTH:READ+UPDATE']" class="font-medium" @click="authChecking">
+                {{ t('system.authorized.authorityUpdate') }}
+              </MsButton>
             </li>
           </ul>
         </div>
@@ -69,7 +71,7 @@
     <MsDrawer
       v-model:visible="authDrawer"
       :title="t('system.authorized.authorityChecking')"
-      :ok-text="t('system.authorized.authorization')"
+      :ok-text="t('common.update')"
       :ok-loading="drawerLoading"
       :width="680"
       @confirm="confirmHandler"
@@ -91,6 +93,7 @@
             :show-sub-text="false"
             :show-file-list="false"
             :auto-upload="false"
+            class="w-full"
           />
           <a-textarea
             v-model="authorizedForm.licenseCode"
@@ -142,9 +145,10 @@
     try {
       const result = await getLicenseInfo();
       licenseInfo.value = result;
-      licenseStore.setLicenseStatus(licenseInfo.value?.status);
+      licenseStore.setLicenseInfo(licenseInfo.value);
       licenseStore.getExpirationTime(licenseInfo.value.license.expired);
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       loading.value = false;
@@ -173,6 +177,7 @@
           getLicenseDetail();
           cancelHandler();
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.log(error);
         } finally {
           drawerLoading.value = false;

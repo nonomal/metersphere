@@ -1,18 +1,20 @@
 package io.metersphere.functional.controller;
 
-import io.metersphere.functional.domain.FunctionalCase;
-import io.metersphere.functional.domain.FunctionalCaseAttachment;
-import io.metersphere.functional.domain.FunctionalCaseAttachmentExample;
-import io.metersphere.functional.domain.FunctionalCaseCustomField;
+import io.metersphere.functional.domain.*;
 import io.metersphere.functional.dto.CaseCustomFieldDTO;
 import io.metersphere.functional.dto.FunctionalCaseAttachmentDTO;
 import io.metersphere.functional.dto.FunctionalCasePageDTO;
 import io.metersphere.functional.dto.response.FunctionalCaseImportResponse;
+import io.metersphere.functional.excel.domain.FunctionalCaseHeader;
+import io.metersphere.functional.mapper.ExportTaskMapper;
 import io.metersphere.functional.mapper.FunctionalCaseAttachmentMapper;
 import io.metersphere.functional.mapper.FunctionalCaseCustomFieldMapper;
+import io.metersphere.functional.mapper.FunctionalCaseMapper;
 import io.metersphere.functional.request.*;
 import io.metersphere.functional.result.CaseManagementResultCode;
 import io.metersphere.functional.utils.FileBaseUtils;
+import io.metersphere.plan.domain.TestPlanConfig;
+import io.metersphere.plan.mapper.TestPlanConfigMapper;
 import io.metersphere.project.domain.Notification;
 import io.metersphere.project.domain.NotificationExample;
 import io.metersphere.project.mapper.NotificationMapper;
@@ -30,6 +32,8 @@ import io.metersphere.system.controller.handler.ResultHolder;
 import io.metersphere.system.domain.CustomField;
 import io.metersphere.system.dto.OperationHistoryDTO;
 import io.metersphere.system.dto.request.OperationHistoryRequest;
+import io.metersphere.sdk.dto.CombineCondition;
+import io.metersphere.sdk.dto.CombineSearch;
 import io.metersphere.system.dto.sdk.TemplateCustomFieldDTO;
 import io.metersphere.system.dto.sdk.TemplateDTO;
 import io.metersphere.system.dto.sdk.request.PosRequest;
@@ -81,8 +85,17 @@ public class FunctionalCaseControllerTests extends BaseTest {
     public static final String FUNCTIONAL_CASE_POS_URL = "/functional/case/edit/pos";
     public static final String DOWNLOAD_EXCEL_TEMPLATE_URL = "/functional/case/download/excel/template/";
     public static final String CHECK_EXCEL_URL = "/functional/case/pre-check/excel";
+    public static final String CHECK_XMIND_URL = "/functional/case/pre-check/xmind";
     public static final String IMPORT_EXCEL_URL = "/functional/case/import/excel";
+    public static final String IMPORT_XMIND_URL = "/functional/case/import/xmind";
     public static final String OPERATION_HISTORY_URL = "/functional/case/operation-history";
+    public static final String EXPORT_EXCEL_URL = "/functional/case/export/excel";
+    public static final String DOWNLOAD_XMIND_TEMPLATE_URL = "/functional/case/download/xmind/template/";
+    public static final String EXPORT_COLUMNS_URL = "/functional/case/export/columns/";
+    public static final String DOWNLOAD_FILE_URL = "/functional/case/download/file/";
+    public static final String STOP_EXPORT_URL = "/functional/case/stop/";
+    public static final String EXPORT_XMIND_URL = "/functional/case/export/xmind";
+    public static final String EXPORT_XMIND_CHECK_URL = "/functional/case/check/export-task";
 
     @Resource
     private NotificationMapper notificationMapper;
@@ -99,7 +112,12 @@ public class FunctionalCaseControllerTests extends BaseTest {
     @Resource
     private FunctionalCaseAttachmentMapper functionalCaseAttachmentMapper;
 
+    @Resource
+    private FunctionalCaseMapper functionalCaseMapper;
+
     protected static String functionalCaseId;
+    @Resource
+    private ExportTaskMapper exportTaskMapper;
 
 
     @Test
@@ -335,6 +353,10 @@ public class FunctionalCaseControllerTests extends BaseTest {
         functionalCaseAddRequest.setName("测试用例新增");
         functionalCaseAddRequest.setCaseEditType("STEP");
         functionalCaseAddRequest.setModuleId("default_module_id");
+        functionalCaseAddRequest.setDescription("");
+        functionalCaseAddRequest.setExpectedResult("");
+        functionalCaseAddRequest.setTextDescription("");
+        functionalCaseAddRequest.setPrerequisite("");
         return functionalCaseAddRequest;
     }
 
@@ -391,6 +413,14 @@ public class FunctionalCaseControllerTests extends BaseTest {
         paramMap.add("request", JSON.toJSONString(editRequest));
         paramMap.add("files", files);
         this.requestMultipart(FUNCTIONAL_CASE_UPDATE_URL, paramMap);
+
+        editRequest.setExpectedResult("adfadsasfdf");
+        editRequest.setPrerequisite("adfadsasfdf");
+        editRequest.setDescription("adfadsasfdf");
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(editRequest));
+        paramMap.add("files", files);
+        this.requestMultipart(FUNCTIONAL_CASE_UPDATE_URL, paramMap);
     }
 
     private List<CaseCustomFieldDTO> updateCustomFields(FunctionalCaseEditRequest editRequest) {
@@ -439,6 +469,9 @@ public class FunctionalCaseControllerTests extends BaseTest {
         Assertions.assertNotNull(editResultHolder);
     }
 
+    @Resource
+    private TestPlanConfigMapper testPlanConfigMapper;
+
     @Test
     @Order(5)
     public void testGetPageList() throws Exception {
@@ -457,14 +490,14 @@ public class FunctionalCaseControllerTests extends BaseTest {
         Assertions.assertNotNull(resultHolder);
 
         //自定义字段 测试
-        Map<String, Object> map = new HashMap<>();
-        map.put("customs", Arrays.asList(new LinkedHashMap() {{
-            put("id", "TEST_FIELD_ID");
-            put("operator", "in");
-            put("value", "222");
-            put("type", "List");
-        }}));
-        request.setCombine(map);
+        CombineSearch combineSearch = new CombineSearch();
+        CombineCondition condition = new CombineCondition();
+        condition.setCustomField(true);
+        condition.setName("TEST_FIELD_ID");
+        condition.setOperator(CombineCondition.CombineConditionOperator.IN.name());
+        condition.setValue(List.of("222"));
+        combineSearch.setConditions(List.of(condition));
+        request.setCombineSearch(combineSearch);
         MvcResult mvcResultPage = this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_LIST_URL, request);
         Pager<List<FunctionalCasePageDTO>> tableData = JSON.parseObject(JSON.toJSONString(
                         JSON.parseObject(mvcResultPage.getResponse().getContentAsString(StandardCharsets.UTF_8), ResultHolder.class).getData()),
@@ -494,6 +527,55 @@ public class FunctionalCaseControllerTests extends BaseTest {
         }
 
         Assertions.assertTrue(moduleCount.containsKey("all"));
+
+        {
+            //测试count接口的入参中包含不存在的测试计划、存在的开启/关闭了重复用例的测试计划
+            TestPlanConfig testPlanConfig = new TestPlanConfig();
+            testPlanConfig.setTestPlanId(IDGenerator.nextStr());
+            testPlanConfig.setRepeatCase(false);
+            testPlanConfig.setAutomaticStatusUpdate(false);
+            testPlanConfig.setPassThreshold(100.00);
+
+            request.setTestPlanId(testPlanConfig.getTestPlanId());
+
+            mvcResult = this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_MODULE_COUNT, request);
+            returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+            resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+            Assertions.assertNotNull(resultHolder);
+            moduleCount = JSON.parseObject(JSON.toJSONString(
+                            JSON.parseObject(moduleCountMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8), ResultHolder.class).getData()),
+                    Map.class);
+            Assertions.assertTrue(moduleCount.containsKey("all"));
+
+            //不开启用例重复的测试计划入库，再次调用
+            testPlanConfigMapper.insertSelective(testPlanConfig);
+
+            mvcResult = this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_MODULE_COUNT, request);
+            returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+            resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+            Assertions.assertNotNull(resultHolder);
+            moduleCount = JSON.parseObject(JSON.toJSONString(
+                            JSON.parseObject(moduleCountMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8), ResultHolder.class).getData()),
+                    Map.class);
+            Assertions.assertTrue(moduleCount.containsKey("all"));
+
+            //开启用例重复的测试计划，再次调用
+            testPlanConfig.setRepeatCase(true);
+            testPlanConfigMapper.updateByPrimaryKeySelective(testPlanConfig);
+
+            mvcResult = this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_MODULE_COUNT, request);
+            returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+            resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+            Assertions.assertNotNull(resultHolder);
+            moduleCount = JSON.parseObject(JSON.toJSONString(
+                            JSON.parseObject(moduleCountMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8), ResultHolder.class).getData()),
+                    Map.class);
+            Assertions.assertTrue(moduleCount.containsKey("all"));
+
+            //使用完后删除该数据
+            testPlanConfigMapper.deleteByPrimaryKey(testPlanConfig.getTestPlanId());
+
+        }
     }
 
 
@@ -561,8 +643,6 @@ public class FunctionalCaseControllerTests extends BaseTest {
         request.setModuleId("TEST_MOVE_MODULE_ID");
         request.setSelectAll(false);
         this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_COPY_URL, request);
-        request.setSelectIds(Arrays.asList("TEST"));
-        this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_COPY_URL, request);
         request.setSelectIds(new ArrayList<>());
         request.setSelectAll(true);
         this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_COPY_URL, request);
@@ -583,16 +663,19 @@ public class FunctionalCaseControllerTests extends BaseTest {
         FunctionalCaseBatchEditRequest request = new FunctionalCaseBatchEditRequest();
         request.setProjectId(DEFAULT_PROJECT_ID);
         request.setAppend(false);
+        request.setClear(false);
         request.setSelectAll(false);
         this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
         request.setSelectIds(Arrays.asList("TEST_FUNCTIONAL_CASE_ID_1", "TEST_FUNCTIONAL_CASE_ID_2"));
         this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
         request.setAppend(true);
+        request.setClear(false);
         request.setTags(Arrays.asList("追加标签_1", "追加标签_2"));
         this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
-        request.setTags(Arrays.asList("追加标签_1", "追加标签_2","追加标签_3","追加标签_4","追加标签_5","追加标签_6","追加标签_7","追加标签_8","追加标签_9","追加标签_10","追加标签_11"));
+        request.setTags(Arrays.asList("追加标签_1", "追加标签_2", "追加标签_3", "追加标签_4", "追加标签_5", "追加标签_6", "追加标签_7", "追加标签_8", "追加标签_9", "追加标签_10", "追加标签_11"));
         this.requestPost(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
         request.setAppend(false);
+        request.setClear(false);
         request.setTags(Arrays.asList("覆盖标签1", "覆盖标签2"));
         request.setSelectAll(true);
         CaseCustomFieldDTO caseCustomFieldDTO = new CaseCustomFieldDTO();
@@ -600,6 +683,42 @@ public class FunctionalCaseControllerTests extends BaseTest {
         caseCustomFieldDTO.setValue("批量编辑自定义字段");
         request.setCustomField(caseCustomFieldDTO);
         this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
+        FunctionalCase functionalCase = functionalCaseMapper.selectByPrimaryKey("TEST_FUNCTIONAL_CASE_ID_1");
+        Assertions.assertTrue(CollectionUtils.isNotEmpty(functionalCase.getTags()));
+        request.setAppend(false);
+        request.setClear(true);
+        request.setSelectAll(true);
+        this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
+        functionalCase = functionalCaseMapper.selectByPrimaryKey("TEST_FUNCTIONAL_CASE_ID_1");
+        Assertions.assertTrue(CollectionUtils.isEmpty(functionalCase.getTags()));
+        request.setAppend(false);
+        request.setClear(false);
+        request.setTags(Arrays.asList("覆盖标签1", "覆盖标签2"));
+        request.setSelectAll(true);
+        this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
+        functionalCase = functionalCaseMapper.selectByPrimaryKey("TEST_FUNCTIONAL_CASE_ID_1");
+        Assertions.assertTrue(CollectionUtils.isNotEmpty(functionalCase.getTags()));
+        request.setAppend(false);
+        request.setClear(false);
+        request.setTags(new ArrayList<>());
+        request.setSelectAll(true);
+        this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
+        functionalCase = functionalCaseMapper.selectByPrimaryKey("TEST_FUNCTIONAL_CASE_ID_1");
+        Assertions.assertTrue(CollectionUtils.isNotEmpty(functionalCase.getTags()));
+        request.setAppend(false);
+        request.setClear(true);
+        request.setTags(new ArrayList<>());
+        request.setSelectAll(true);
+        this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
+        functionalCase = functionalCaseMapper.selectByPrimaryKey("TEST_FUNCTIONAL_CASE_ID_1");
+        Assertions.assertTrue(CollectionUtils.isEmpty(functionalCase.getTags()));
+        request.setAppend(false);
+        request.setClear(false);
+        request.setTags(new ArrayList<>());
+        request.setSelectAll(true);
+        this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_BATCH_EDIT_URL, request);
+        functionalCase = functionalCaseMapper.selectByPrimaryKey("TEST_FUNCTIONAL_CASE_ID_1");
+        Assertions.assertTrue(CollectionUtils.isEmpty(functionalCase.getTags()));
     }
 
 
@@ -714,6 +833,148 @@ public class FunctionalCaseControllerTests extends BaseTest {
         this.requestMultipart(IMPORT_EXCEL_URL, paramMap);
     }
 
+
+    @Test
+    @Order(19)
+    public void testImportXmind() throws Exception {
+        FunctionalCaseImportRequest request = new FunctionalCaseImportRequest();
+        request.setCover(true);
+        request.setProjectId("100001100001");
+        request.setCount("1");
+        LinkedMultiValueMap<String, Object> paramMap = new LinkedMultiValueMap<>();
+
+        String filePath = Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/1xml.xmind")).getPath();
+        MockMultipartFile file = new MockMultipartFile("file", "11.xmind", MediaType.APPLICATION_OCTET_STREAM_VALUE, FileBaseUtils.getFileBytes(filePath));
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file);
+        MvcResult functionalCaseMvcResult = this.requestMultipartWithOkAndReturn(IMPORT_XMIND_URL, paramMap);
+
+        String functionalCaseImportResponseData = functionalCaseMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        ResultHolder functionalCaseResultHolder = JSON.parseObject(functionalCaseImportResponseData, ResultHolder.class);
+        FunctionalCaseImportResponse functionalCaseImportResponse = JSON.parseObject(JSON.toJSONString(functionalCaseResultHolder.getData()), FunctionalCaseImportResponse.class);
+        Assertions.assertNotNull(functionalCaseImportResponse);
+
+        FunctionalCaseExample functionalCaseExample = new FunctionalCaseExample();
+        functionalCaseExample.createCriteria().andNameEqualTo("用例名称");
+        List<FunctionalCase> functionalCases = functionalCaseMapper.selectByExample(functionalCaseExample);
+        Assertions.assertNotNull(functionalCases);
+
+        String filePath5 = Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/2module.xmind")).getPath();
+        MockMultipartFile file5 = new MockMultipartFile("file", "15.xmind", MediaType.APPLICATION_OCTET_STREAM_VALUE, FileBaseUtils.getFileBytes(filePath5));
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file5);
+        functionalCaseMvcResult =  this.requestMultipartWithOkAndReturn(IMPORT_XMIND_URL, paramMap);
+        functionalCaseImportResponseData = functionalCaseMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        functionalCaseResultHolder = JSON.parseObject(functionalCaseImportResponseData, ResultHolder.class);
+        functionalCaseImportResponse = JSON.parseObject(JSON.toJSONString(functionalCaseResultHolder.getData()), FunctionalCaseImportResponse.class);
+        Assertions.assertNotNull(functionalCaseImportResponse);
+        functionalCaseExample = new FunctionalCaseExample();
+        functionalCaseExample.createCriteria().andNameLike("%" + "用例名称"+"%");
+        functionalCases = functionalCaseMapper.selectByExample(functionalCaseExample);
+        Assertions.assertNotNull(functionalCases);
+
+        String filePath1 = Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/3erro.xmind")).getPath();
+        MockMultipartFile file1 = new MockMultipartFile("file", "14.xmind", MediaType.APPLICATION_OCTET_STREAM_VALUE, FileBaseUtils.getFileBytes(filePath1));
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file1);
+        functionalCaseMvcResult = this.requestMultipartWithOkAndReturn(IMPORT_XMIND_URL, paramMap);
+        functionalCaseImportResponseData = functionalCaseMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        functionalCaseResultHolder = JSON.parseObject(functionalCaseImportResponseData, ResultHolder.class);
+        functionalCaseImportResponse = JSON.parseObject(JSON.toJSONString(functionalCaseResultHolder.getData()), FunctionalCaseImportResponse.class);
+        Assertions.assertNotNull(functionalCaseImportResponse);
+
+        String filePath4 = Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/empty.xmind")).getPath();
+        MockMultipartFile file2 = new MockMultipartFile("file", "18.xmind", MediaType.APPLICATION_OCTET_STREAM_VALUE, FileBaseUtils.getFileBytes(filePath4));
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file2);
+        functionalCaseMvcResult = this.requestMultipartWithOkAndReturn(IMPORT_XMIND_URL, paramMap);
+        functionalCaseImportResponseData = functionalCaseMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        functionalCaseResultHolder = JSON.parseObject(functionalCaseImportResponseData, ResultHolder.class);
+        functionalCaseImportResponse = JSON.parseObject(JSON.toJSONString(functionalCaseResultHolder.getData()), FunctionalCaseImportResponse.class);
+        Assertions.assertNotNull(functionalCaseImportResponse);
+
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", null);
+        this.requestMultipart(IMPORT_XMIND_URL, paramMap).andExpect(status().is5xxServerError());
+
+        request.setCount(null);
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file2);
+        this.requestMultipart(IMPORT_XMIND_URL, paramMap).andExpect(status().is5xxServerError());
+    }
+
+    @Test
+    @Order(20)
+    public void testPreCheckImportXmind() throws Exception {
+        FunctionalCaseImportRequest request = new FunctionalCaseImportRequest();
+        request.setCover(true);
+        request.setProjectId("100001100001");
+        request.setCount("1");
+        LinkedMultiValueMap<String, Object> paramMap = new LinkedMultiValueMap<>();
+
+        String filePath = Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/1xml.xmind")).getPath();
+        MockMultipartFile file = new MockMultipartFile("file", "11.xmind", MediaType.APPLICATION_OCTET_STREAM_VALUE, FileBaseUtils.getFileBytes(filePath));
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file);
+        MvcResult functionalCaseMvcResult = this.requestMultipartWithOkAndReturn(CHECK_XMIND_URL, paramMap);
+
+        String functionalCaseImportResponseData = functionalCaseMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        ResultHolder functionalCaseResultHolder = JSON.parseObject(functionalCaseImportResponseData, ResultHolder.class);
+        FunctionalCaseImportResponse functionalCaseImportResponse = JSON.parseObject(JSON.toJSONString(functionalCaseResultHolder.getData()), FunctionalCaseImportResponse.class);
+        Assertions.assertNotNull(functionalCaseImportResponse);
+        System.out.println(JSON.toJSONString(functionalCaseImportResponse));
+
+
+
+        String filePath5 = Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/2module.xmind")).getPath();
+        MockMultipartFile file5 = new MockMultipartFile("file", "15.xmind", MediaType.APPLICATION_OCTET_STREAM_VALUE, FileBaseUtils.getFileBytes(filePath5));
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file5);
+        functionalCaseMvcResult =  this.requestMultipartWithOkAndReturn(CHECK_XMIND_URL, paramMap);
+        functionalCaseImportResponseData = functionalCaseMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        functionalCaseResultHolder = JSON.parseObject(functionalCaseImportResponseData, ResultHolder.class);
+        functionalCaseImportResponse = JSON.parseObject(JSON.toJSONString(functionalCaseResultHolder.getData()), FunctionalCaseImportResponse.class);
+        Assertions.assertNotNull(functionalCaseImportResponse);
+        System.out.println(JSON.toJSONString(functionalCaseImportResponse));
+
+
+        String filePath1 = Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/3erro.xmind")).getPath();
+        MockMultipartFile file1 = new MockMultipartFile("file", "14.xmind", MediaType.APPLICATION_OCTET_STREAM_VALUE, FileBaseUtils.getFileBytes(filePath1));
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file1);
+        functionalCaseMvcResult = this.requestMultipartWithOkAndReturn(CHECK_XMIND_URL, paramMap);
+        functionalCaseImportResponseData = functionalCaseMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        functionalCaseResultHolder = JSON.parseObject(functionalCaseImportResponseData, ResultHolder.class);
+        functionalCaseImportResponse = JSON.parseObject(JSON.toJSONString(functionalCaseResultHolder.getData()), FunctionalCaseImportResponse.class);
+        Assertions.assertNotNull(functionalCaseImportResponse);
+        System.out.println(JSON.toJSONString(functionalCaseImportResponse.getErrorMessages()));
+
+        String filePath4 = Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/empty.xmind")).getPath();
+        MockMultipartFile file2 = new MockMultipartFile("file", "18.xmind", MediaType.APPLICATION_OCTET_STREAM_VALUE, FileBaseUtils.getFileBytes(filePath4));
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file2);
+        functionalCaseMvcResult = this.requestMultipartWithOkAndReturn(CHECK_XMIND_URL, paramMap);
+        functionalCaseImportResponseData = functionalCaseMvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        functionalCaseResultHolder = JSON.parseObject(functionalCaseImportResponseData, ResultHolder.class);
+        functionalCaseImportResponse = JSON.parseObject(JSON.toJSONString(functionalCaseResultHolder.getData()), FunctionalCaseImportResponse.class);
+        Assertions.assertNotNull(functionalCaseImportResponse);
+        System.out.println(JSON.toJSONString(functionalCaseImportResponse));
+
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", null);
+        this.requestMultipart(CHECK_XMIND_URL, paramMap).andExpect(status().is5xxServerError());
+
+    }
+
     @Test
     @Order(22)
     public void operationHistoryList() throws Exception {
@@ -743,4 +1004,134 @@ public class FunctionalCaseControllerTests extends BaseTest {
         Assertions.assertTrue(CollectionUtils.isNotEmpty(operationHistoryDTOS));
 
     }
+
+
+    @Test
+    @Order(2)
+    public void exportExcel() throws Exception {
+        FunctionalCaseExportRequest request = new FunctionalCaseExportRequest();
+        request.setProjectId(DEFAULT_PROJECT_ID);
+        request.setSelectIds(List.of("TEST_FUNCTIONAL_CASE_ID"));
+        List<FunctionalCaseHeader> sysHeaders = new ArrayList<>() {{
+            add(new FunctionalCaseHeader() {{
+                setId("num");
+                setName("ID");
+            }});
+            add(new FunctionalCaseHeader() {{
+                setId("name");
+                setName("用例名称");
+            }});
+        }};
+        request.setSystemFields(sysHeaders);
+        List<FunctionalCaseHeader> customHeaders = new ArrayList<>() {{
+            add(new FunctionalCaseHeader() {{
+                setId("A");
+                setName("测试3");
+            }});
+        }};
+        request.setCustomFields(customHeaders);
+        List<FunctionalCaseHeader> otherHeaders = new ArrayList<>() {{
+            add(new FunctionalCaseHeader() {{
+                setId("createTime");
+                setName("创建时间");
+            }});
+        }};
+        request.setOtherFields(otherHeaders);
+
+        request.setFileId("123142342");
+        this.requestPost(EXPORT_EXCEL_URL, request);
+    }
+
+
+    @Test
+    @Order(22)
+    public void testDownloadXmindTemplate() throws Exception {
+        this.requestGetExcel(DOWNLOAD_XMIND_TEMPLATE_URL + DEFAULT_PROJECT_ID);
+    }
+
+    @Test
+    @Order(23)
+    public void getExportColumns() throws Exception {
+        this.requestGetExcel(EXPORT_COLUMNS_URL + DEFAULT_PROJECT_ID);
+    }
+
+    @Test
+    @Order(24)
+    public void downloadFile() throws Exception {
+        download("12222");
+        ExportTask exportTask = new ExportTask();
+        exportTask.setId("12314234222");
+        exportTask.setProjectId(DEFAULT_PROJECT_ID);
+        exportTask.setFileId("123142342");
+        exportTask.setFileType("xlsx");
+        exportTask.setType("CASE");
+        exportTask.setState("SUCCESS");
+        exportTask.setCreateTime(System.currentTimeMillis());
+        exportTask.setCreateUser("admin");
+        exportTask.setUpdateUser("admin");
+        exportTask.setUpdateTime(System.currentTimeMillis());
+        exportTaskMapper.insertSelective(exportTask);
+        download("123142342");
+
+    }
+
+    private void download(String fileId) throws Exception {
+        mockMvc.perform(MockMvcRequestBuilders.get(DOWNLOAD_FILE_URL + DEFAULT_PROJECT_ID + "/" + fileId)
+                .header(SessionConstants.HEADER_TOKEN, sessionId)
+                .header(SessionConstants.CSRF_TOKEN, csrfToken));
+    }
+
+
+    @Test
+    @Order(25)
+    public void stopExport() throws Exception {
+        this.requestGetExcel(STOP_EXPORT_URL + DEFAULT_PROJECT_ID);
+    }
+
+    @Test
+    @Order(3)
+    public void exportXmind() throws Exception {
+        FunctionalCaseExportRequest request = new FunctionalCaseExportRequest();
+        request.setProjectId(DEFAULT_PROJECT_ID);
+        request.setSelectIds(List.of("TEST_FUNCTIONAL_CASE_ID"));
+        List<FunctionalCaseHeader> sysHeaders = new ArrayList<>() {{
+            add(new FunctionalCaseHeader() {{
+                setId("num");
+                setName("ID");
+            }});
+            add(new FunctionalCaseHeader() {{
+                setId("name");
+                setName("用例名称");
+            }});
+        }};
+        request.setSystemFields(sysHeaders);
+        List<FunctionalCaseHeader> customHeaders = new ArrayList<>() {{
+            add(new FunctionalCaseHeader() {{
+                setId("A");
+                setName("测试3");
+            }});
+        }};
+        request.setCustomFields(customHeaders);
+        List<FunctionalCaseHeader> otherHeaders = new ArrayList<>() {{
+            add(new FunctionalCaseHeader() {{
+                setId("createTime");
+                setName("创建时间");
+            }});
+        }};
+        request.setOtherFields(otherHeaders);
+
+        request.setFileId("1231423421");
+        this.requestPost(EXPORT_XMIND_URL, request);
+        request.setSelectIds(new ArrayList<>());
+        this.requestPost(EXPORT_XMIND_URL, request);
+        request.setSelectIds(List.of("TEST_FUNCTIONAL_CASE_ID_8"));
+        this.requestPost(EXPORT_XMIND_URL, request);
+    }
+
+    @Test
+    @Order(4)
+    public void checkExportTask() throws Exception {
+        this.requestGetExcel(EXPORT_XMIND_CHECK_URL);
+    }
+
 }

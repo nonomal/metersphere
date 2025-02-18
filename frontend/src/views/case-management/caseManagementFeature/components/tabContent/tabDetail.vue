@@ -16,17 +16,16 @@
             class="px-0"
             @click="prepositionEdit"
           >
-            <MsIcon type="icon-icon_edit_outlined" class="mr-1 font-[16px] text-[rgb(var(--primary-5))]" />{{
-              t('caseManagement.featureCase.contentEdit')
-            }}</a-button
-          ></span
-        >
+            <MsIcon type="icon-icon_edit_outlined" class="mr-1 font-[16px] text-[rgb(var(--primary-5))]" />
+            {{ t('caseManagement.featureCase.contentEdit') }}
+          </a-button>
+        </span>
         <MsRichText
           v-if="isEditPreposition"
           v-model:raw="detailForm.prerequisite"
           v-model:filed-ids="prerequisiteFileIds"
           :upload-image="handleUploadImage"
-          :preview-url="PreviewEditorImageUrl"
+          :preview-url="`${PreviewEditorImageUrl}/${currentProjectId}`"
           class="mt-2"
         />
 
@@ -34,59 +33,38 @@
           v-else
           v-dompurify-html="detailForm?.prerequisite || '-'"
           class="markdown-body list-item-css !break-words break-all"
-        ></div>
+        >
+        </div>
       </a-form-item>
-      <a-form-item
-        field="step"
-        :label="
-          detailForm.caseEditType === 'STEP'
-            ? t('system.orgTemplate.stepDescription')
-            : t('system.orgTemplate.textDescription')
-        "
-        class="relative"
-      >
-        <div v-if="!props.isTestPlan" class="absolute left-16 top-0 font-normal">
-          <a-divider direction="vertical" />
-          <a-dropdown :popup-max-height="false" @select="handleSelectType">
-            <span class="changeType cursor-pointer text-[var(--color-text-3)]"
-              >{{ t('system.orgTemplate.changeType') }} <icon-down
-            /></span>
-            <template #content>
-              <a-doption value="STEP" :class="getSelectTypeClass('STEP')">
-                {{ t('system.orgTemplate.stepDescription') }}</a-doption
-              >
-              <a-doption value="TEXT" :class="getSelectTypeClass('TEXT')">{{
-                t('system.orgTemplate.textDescription')
-              }}</a-doption>
-            </template>
-          </a-dropdown>
-        </div>
-        <!-- 步骤描述 -->
-        <div v-if="detailForm.caseEditType === 'STEP'" class="w-full">
-          <AddStep
-            v-model:step-list="stepData"
-            :is-scroll-y="false"
-            :is-test-plan="props.isTestPlan"
-            :is-disabled="!isEditPreposition"
-          />
-        </div>
-        <!-- 文本描述 -->
-        <MsRichText
-          v-if="detailForm.caseEditType === 'TEXT' && isEditPreposition"
-          v-model:raw="detailForm.textDescription"
-          v-model:filed-ids="textDescriptionFileIds"
-          :upload-image="handleUploadImage"
-          :preview-url="PreviewEditorImageUrl"
+      <StepDescription v-model:caseEditType="detailForm.caseEditType" :is-test-plan="props.isTestPlan" />
+      <!-- 步骤描述 -->
+      <div v-if="detailForm.caseEditType === 'STEP'" class="mb-[20px] w-full">
+        <AddStep
+          v-model:step-list="stepData"
+          :is-scroll-y="false"
+          :is-test-plan="props.isTestPlan"
+          :is-disabled-test-plan="props.isDisabledTestPlan"
+          :is-disabled="!isEditPreposition"
         />
-        <div
-          v-if="detailForm.caseEditType === 'TEXT' && !isEditPreposition"
-          v-dompurify-html="detailForm.textDescription || '-'"
-          class="markdown-body !break-words break-all"
-        ></div>
-      </a-form-item>
+      </div>
+      <!-- 文本描述 -->
+      <MsRichText
+        v-if="detailForm.caseEditType === 'TEXT' && isEditPreposition"
+        v-model:raw="detailForm.textDescription"
+        v-model:filed-ids="textDescriptionFileIds"
+        :upload-image="handleUploadImage"
+        :preview-url="`${PreviewEditorImageUrl}/${currentProjectId}`"
+      />
+      <div
+        v-if="detailForm.caseEditType === 'TEXT' && !isEditPreposition"
+        v-dompurify-html="detailForm.textDescription || '-'"
+        class="markdown-body !break-words break-all"
+      >
+      </div>
       <a-form-item
         v-if="detailForm.caseEditType === 'TEXT'"
         field="remark"
+        class="mt-[20px]"
         :label="t('caseManagement.featureCase.expectedResult')"
       >
         <MsRichText
@@ -94,7 +72,7 @@
           v-model:raw="detailForm.expectedResult"
           v-model:filed-ids="expectedResultFileIds"
           :upload-image="handleUploadImage"
-          :preview-url="PreviewEditorImageUrl"
+          :preview-url="`${PreviewEditorImageUrl}/${currentProjectId}`"
         />
         <div
           v-else
@@ -108,7 +86,7 @@
           v-model:filed-ids="descriptionFileIds"
           v-model:raw="detailForm.description"
           :upload-image="handleUploadImage"
-          :preview-url="PreviewEditorImageUrl"
+          :preview-url="`${PreviewEditorImageUrl}/${currentProjectId}`"
         />
         <div v-else v-dompurify-html="detailForm.description || '-'" class="markdown-body !break-words break-all"></div>
       </a-form-item>
@@ -116,8 +94,8 @@
         <a-button type="secondary" @click="handleCancel">{{ t('common.cancel') }}</a-button>
         <a-button class="ml-[12px]" type="primary" :loading="confirmLoading" @click="handleOK">
           {{ t('common.save') }}
-        </a-button></div
-      >
+        </a-button>
+      </div>
       <div v-if="!props.isTestPlan" v-permission="['FUNCTIONAL_CASE:READ+UPDATE']">
         <AddAttachment v-model:file-list="fileList" multiple @change="handleChange" @link-file="associatedFile" />
       </div>
@@ -136,25 +114,25 @@
           projectId: currentProjectId,
         }"
         :upload-func="uploadOrAssociationFile"
-        :handle-delete="deleteFileHandler"
-        :show-delete="props.allowEdit && !props.isTestPlan"
+        :show-delete="false"
         @finish="uploadFileOver"
       >
         <template #actions="{ item }">
           <div v-if="props.allowEdit">
             <!-- 本地文件 -->
-            <div v-if="item.local || item.status === 'init'" class="flex flex-nowrap">
+            <div v-if="item.local || item.status === 'init'" class="flex items-center font-normal">
               <MsButton
                 v-if="item.file.type.includes('/image')"
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="handlePreview(item)"
               >
                 {{ t('ms.upload.preview') }}
               </MsButton>
+              <a-divider v-if="item.file.type.includes('/image')" direction="vertical" />
               <SaveAsFilePopover
-                v-if="!props.isTestPlan"
+                v-if="!props.isTestPlan && item.uid === activeTransferFileParams?.uid"
                 v-model:visible="transferVisible"
                 :saving-file="activeTransferFileParams"
                 :file-save-as-source-id="(form.id as string)"
@@ -164,52 +142,109 @@
                 @finish="emit('updateSuccess')"
               />
               <MsButton
-                v-if="!props.isTestPlan"
+                v-if="props.allowEdit && !props.isTestPlan && hasAllPermission(['FUNCTIONAL_CASE:READ+UPDATE'])"
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="transferFileHandler(item)"
               >
                 {{ t('caseManagement.featureCase.storage') }}
               </MsButton>
+              <a-divider
+                v-if="props.allowEdit && !props.isTestPlan && hasAllPermission(['FUNCTIONAL_CASE:READ+UPDATE'])"
+                direction="vertical"
+              />
               <MsButton
-                v-if="item.status === 'done'"
+                v-if="
+                  item.status === 'done' &&
+                  props.allowEdit &&
+                  !props.isTestPlan &&
+                  hasAllPermission(['FUNCTIONAL_CASE:READ+UPDATE'])
+                "
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="downloadFile(item)"
               >
                 {{ t('caseManagement.featureCase.download') }}
               </MsButton>
+              <a-divider
+                v-if="
+                  item.status === 'done' &&
+                  props.allowEdit &&
+                  !props.isTestPlan &&
+                  hasAllPermission(['FUNCTIONAL_CASE:READ+UPDATE'])
+                "
+                direction="vertical"
+              />
+              <MsButton
+                v-if="item.status !== 'uploading' && props.allowEdit && !props.isTestPlan"
+                type="button"
+                :status="item.deleteContent ? 'primary' : 'danger'"
+                class="!mr-0"
+                @click="deleteFileHandler(item)"
+              >
+                {{ t(item.deleteContent) || t('ms.upload.delete') }}
+              </MsButton>
             </div>
             <!-- 关联文件 -->
-            <div v-else class="flex flex-nowrap">
+            <div v-else class="flex items-center font-normal">
               <MsButton
                 v-if="item.file.type.includes('/image')"
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="handlePreview(item)"
               >
                 {{ t('ms.upload.preview') }}
               </MsButton>
+              <a-divider v-if="item.file.type.includes('/image')" direction="vertical" />
               <MsButton
                 v-if="item.status === 'done'"
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="downloadFile(item)"
               >
                 {{ t('caseManagement.featureCase.download') }}
               </MsButton>
+              <a-divider v-if="item.status === 'done'" direction="vertical" />
               <MsButton
-                v-if="item.isUpdateFlag"
+                v-if="
+                  item.isUpdateFlag &&
+                  props.allowEdit &&
+                  !props.isTestPlan &&
+                  hasAllPermission(['FUNCTIONAL_CASE:READ+UPDATE'])
+                "
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="handleUpdateFile(item)"
               >
                 {{ t('common.update') }}
+              </MsButton>
+              <a-divider
+                v-if="
+                  item.isUpdateFlag &&
+                  props.allowEdit &&
+                  !props.isTestPlan &&
+                  hasAllPermission(['FUNCTIONAL_CASE:READ+UPDATE'])
+                "
+                direction="vertical"
+              />
+              <MsButton
+                v-if="
+                  item.status !== 'uploading' &&
+                  props.allowEdit &&
+                  !props.isTestPlan &&
+                  hasAllPermission(['FUNCTIONAL_CASE:READ+UPDATE'])
+                "
+                type="button"
+                :status="item.deleteContent ? 'primary' : 'danger'"
+                class="!mr-0"
+                @click="deleteFileHandler(item)"
+              >
+                {{ t(item.deleteContent) }}
               </MsButton>
             </div>
           </div>
@@ -226,11 +261,12 @@
         v-model:file-list="fileList"
         accept="none"
         :auto-upload="false"
-        :sub-text="acceptType === 'jar' ? '' : t('project.fileManagement.normalFileSubText', { size: 50 })"
+        :sub-text="
+          acceptType === 'jar' ? '' : t('project.fileManagement.normalFileSubText', { size: appStore.getFileMaxSize })
+        "
         multiple
         draggable
         size-unit="MB"
-        :max-size="50"
         :is-all-screen="true"
         class="mb-[16px]"
         @change="handleChange"
@@ -262,6 +298,7 @@
   import SaveAsFilePopover from '@/components/business/ms-add-attachment/saveAsFilePopover.vue';
   import LinkFileDrawer from '@/components/business/ms-link-file/associatedFileDrawer.vue';
   import AddStep from '../addStep.vue';
+  import StepDescription from '@/views/case-management/caseManagementFeature/components/tabContent/stepDescription.vue';
 
   import {
     checkFileIsUpdateRequest,
@@ -280,9 +317,11 @@
   import { PreviewEditorImageUrl } from '@/api/requrls/case-management/featureCase';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
+  import useShortcutSave from '@/hooks/useShortcutSave';
   import useAppStore from '@/store/modules/app';
-  import { downloadByteFile, getGenerateId, sleep } from '@/utils';
+  import { characterLimit, downloadByteFile, getGenerateId, sleep } from '@/utils';
   import { scrollIntoView } from '@/utils/dom';
+  import { hasAllPermission } from '@/utils/permission';
 
   import type { AssociatedList, DetailCase, StepList } from '@/models/caseManagement/featureCase';
   import type { TableQueryParams } from '@/models/common';
@@ -302,11 +341,13 @@
       form: DetailCase;
       allowEdit?: boolean; // 是否允许编辑
       formRules?: FormRuleItem[]; // 编辑表单
-      formApi?: any;
       isTestPlan?: boolean; // 测试计划页面的
+      isDisabledTestPlan?: boolean; // 测试计划页面-已归档
+      isEdit?: boolean; // 是否为编辑状态
     }>(),
     {
       allowEdit: true, // 是否允许编辑
+      isEdit: false,
     }
   );
 
@@ -343,7 +384,7 @@
     },
   ]);
 
-  const isEditPreposition = ref<boolean>(false); // 非编辑状态
+  const isEditPreposition = ref<boolean>(props.isEdit); // 非编辑状态
 
   // 更改类型
   const handleSelectType = (value: string | number | Record<string, any> | undefined) => {
@@ -357,7 +398,7 @@
       : [];
   }
 
-  // 编辑前置条件
+  // 编辑前置操作
   function prepositionEdit() {
     isEditPreposition.value = !isEditPreposition.value;
   }
@@ -426,7 +467,7 @@
     );
   });
 
-  // 前置条件附件id
+  // 前置操作附件id
   const prerequisiteFileIds = ref<string[]>([]);
   // 文本描述附件id
   const textDescriptionFileIds = ref<string[]>([]);
@@ -449,6 +490,7 @@
   function getParams() {
     const steps = stepData.value.map((item, index) => {
       return {
+        id: item.id,
         num: index,
         desc: item.step,
         result: item.expected,
@@ -482,16 +524,12 @@
     caseFormRef.value?.validate().then(async (res: any) => {
       if (!res) {
         try {
-          props.formApi?.validate().then(async (valid: any) => {
-            if (valid === true) {
-              confirmLoading.value = true;
-              await updateCaseRequest(getParams());
-              confirmLoading.value = false;
-              Message.success(t('caseManagement.featureCase.editSuccess'));
-              isEditPreposition.value = false;
-              emit('updateSuccess');
-            }
-          });
+          confirmLoading.value = true;
+          await updateCaseRequest(getParams());
+          confirmLoading.value = false;
+          Message.success(t('caseManagement.featureCase.editSuccess'));
+          isEditPreposition.value = false;
+          emit('updateSuccess');
         } catch (error) {
           console.log(error);
         } finally {
@@ -502,7 +540,26 @@
     });
   }
 
+  function setStepData(steps: string) {
+    if (steps) {
+      stepData.value = JSON.parse(steps).map((item: any) => {
+        return {
+          id: item.id,
+          step: item.desc,
+          expected: item.result,
+          actualResult: item.actualResult,
+          executeResult: item.executeResult,
+        };
+      });
+    } else {
+      stepData.value = [];
+    }
+  }
+
   function handleCancel() {
+    detailForm.value = { ...props.form };
+    const { steps } = detailForm.value;
+    setStepData(steps);
     isEditPreposition.value = false;
   }
 
@@ -529,7 +586,7 @@
     } else {
       openModal({
         type: 'error',
-        title: t('caseManagement.featureCase.deleteFile', { name: item?.name }),
+        title: t('caseManagement.featureCase.deleteFile', { name: characterLimit(item?.name) }),
         content: t('caseManagement.featureCase.deleteFileTip'),
         okText: t('common.confirmDelete'),
         cancelText: t('common.cancel'),
@@ -590,17 +647,7 @@
   // 获取详情
   async function getDetails() {
     const { steps, attachments } = detailForm.value;
-    if (steps) {
-      stepData.value = JSON.parse(steps).map((item: any) => {
-        return {
-          id: item.id,
-          step: item.desc,
-          expected: item.result,
-          actualResult: item.actualResult,
-          executeResult: item.executeResult,
-        };
-      });
-    }
+    setStepData(steps);
     const fileIds = (attachments || []).map((item: any) => item.id);
     if (fileIds.length) {
       await getCheckFileIds(fileIds);
@@ -627,7 +674,6 @@
   // 预览
   async function handlePreview(item: MsFileItem) {
     try {
-      previewVisible.value = true;
       const res = await previewFile({
         projectId: currentProjectId.value,
         caseId: detailForm.value.id,
@@ -636,6 +682,7 @@
       });
       const blob = new Blob([res], { type: 'image/jpeg' });
       imageUrl.value = URL.createObjectURL(blob);
+      previewVisible.value = true;
     } catch (error) {
       console.log(error);
     }
@@ -693,11 +740,8 @@
   }
 
   // 处理关联文件
-  function saveSelectAssociatedFile(fileData: AssociatedList[]) {
-    const fileResultList = fileData.map((fileInfo) => convertToFile(fileInfo));
-    fileList.value.push(...fileResultList);
-    const fileIds = fileResultList.map((item: any) => item.uid);
-    startUpload(fileIds);
+  function saveSelectAssociatedFile(fileData: AssociatedList[], selectIds?: string[]) {
+    startUpload(selectIds || []);
   }
 
   // 更新文件
@@ -705,6 +749,7 @@
     try {
       await updateFile(currentProjectId.value, item.associationId);
       Message.success(t('common.updateSuccess'));
+      emit('updateSuccess');
     } catch (error) {
       console.log(error);
     }
@@ -744,9 +789,17 @@
     }
   }
 
-  onMounted(() => {
+  const { registerCatchSaveShortcut, removeCatchSaveShortcut } = useShortcutSave(handleOK);
+  onMounted(async () => {
     detailForm.value = { ...props.form };
-    getDetails();
+    await getDetails();
+    if (isEditPreposition.value) {
+      registerCatchSaveShortcut();
+    }
+  });
+
+  onBeforeUnmount(() => {
+    removeCatchSaveShortcut();
   });
 
   defineExpose({

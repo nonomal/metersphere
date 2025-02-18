@@ -1,5 +1,4 @@
 import { RouteEnum } from '@/enums/routeEnum';
-import { TaskCenterEnum } from '@/enums/taskCenter';
 
 export const MENU_LEVEL = ['SYSTEM', 'ORGANIZATION', 'PROJECT'] as const; // 菜单级别
 
@@ -79,6 +78,18 @@ export const pathMap: PathMapItem[] = [
             route: RouteEnum.API_TEST_MANAGEMENT,
             permission: [],
             level: MENU_LEVEL[2],
+            routeQuery: {
+              tab: 'api',
+            },
+            children: [
+              {
+                key: 'API_TEST_MANAGEMENT_DEFINITION_SHARE', // 接口测试-接口定义-模块
+                locale: 'common.share',
+                route: RouteEnum.API_TEST_MANAGEMENT,
+                permission: [],
+                level: MENU_LEVEL[2],
+              },
+            ],
           },
           {
             key: 'API_TEST_MANAGEMENT_MOCK', // 接口测试-接口定义-mock
@@ -86,6 +97,9 @@ export const pathMap: PathMapItem[] = [
             route: RouteEnum.API_TEST_MANAGEMENT,
             permission: [],
             level: MENU_LEVEL[2],
+            routeQuery: {
+              tab: 'mock',
+            },
           },
           {
             key: 'API_TEST_MANAGEMENT_CASE', // 接口测试-接口定义-case
@@ -93,6 +107,9 @@ export const pathMap: PathMapItem[] = [
             route: RouteEnum.API_TEST_MANAGEMENT,
             permission: [],
             level: MENU_LEVEL[2],
+            routeQuery: {
+              tab: 'case',
+            },
           },
           {
             key: 'API_TEST_MANAGEMENT_RECYCLE', // 接口测试-回收站
@@ -125,7 +142,7 @@ export const pathMap: PathMapItem[] = [
             level: MENU_LEVEL[2],
           },
           {
-            key: 'API_TEST_SCENARIO_RECYCLE', // 接口测试-场景-回收站
+            key: 'API_TEST_SCENARIO_MANAGEMENT_RECYCLE', // 接口测试-场景-回收站
             locale: 'menu.apiTest.scenario.recycle',
             route: RouteEnum.API_TEST_SCENARIO_RECYCLE,
             permission: [],
@@ -200,13 +217,29 @@ export const pathMap: PathMapItem[] = [
         route: RouteEnum.CASE_MANAGEMENT_CASE,
         permission: [],
         level: MENU_LEVEL[2],
-      },
-      {
-        key: 'CASE_MANAGEMENT_CASE_DETAIL', // 功能测试-功能用例-用例详情
-        locale: 'menu.caseManagement.featureCaseDetail',
-        route: RouteEnum.CASE_MANAGEMENT_CASE_DETAIL,
-        permission: [],
-        level: MENU_LEVEL[2],
+        children: [
+          {
+            key: 'CASE_MANAGEMENT_CASE_MODULE', // 功能测试-功能用例-模块
+            locale: 'common.module',
+            route: RouteEnum.CASE_MANAGEMENT_CASE,
+            permission: [],
+            level: MENU_LEVEL[2],
+          },
+          {
+            key: 'CASE_MANAGEMENT_CASE_CASE', // 功能测试-功能用例-用例列表
+            locale: 'common.case',
+            route: RouteEnum.CASE_MANAGEMENT_CASE,
+            permission: [],
+            level: MENU_LEVEL[2],
+          },
+          {
+            key: 'CASE_MANAGEMENT_CASE_RECYCLE', // 功能测试-功能用例-回收站
+            locale: 'menu.caseManagement.featureCaseRecycle',
+            route: RouteEnum.CASE_MANAGEMENT_CASE_RECYCLE,
+            permission: [],
+            level: MENU_LEVEL[2],
+          },
+        ],
       },
       {
         key: 'CASE_MANAGEMENT_REVIEW', // 功能测试-功能用例-用例评审
@@ -214,13 +247,29 @@ export const pathMap: PathMapItem[] = [
         route: RouteEnum.CASE_MANAGEMENT_REVIEW,
         permission: [],
         level: MENU_LEVEL[2],
-      },
-      {
-        key: 'CASE_MANAGEMENT_REVIEW_DETAIL', // 功能测试-功能用例-用例评审
-        locale: 'menu.caseManagement.caseManagementReviewDetail',
-        route: RouteEnum.CASE_MANAGEMENT_REVIEW_DETAIL,
-        permission: [],
-        level: MENU_LEVEL[2],
+        children: [
+          {
+            key: 'CASE_MANAGEMENT_REVIEW_REVIEW', // 功能测试-功能用例-用例评审
+            locale: 'menu.caseManagement.caseManagementReview',
+            route: RouteEnum.CASE_MANAGEMENT_REVIEW,
+            permission: [],
+            level: MENU_LEVEL[2],
+          },
+          {
+            key: 'CASE_MANAGEMENT_REVIEW_DETAIL', // 功能测试-功能用例-评审详情
+            locale: 'menu.caseManagement.caseManagementReviewDetail',
+            route: RouteEnum.CASE_MANAGEMENT_REVIEW_DETAIL,
+            permission: [],
+            level: MENU_LEVEL[2],
+          },
+          {
+            key: 'CASE_MANAGEMENT_REVIEW_REVIEW_MODULE', // 功能测试-功能用例-用例评审-模块
+            locale: 'common.module',
+            route: RouteEnum.CASE_MANAGEMENT_REVIEW,
+            permission: [],
+            level: MENU_LEVEL[2],
+          },
+        ],
       },
     ],
   },
@@ -304,7 +353,7 @@ export const pathMap: PathMapItem[] = [
           },
           {
             key: 'SETTING_SYSTEM_AUTHORIZED_MANAGEMENT', // 系统设置-系统-授权管理
-            locale: 'menu.settings.system.authorizedManagement',
+            locale: 'License',
             route: RouteEnum.SETTING_SYSTEM_AUTHORIZED_MANAGEMENT,
             permission: [],
             level: MENU_LEVEL[0],
@@ -322,73 +371,6 @@ export const pathMap: PathMapItem[] = [
             route: RouteEnum.SETTING_SYSTEM_TASK_CENTER,
             permission: [],
             level: MENU_LEVEL[0],
-            children: [
-              {
-                key: 'SETTING_SYSTEM_TASK_CENTER_REAL_TIME', // 系统设置-系统-任务中心-实时任务
-                locale: 'project.taskCenter.real',
-                route: RouteEnum.SETTING_SYSTEM_TASK_CENTER,
-                permission: [],
-                level: MENU_LEVEL[0],
-                children: [
-                  {
-                    key: 'SETTING_SYSTEM_TASK_CENTER_REAL_TIME_API_CASE', // 系统设置-系统-任务中心-实时任务-接口用例
-                    locale: 'project.taskCenter.interfaceCase',
-                    route: RouteEnum.SETTING_SYSTEM_TASK_CENTER,
-                    permission: [],
-                    level: MENU_LEVEL[0],
-                    routeQuery: {
-                      tab: 'real',
-                      type: TaskCenterEnum.API_CASE,
-                    },
-                  },
-                  {
-                    key: 'SETTING_SYSTEM_TASK_CENTER_REAL_TIME_API_SCENARIO', // 系统设置-系统-任务中心-实时任务-接口场景
-                    locale: 'project.taskCenter.apiScenario',
-                    route: RouteEnum.SETTING_SYSTEM_TASK_CENTER,
-                    permission: [],
-                    level: MENU_LEVEL[0],
-                    routeQuery: {
-                      tab: 'real',
-                      type: TaskCenterEnum.API_SCENARIO,
-                    },
-                  },
-                ],
-              },
-              {
-                key: 'SETTING_SYSTEM_TASK_CENTER_TIME', // 系统设置-系统-任务中心-定时任务
-                locale: 'apiTestManagement.timeTask',
-                route: RouteEnum.SETTING_SYSTEM_TASK_CENTER,
-                permission: [],
-                level: MENU_LEVEL[0],
-                routeQuery: {
-                  tab: 'timeTask',
-                },
-                children: [
-                  {
-                    key: 'SETTING_SYSTEM_TASK_CENTER_TIME_API_SCENARIO', // 系统设置-系统-任务中心-定时任务-接口场景
-                    locale: 'project.taskCenter.apiScenario',
-                    route: RouteEnum.SETTING_SYSTEM_TASK_CENTER,
-                    permission: [],
-                    level: MENU_LEVEL[0],
-                    routeQuery: {
-                      tab: 'timeTask',
-                      type: TaskCenterEnum.API_SCENARIO,
-                    },
-                  },
-                  {
-                    key: 'SETTING_SYSTEM_TASK_CENTER_TIME_API_IMPORT', // 系统设置-系统-任务中心-定时任务-接口导入
-                    locale: 'project.taskCenter.apiImport',
-                    route: RouteEnum.SETTING_SYSTEM_TASK_CENTER,
-                    permission: [],
-                    level: MENU_LEVEL[0],
-                    routeQuery: {
-                      tab: 'timeTask',
-                      type: TaskCenterEnum.API_IMPORT,
-                    },
-                  },
-                ],
-              },
-            ],
           },
           {
             key: 'SETTING_SYSTEM_PLUGIN_MANAGEMENT', // 系统设置-系统-插件管理
@@ -440,73 +422,6 @@ export const pathMap: PathMapItem[] = [
             route: RouteEnum.SETTING_ORGANIZATION_TASK_CENTER,
             permission: [],
             level: MENU_LEVEL[1],
-            children: [
-              {
-                key: 'SETTING_ORGANIZATION_TASK_CENTER_REAL_TIME', // 系统设置-组织-任务中心-实时任务
-                locale: 'project.taskCenter.real',
-                route: RouteEnum.SETTING_ORGANIZATION_TASK_CENTER,
-                permission: [],
-                level: MENU_LEVEL[1],
-                children: [
-                  {
-                    key: 'SETTING_ORGANIZATION_TASK_CENTER_REAL_TIME_API_CASE', // 系统设置-组织-任务中心-实时任务-接口用例
-                    locale: 'project.taskCenter.interfaceCase',
-                    route: RouteEnum.SETTING_ORGANIZATION_TASK_CENTER,
-                    permission: [],
-                    level: MENU_LEVEL[1],
-                    routeQuery: {
-                      tab: 'real',
-                      type: TaskCenterEnum.API_CASE,
-                    },
-                  },
-                  {
-                    key: 'SETTING_ORGANIZATION_TASK_CENTER_REAL_TIME_API_SCENARIO', // 系统设置-组织-任务中心-实时任务-接口场景
-                    locale: 'project.taskCenter.apiScenario',
-                    route: RouteEnum.SETTING_ORGANIZATION_TASK_CENTER,
-                    permission: [],
-                    level: MENU_LEVEL[1],
-                    routeQuery: {
-                      tab: 'real',
-                      type: TaskCenterEnum.API_SCENARIO,
-                    },
-                  },
-                ],
-              },
-              {
-                key: 'SETTING_ORGANIZATION_TASK_CENTER_TIME', // 系统设置-组织-任务中心-定时任务
-                locale: 'apiTestManagement.timeTask',
-                route: RouteEnum.SETTING_ORGANIZATION_TASK_CENTER,
-                permission: [],
-                level: MENU_LEVEL[1],
-                routeQuery: {
-                  tab: 'timeTask',
-                },
-                children: [
-                  {
-                    key: 'SETTING_ORGANIZATION_TASK_CENTER_TIME_API_SCENARIO', // 系统设置-组织-任务中心-定时任务-接口场景
-                    locale: 'project.taskCenter.apiScenario',
-                    route: RouteEnum.SETTING_ORGANIZATION_TASK_CENTER,
-                    permission: [],
-                    level: MENU_LEVEL[1],
-                    routeQuery: {
-                      tab: 'timeTask',
-                      type: TaskCenterEnum.API_SCENARIO,
-                    },
-                  },
-                  {
-                    key: 'SETTING_ORGANIZATION_TASK_CENTER_TIME_API_IMPORT', // 系统设置-组织-任务中心-定时任务-接口导入
-                    locale: 'project.taskCenter.apiImport',
-                    route: RouteEnum.SETTING_ORGANIZATION_TASK_CENTER,
-                    permission: [],
-                    level: MENU_LEVEL[1],
-                    routeQuery: {
-                      tab: 'timeTask',
-                      type: TaskCenterEnum.API_IMPORT,
-                    },
-                  },
-                ],
-              },
-            ],
           },
           {
             key: 'SETTING_ORGANIZATION_TEMPLATE', // 系统设置-组织-模板管理
@@ -872,74 +787,6 @@ export const pathMap: PathMapItem[] = [
         route: '',
         permission: [],
         level: MENU_LEVEL[2],
-        children: [
-          {
-            key: 'PROJECT_MANAGEMENT_TASK_CENTER_REAL_TIME', // 项目管理-任务中心-实时任务
-            locale: 'project.taskCenter.realTimeTask',
-            route: '',
-            permission: [],
-            level: MENU_LEVEL[2],
-            children: [
-              {
-                key: 'PROJECT_MANAGEMENT_TASK_CENTER_REAL_TIME_API_CASE', // 项目管理-任务中心-实时任务-接口用例
-                locale: 'project.taskCenter.interfaceCase',
-                route: '',
-                permission: [],
-                level: MENU_LEVEL[2],
-                routeQuery: {
-                  task: true,
-                  tab: 'real',
-                  type: TaskCenterEnum.API_CASE,
-                },
-              },
-              {
-                key: 'PROJECT_MANAGEMENT_TASK_CENTER_REAL_TIME_API_SCENARIO', // 项目管理-任务中心-实时任务-接口场景
-                locale: 'project.taskCenter.apiScenario',
-                route: '',
-                permission: [],
-                level: MENU_LEVEL[2],
-                routeQuery: {
-                  task: true,
-                  tab: 'real',
-                  type: TaskCenterEnum.API_SCENARIO,
-                },
-              },
-            ],
-          },
-          {
-            key: 'PROJECT_MANAGEMENT_TASK_CENTER_TIME', // 项目管理-任务中心-定时任务
-            locale: 'project.taskCenter.scheduledTask',
-            route: '',
-            permission: [],
-            level: MENU_LEVEL[2],
-            children: [
-              {
-                key: 'PROJECT_MANAGEMENT_TASK_CENTER_TIME_API_SCENARIO', // 项目管理-任务中心-定时任务-接口场景
-                locale: 'project.taskCenter.apiScenario',
-                route: '',
-                permission: [],
-                level: MENU_LEVEL[2],
-                routeQuery: {
-                  task: true,
-                  tab: 'timing',
-                  type: TaskCenterEnum.API_SCENARIO,
-                },
-              },
-              {
-                key: 'PROJECT_MANAGEMENT_TASK_CENTER_TIME_API_IMPORT', // 项目管理-任务中心-定时任务-接口导入
-                locale: 'project.taskCenter.apiImport',
-                route: '',
-                permission: [],
-                level: MENU_LEVEL[2],
-                routeQuery: {
-                  task: true,
-                  tab: 'timing',
-                  type: TaskCenterEnum.API_IMPORT,
-                },
-              },
-            ],
-          },
-        ],
       },
     ],
   },
@@ -952,8 +799,22 @@ export const pathMap: PathMapItem[] = [
     level: MENU_LEVEL[2],
     children: [
       {
-        key: 'TEST_PLAN_INDEX', // 测试计划-测试计划
-        locale: 'menu.testPlan',
+        key: 'TEST_PLAN_MODULE', // 测试计划-模块
+        locale: 'testPlan.testPlanGroup.module',
+        route: RouteEnum.TEST_PLAN,
+        permission: [],
+        level: MENU_LEVEL[2],
+      },
+      {
+        key: 'TEST_PLAN_PLAN', // 测试计划-计划
+        locale: 'menu.testPlanShort',
+        route: RouteEnum.TEST_PLAN_INDEX_DETAIL,
+        permission: [],
+        level: MENU_LEVEL[2],
+      },
+      {
+        key: 'TEST_PLAN_GROUP', // 测试计划-计划组
+        locale: 'menu.testPlanGroup',
         route: RouteEnum.TEST_PLAN_INDEX,
         permission: [],
         level: MENU_LEVEL[2],
@@ -964,20 +825,28 @@ export const pathMap: PathMapItem[] = [
         route: RouteEnum.TEST_PLAN_REPORT,
         permission: [],
         level: MENU_LEVEL[2],
-      },
-      {
-        key: 'TEST_PLAN_INDEX_DETAIL', // 测试计划-测试计划-测试计划详情
-        locale: 'menu.testPlan.testPlanDetail',
-        route: RouteEnum.TEST_PLAN_INDEX_DETAIL,
-        permission: [],
-        level: MENU_LEVEL[2],
-      },
-      {
-        key: 'TEST_PLAN_INDEX_DETAIL_FEATURE_CASE_DETAIL', // 测试计划-测试计划-测试计划详情-功能用例详情
-        locale: 'menu.caseManagement.caseManagementCaseDetail',
-        route: RouteEnum.TEST_PLAN_INDEX_DETAIL_FEATURE_CASE_DETAIL,
-        permission: [],
-        level: MENU_LEVEL[2],
+        children: [
+          {
+            key: 'TEST_PLAN_REPORT_TEST_PLAN', // 测试计划报告
+            locale: 'menu.apiTest.reportTestPlan',
+            route: RouteEnum.TEST_PLAN_REPORT_DETAIL,
+            permission: [],
+            level: MENU_LEVEL[2],
+            routeQuery: {
+              type: 'TEST_PLAN',
+            },
+          },
+          {
+            key: 'TEST_PLAN_REPORT_TEST_PLAN_GROUP', // 测试计划组报告
+            locale: 'menu.apiTest.reportTestGroupPlan',
+            route: RouteEnum.TEST_PLAN_REPORT_DETAIL,
+            permission: [],
+            level: MENU_LEVEL[2],
+            routeQuery: {
+              type: 'GROUP',
+            },
+          },
+        ],
       },
     ],
   },
@@ -1032,5 +901,42 @@ export const pathMap: PathMapItem[] = [
     route: '',
     permission: [],
     level: MENU_LEVEL[0],
+  },
+  {
+    key: 'WORKBENCH', // 工作台
+    locale: 'menu.workbench',
+    route: RouteEnum.WORKBENCH,
+    permission: [],
+    level: MENU_LEVEL[1],
+    children: [
+      {
+        key: 'WORKBENCH_INDEX', // 工作台-首页
+        locale: 'menu.workbenchHomeSort',
+        route: RouteEnum.WORKBENCH_INDEX,
+        permission: [],
+        level: MENU_LEVEL[1],
+      },
+      {
+        key: 'WORKBENCH_INDEX_WAIT', // 工作台-待办
+        locale: 'menu.workbenchWaitSort',
+        route: RouteEnum.WORKBENCH_INDEX_WAIT,
+        permission: [],
+        level: MENU_LEVEL[1],
+      },
+      {
+        key: 'WORKBENCH_INDEX_FOLLOW', // 工作台-我关注的
+        locale: 'menu.workbenchFollowSort',
+        route: RouteEnum.WORKBENCH_INDEX_FOLLOW,
+        permission: [],
+        level: MENU_LEVEL[1],
+      },
+      {
+        key: 'WORKBENCH_INDEX_CREATED', // 工作台-我创建的
+        locale: 'menu.workbenchCreatedSort',
+        route: RouteEnum.WORKBENCH_INDEX_CREATED,
+        permission: [],
+        level: MENU_LEVEL[1],
+      },
+    ],
   },
 ];

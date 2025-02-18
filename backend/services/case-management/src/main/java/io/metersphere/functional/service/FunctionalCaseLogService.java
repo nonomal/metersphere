@@ -17,7 +17,6 @@ import io.metersphere.sdk.util.JSON;
 import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.log.dto.LogDTO;
-import io.metersphere.system.mapper.CustomFieldMapper;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
 import org.jetbrains.annotations.NotNull;
@@ -51,18 +50,11 @@ public class FunctionalCaseLogService {
     private FunctionalCaseAttachmentMapper functionalCaseAttachmentMapper;
     @Resource
     private FileAssociationMapper fileAssociationMapper;
-
-    @Resource
-    private CustomFieldMapper customFieldMapper;
-
     @Resource
     private BugRelationCaseMapper bugRelationCaseMapper;
 
     @Resource
     private BugMapper bugMapper;
-
-    @Resource
-    private ExtFunctionalCaseModuleMapper extFunctionalCaseModuleMapper;
 
 
     /**
@@ -149,7 +141,7 @@ public class FunctionalCaseLogService {
                     functionalCase.getId(),
                     null,
                     OperationLogType.DELETE.name(),
-                    OperationLogModule.FUNCTIONAL_CASE,
+                    OperationLogModule.CASE_MANAGEMENT_CASE_CASE,
                     functionalCase.getName());
 
             dto.setPath("/functional/case/delete");
@@ -176,7 +168,7 @@ public class FunctionalCaseLogService {
                         functionalCase.getId(),
                         null,
                         OperationLogType.DELETE.name(),
-                        OperationLogModule.FUNCTIONAL_CASE,
+                        OperationLogModule.CASE_MANAGEMENT_CASE_CASE,
                         functionalCase.getName());
 
                 dto.setPath(path);
@@ -187,7 +179,7 @@ public class FunctionalCaseLogService {
         }
         return dtoList;
     }
-    
+
     /**
      * 恢复项目
      *
@@ -203,7 +195,7 @@ public class FunctionalCaseLogService {
                     id,
                     null,
                     OperationLogType.RECOVER.name(),
-                    OperationLogModule.FUNCTIONAL_CASE,
+                    OperationLogModule.CASE_MANAGEMENT_CASE_RECYCLE,
                     functionalCase.getName());
             dto.setOriginalValue(JSON.toJSONBytes(functionalCase));
             return dto;
@@ -229,7 +221,7 @@ public class FunctionalCaseLogService {
                         functionalCase.getId(),
                         null,
                         OperationLogType.RECOVER.name(),
-                        OperationLogModule.FUNCTIONAL_CASE,
+                        OperationLogModule.CASE_MANAGEMENT_CASE_RECYCLE,
                         functionalCase.getName());
 
                 dto.setPath("/functional/case/batch/recover");
@@ -256,7 +248,7 @@ public class FunctionalCaseLogService {
                     functionalCase.getId(),
                     null,
                     OperationLogType.DELETE.name(),
-                    OperationLogModule.FUNCTIONAL_CASE,
+                    OperationLogModule.CASE_MANAGEMENT_CASE_RECYCLE,
                     functionalCase.getName());
 
             dto.setPath("/functional/case/trash/delete");
@@ -287,7 +279,7 @@ public class FunctionalCaseLogService {
                     functionalCase.getId(),
                     null,
                     OperationLogType.DISASSOCIATE.name(),
-                    OperationLogModule.FUNCTIONAL_CASE,
+                    OperationLogModule.CASE_MANAGEMENT_CASE_CASE,
                     functionalCase.getName());
 
             dto.setPath("/functional/case/demand/cancel/");
@@ -313,7 +305,7 @@ public class FunctionalCaseLogService {
                     functionalCase.getId(),
                     null,
                     OperationLogType.DISASSOCIATE.name(),
-                    OperationLogModule.FUNCTIONAL_CASE,
+                    OperationLogModule.CASE_MANAGEMENT_CASE_CASE,
                     functionalCase.getName());
 
             dto.setPath("/functional/case/test/disassociate/case");
@@ -352,7 +344,7 @@ public class FunctionalCaseLogService {
                         functionalCase.getId(),
                         null,
                         OperationLogType.DELETE.name(),
-                        OperationLogModule.FUNCTIONAL_CASE,
+                        OperationLogModule.CASE_MANAGEMENT_CASE_RECYCLE,
                         functionalCase.getName());
 
                 dto.setPath("/functional/case/batch/delete");
@@ -387,7 +379,7 @@ public class FunctionalCaseLogService {
                     bugRelationCase.getBugId(),
                     null,
                     OperationLogType.DISASSOCIATE.name(),
-                    OperationLogModule.FUNCTIONAL_CASE,
+                    OperationLogModule.CASE_MANAGEMENT_CASE_CASE,
                     bug.getTitle() + "缺陷");
 
             dto.setPath("/functional/case/test/disassociate/bug/" + id);
@@ -408,7 +400,7 @@ public class FunctionalCaseLogService {
                     functionalCase.getId(),
                     null,
                     OperationLogType.DISASSOCIATE.name(),
-                    OperationLogModule.FUNCTIONAL_CASE,
+                    OperationLogModule.CASE_MANAGEMENT_CASE_CASE,
                     functionalCase.getName());
 
             dto.setPath("/functional/case/relationship/delete");
@@ -427,10 +419,26 @@ public class FunctionalCaseLogService {
                 sourceId,
                 null,
                 OperationLogType.UPDATE.name(),
-                OperationLogModule.FUNCTIONAL_CASE,
+                OperationLogModule.CASE_MANAGEMENT_CASE_CASE,
                 content);
         dto.setHistory(true);
         dto.setPath(path);
+        dto.setMethod(HttpMethodConstants.POST.name());
+        return dto;
+    }
+
+
+    public LogDTO exportExcelLog(FunctionalCaseExportRequest request, String url, String userId, String orgId) {
+        LogDTO dto = new LogDTO(
+                request.getProjectId(),
+                orgId,
+                request.getFileId(),
+                userId,
+                OperationLogType.EXPORT.name(),
+                OperationLogModule.CASE_MANAGEMENT_CASE_CASE,
+                "");
+        dto.setHistory(true);
+        dto.setPath("/functional/case/export/" + url);
         dto.setMethod(HttpMethodConstants.POST.name());
         return dto;
     }

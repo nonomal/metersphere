@@ -2,7 +2,7 @@ package io.metersphere.api.dto.scenario;
 
 import io.metersphere.api.constants.ApiScenarioStatus;
 import io.metersphere.api.dto.ResourceAddFileParam;
-import io.metersphere.system.valid.EnumValue;
+import io.metersphere.sdk.valid.EnumValue;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -57,6 +57,10 @@ public class ApiScenarioAddRequest {
     @Schema(description = "环境或者环境组ID")
     @Size(max = 50, message = "{api_scenario.environment_id.length_range}")
     private String environmentId;
+
+    @Schema(description = "复制的原场景ID")
+    @Size(max = 50)
+    private String copyFromScenarioId;
 
     @Schema(description = "场景的通用配置")
     @Valid

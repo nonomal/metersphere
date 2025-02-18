@@ -1,21 +1,66 @@
 <template>
-  <a-form ref="formRef" :model="propsRes" layout="vertical">
+  <a-form ref="formRef" :model="propsRes" :disabled="props.disabled" layout="vertical">
     <MsBaseTable
       v-bind="propsRes"
+      v-model:original-selected-keys="originalSelectedKeys"
+      v-model:expanded-keys="expandedKeys"
       :hoverable="false"
       is-simple-setting
       :span-method="props.spanMethod"
-      :class="!props.selectable && !props.draggable ? 'ms-form-table-no-left-action' : ''"
+      :class="[
+        !props.selectable && !props.draggable ? 'ms-form-table-no-left-action' : '',
+        props.disabled ? 'ms-form-table--disabled' : '',
+      ]"
+      bordered
+      :row-class="rowClass"
+      :filter="filterData"
       v-on="propsEvent"
       @drag-change="tableChange"
       @init-end="validateAndUpdateErrorMessageList"
+      @select="handleSelect"
+      @select-all="handleSelectAll"
     >
       <!-- 展开行-->
       <template #expand-icon="{ expanded, record }">
-        <div class="flex items-center gap-[2px] text-[var(--color-text-4)]">
-          <MsIcon :type="expanded ? 'icon-icon_split_turn-down_arrow' : 'icon-icon_split-turn-down-left'" />
-          <div v-if="record.children">{{ record.children.length }}</div>
-        </div>
+        <a-tooltip
+          :content="
+            t(
+              record.children.length === 0
+                ? 'msFormTable.noChildren'
+                : expanded
+                ? 'msFormTable.collapse'
+                : 'msFormTable.expand'
+            )
+          "
+        >
+          <div
+            class="flex items-end gap-[2px] text-[var(--color-text-4)]"
+            :class="[
+              expanded ? '!text-[rgb(var(--primary-5))]' : '',
+              record.children.length === 0 ? 'cursor-not-allowed' : '',
+            ]"
+          >
+            <MsIcon type="icon-icon_split_turn-down_arrow" />
+            <div v-if="record.children" class="break-keep">{{ record.children.length }}</div>
+          </div>
+        </a-tooltip>
+      </template>
+      <template #columnFilter="{ column }">
+        <DefaultFilter
+          v-if="(column.filterConfig && column.filterConfig.options?.length) || column?.filterConfig?.remoteMethod"
+          v-model:checked-list="column.filterCheckedList"
+          class="ml-[4px]"
+          :options="column.filterConfig.options"
+          :data-index="column.dataIndex"
+          v-bind="column.filterConfig"
+          :filter="filterData"
+          @handle-confirm="(v) => handleFilterConfirm(v, column.dataIndex as string, column.isCustomParam || false)"
+          @click.stop="null"
+        >
+          <template #item="{ filterItem }">
+            <slot :name="column.filterConfig.filterSlotName" :filter-content="filterItem"> </slot>
+          </template>
+        </DefaultFilter>
       </template>
       <template
         v-for="item of props.columns.filter((e) => e.slotName !== undefined)"
@@ -27,9 +72,10 @@
           label=""
           :rules="{
             validator: (value, callback) => {
-              validRepeat(rowIndex, item.dataIndex as string, value, callback);
+              validRepeat(rowIndex, item.dataIndex as string, record[item.dataIndex as string], record, callback);
             },
           }"
+          :disabled="props.disabled || item.disabled || record.disabled"
         >
           <slot
             :name="item.slotName"
@@ -39,33 +85,33 @@
               v-if="item.hasRequired"
               :content="t(record.required ? 'msFormTable.paramRequired' : 'msFormTable.paramNotRequired')"
             >
-              <MsButton
-                type="icon"
+              <div
+                class="ms-form-table-required-button"
                 :class="[
-                  record.required ? '!text-[rgb(var(--danger-5))]' : '!text-[var(--color-text-brand)]',
-                  '!mr-[4px] !p-[4px]',
+                  record.required ? 'ms-form-table-required-button--required' : '',
+                  props.disabled ? 'ms-form-table-required-button--disabled' : '',
                 ]"
-                size="mini"
-                @click="toggleRequired(record, rowIndex, item)"
+                @click="toggleRequired(record, rowIndex, column)"
               >
-                <div>*</div>
-              </MsButton>
+                <article>*</article>
+              </div>
             </a-tooltip>
+            <div v-if="item.isNull && item.isNull(record)" class="ms-form-table-td-text">-</div>
             <a-input
-              v-if="item.inputType === 'input'"
+              v-else-if="item.inputType === 'input'"
               v-model:model-value="record[item.dataIndex as string]"
-              :placeholder="t(item.locale)"
-              class="ms-form-table-input"
+              :placeholder="t(item.locale || 'common.pleaseInput')"
+              class="ms-form-table-input ms-form-table-input--hasPlaceholder"
               :max-length="255"
-              size="mini"
+              :size="item.size || 'medium'"
               @input="() => handleFormChange(record, rowIndex, item)"
             />
             <a-select
               v-else-if="item.inputType === 'select'"
               v-model:model-value="record[item.dataIndex as string]"
-              :options="item.typeOptions || []"
+              :options="item.options || []"
               class="ms-form-table-input w-full"
-              size="mini"
+              :size="item.size || 'medium'"
               @change="() => handleFormChange(record, rowIndex, item)"
             />
             <MsTagsInput
@@ -73,14 +119,14 @@
               v-model:model-value="record[item.dataIndex as string]"
               :max-tag-count="1"
               input-class="ms-form-table-input"
-              size="mini"
+              :size="item.size || 'medium'"
               @change="() => handleFormChange(record, rowIndex, item)"
               @clear="() => handleFormChange(record, rowIndex, item)"
             />
             <a-switch
               v-else-if="item.inputType === 'switch'"
               v-model:model-value="record[item.dataIndex as string]"
-              size="small"
+              :size="(item.size as any) || 'medium'"
               class="ms-form-table-input-switch"
               type="line"
               @change="() => handleFormChange(record, rowIndex, item)"
@@ -88,6 +134,7 @@
             <a-checkbox
               v-else-if="item.inputType === 'checkbox'"
               v-model:model-value="record[item.dataIndex as string]"
+              :size="item.size || 'medium'"
               @change="() => handleFormChange(record, rowIndex, item)"
             />
             <template v-else-if="item.inputType === 'autoComplete'">
@@ -97,7 +144,7 @@
                 class="ms-form-table-input"
                 :trigger-props="{ contentClass: 'ms-form-table-input-trigger' }"
                 :filter-option="false"
-                size="small"
+                :size="item.size || 'medium'"
                 @search="(val) => handleSearchParams(val, item)"
                 @change="() => handleFormChange(record, rowIndex, item)"
                 @select="(val) => selectAutoComplete(val, record, item)"
@@ -114,13 +161,44 @@
                 </template>
               </a-auto-complete>
             </template>
-            <template v-else-if="item.inputType === 'text'">
+            <a-input-number
+              v-else-if="item.inputType === 'inputNumber'"
+              v-model:model-value="record[item.dataIndex as string]"
+              class="ms-form-table-input-number"
+              :min="item.min"
+              :max="item.max"
+              :size="item.size || 'medium'"
+              :precision="item.precision"
+              @change="() => handleFormChange(record, rowIndex, item)"
+            ></a-input-number>
+            <a-textarea
+              v-else-if="item.inputType === 'textarea'"
+              v-model:model-value="record[item.dataIndex as string]"
+              class="ms-form-table-input"
+              :auto-size="{ minRows: 1, maxRows: 1 }"
+              :size="item.size || 'medium'"
+              :max-length="item.maxLength"
+              @input="() => handleFormChange(record, rowIndex, item)"
+            ></a-textarea>
+            <MsQuickInput
+              v-else-if="item.inputType === 'quickInput'"
+              v-model:model-value="record[item.dataIndex as string]"
+              :title="item.title as string || ''"
+              :disabled="props.disabled || item.disabled || record.disabled"
+              :max-length="item.maxLength"
+              class="ms-form-table-input"
+              type="textarea"
+              @input="() => handleFormChange(record, rowIndex, item)"
+              @change="() => handleFormChange(record, rowIndex, item)"
+            >
+            </MsQuickInput>
+            <div v-else-if="item.inputType === 'text'" class="one-line-text pl-[8px]">
               {{
                 typeof item.valueFormat === 'function'
                   ? item.valueFormat(record)
                   : record[item.dataIndex as string] || '-'
               }}
-            </template>
+            </div>
             <template v-else-if="item.dataIndex === 'action'">
               <div
                 :key="item.dataIndex"
@@ -136,12 +214,17 @@
                   :list="getMoreActionList(item.moreAction, record)"
                   @select="(e) => handleMoreActionSelect(e, record, item, rowIndex)"
                 />
-                <icon-minus-circle
-                  v-if="dataLength > 1 && rowIndex !== dataLength - 1"
-                  class="ml-[8px] cursor-pointer text-[var(--color-text-4)]"
-                  size="20"
-                  @click="deleteParam(record, rowIndex)"
-                />
+                <slot
+                  name="operationDelete"
+                  v-bind="{ record, rowIndex, column, dataIndex: item.dataIndex, columnConfig: item }"
+                >
+                  <icon-minus-circle
+                    v-if="dataLength > 1 && rowIndex !== dataLength - 1"
+                    class="ml-[8px] cursor-pointer text-[var(--color-text-4)]"
+                    size="20"
+                    @click="deleteParam(record, rowIndex)"
+                  />
+                </slot>
               </div>
             </template>
           </slot>
@@ -165,13 +248,14 @@
   import { FormInstance } from '@arco-design/web-vue';
   import { cloneDeep } from 'lodash-es';
 
-  import MsButton from '@/components/pure/ms-button/index.vue';
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
-  import type { MsTableColumnData } from '@/components/pure/ms-table/type';
+  import DefaultFilter from '@/components/pure/ms-table/comp/defaultFilter.vue';
+  import type { MsTableColumnData, MsTableProps } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
   import MsTableMoreAction from '@/components/pure/ms-table-more-action/index.vue';
   import MsTagsInput from '@/components/pure/ms-tags-input/index.vue';
+  import MsQuickInput from '@/components/business/ms-quick-input/index.vue';
 
   import { useI18n } from '@/hooks/useI18n';
   import useTableStore from '@/hooks/useTableStore';
@@ -179,16 +263,35 @@
   import { SelectAllEnum, TableKeyEnum } from '@/enums/tableEnum';
 
   import { ActionsItem } from '../ms-table-more-action/types';
-  import type { SelectOptionData, TableColumnData, TableData } from '@arco-design/web-vue';
+  import type { SelectOptionData, TableColumnData, TableData, TableRowSelection } from '@arco-design/web-vue';
   import { TableOperationColumn } from '@arco-design/web-vue/es/table/interface';
 
   export interface FormTableColumn extends MsTableColumnData {
     enable?: boolean; // 是否启用
     required?: boolean; // 是否必填
-    inputType?: 'input' | 'select' | 'tags' | 'switch' | 'text' | 'checkbox' | 'autoComplete'; // 输入组件类型
+    inputType?:
+      | 'input'
+      | 'select'
+      | 'tags'
+      | 'switch'
+      | 'text'
+      | 'checkbox'
+      | 'autoComplete'
+      | 'textarea'
+      | 'inputNumber'
+      | 'quickInput'; // 输入组件类型
     autoCompleteParams?: SelectOptionData[]; // 自动补全参数
     needValidRepeat?: boolean; // 是否需要判断重复
+    maxLength?: number;
+    disabled?: boolean; // 是否禁用
+    size?: 'mini' | 'small' | 'medium' | 'large'; // 输入框大小
+    // 数字输入框属性
+    min?: number;
+    max?: number;
+    step?: number;
+    precision?: number;
     valueFormat?: (record: Record<string, any>) => string; // 展示值格式化，仅在inputType为text时生效
+    isNull?: (record: Record<string, any>) => boolean; // 需要判断是否为空，为空展示‘-’，不展示表单或文本
     [key: string]: any; // 扩展属性
   }
 
@@ -210,6 +313,8 @@
       tableKey?: TableKeyEnum; // 表格key showSetting为true时必传
       disabled?: boolean; // 是否禁用
       showSelectorAll?: boolean; // 是否显示全选
+      rowSelection?: TableRowSelection;
+      diffMode?: 'add' | 'delete';
       spanMethod?: (data: {
         record: TableData;
         column: TableColumnData | TableOperationColumn;
@@ -234,10 +339,24 @@
       columnConfig: FormTableColumn,
       rowIndex: number
     ): void;
+    (e: 'rowSelect', rowKeys: (string | number)[], _rowKey: string | number, record: TableData): void;
+    (e: 'selectAll', checked: boolean): void;
+    (
+      e: 'filterChange',
+      dataIndex: string,
+      value: string[] | (string | number | boolean)[] | undefined,
+      isCustomParam: boolean
+    ): void;
+    (e: 'sorterChange', value: { [key: string]: string }): void;
   }>();
 
   const { t } = useI18n();
   const tableStore = useTableStore();
+
+  const expandedKeys = defineModel<string[]>('expandedKeys', { default: [] });
+  const originalSelectedKeys = defineModel<(string | number)[]>('originalSelectedKeys', { default: [] });
+
+  const filterData = ref<Record<string, any>>({});
 
   async function initColumns() {
     if (props.showSetting && props.tableKey) {
@@ -245,7 +364,7 @@
     }
   }
 
-  const { propsRes, propsEvent } = useTable(() => Promise.resolve([]), {
+  const tableProps = ref<Partial<MsTableProps<Record<string, any>>>>({
     firstColumnWidth: 32,
     tableKey: props.showSetting ? props.tableKey : undefined,
     scroll: props.scroll,
@@ -257,12 +376,14 @@
     disabled: props.disabled,
     showSelectorAll: props.showSelectorAll,
     showPagination: false,
+    rowSelection: props.selectable ? undefined : props.rowSelection,
   });
 
+  const { propsRes, propsEvent } = useTable(() => Promise.resolve([]), tableProps.value);
   const selectedKeys = computed(() => propsRes.value.data.filter((e) => e.enable).map((e) => e.id));
-  propsEvent.value.rowSelectChange = (key: string) => {
+  propsEvent.value.rowSelectChange = (record: Record<string, any>) => {
     propsRes.value.data = propsRes.value.data.map((e) => {
-      if (e.id === key) {
+      if (e.id === record.id) {
         e.enable = !e.enable;
       }
       return e;
@@ -276,22 +397,48 @@
     });
     emit('change', propsRes.value.data);
   };
+  propsEvent.value.sorterChange = (value: { [key: string]: string }) => {
+    emit('sorterChange', value);
+  };
 
   const dataLength = computed(() => propsRes.value.data.length);
 
+  const handleFilterConfirm = (
+    value: string[] | (string | number | boolean)[] | undefined,
+    dataIndex: string,
+    isCustomParam: boolean
+  ) => {
+    filterData.value[dataIndex] = value;
+    emit('filterChange', dataIndex, value, isCustomParam);
+  };
+
   // 校验重复
   const formRef = ref<FormInstance>();
-  async function validRepeat(rowIndex: number, dataIndex: string, value: any, callback: (error?: string) => void) {
+  async function validRepeat(
+    rowIndex: number,
+    dataIndex: string,
+    value: any,
+    record: Record<string, any>,
+    callback: (error?: string) => void
+  ) {
     const currentColumn = props.columns.find((item) => item.dataIndex === dataIndex);
     if (!currentColumn?.needValidRepeat) {
       callback();
       return;
     }
-    propsRes.value.data?.forEach((row, index) => {
-      if (row[dataIndex].length && index !== rowIndex && row[dataIndex] === value) {
-        callback(`${t(currentColumn?.title as string)}${t('msFormTable.paramRepeatMessage')}`);
-      }
-    });
+    if (record.parent) {
+      (record.parent.children as Record<string, any>[])?.forEach((row, index) => {
+        if (row[dataIndex].length && index !== rowIndex && row[dataIndex] === value) {
+          callback(`${t(currentColumn?.title as string)}${t('msFormTable.paramRepeatMessage')}`);
+        }
+      });
+    } else {
+      propsRes.value.data?.forEach((row, index) => {
+        if (row[dataIndex].length && index !== rowIndex && row[dataIndex] === value) {
+          callback(`${t(currentColumn?.title as string)}${t('msFormTable.paramRepeatMessage')}`);
+        }
+      });
+    }
     callback();
   }
 
@@ -358,8 +505,8 @@
       const id = new Date().getTime().toString();
       propsRes.value.data.push({
         id,
-        ...cloneDeep(props.defaultParamDataItem), // 深拷贝，避免有嵌套引用类型，数据隔离
         enable: true, // 是否勾选
+        ...cloneDeep(props.defaultParamDataItem), // 深拷贝，避免有嵌套引用类型，数据隔离
       } as any);
       emitChange('addTableLine', isInit);
     }
@@ -371,6 +518,9 @@
   }
 
   function toggleRequired(record: Record<string, any>, rowIndex: number, columnConfig: FormTableColumn) {
+    if (props.disabled) {
+      return;
+    }
     record.required = !record.required;
     emit('formChange', record, columnConfig, rowIndex);
     addTableLine(rowIndex, columnConfig.addLineDisabled);
@@ -421,16 +571,119 @@
     record[item.dataIndex as string] = val;
   }
 
+  function handleSelect(rowKeys: (string | number)[], rowKey: string | number, record: TableData) {
+    emit('rowSelect', rowKeys, rowKey, record);
+  }
+
+  function handleSelectAll(checked: boolean) {
+    emit('selectAll', checked);
+  }
+
+  function rowClass(record: TableData) {
+    if (record.diff) {
+      if (props.diffMode === 'add') {
+        return 'add-row-class';
+      }
+      if (props.diffMode === 'delete') {
+        return 'delete-row-class';
+      }
+    }
+    return '';
+  }
+
+  defineExpose({
+    validateAndUpdateErrorMessageList,
+  });
+
   await initColumns();
 </script>
 
 <style lang="less" scoped>
+  :deep(.ms-base-table) {
+    .arco-table-th {
+      .arco-table-cell {
+        padding: 5px 8px !important;
+        line-height: 1.5715;
+      }
+      .arco-table-cell-with-sorter {
+        margin-left: 0;
+      }
+    }
+    .arco-table-td {
+      height: 32px;
+      .arco-table-cell {
+        padding: 0 !important;
+        .arco-select-view-single,
+        .arco-input-wrapper,
+        .arco-textarea-wrapper {
+          border-radius: 0;
+        }
+        article {
+          position: relative;
+          top: 50%;
+          display: inline-block;
+          transform: translateY(-50%); /* 垂直居中 */
+        }
+      }
+    }
+    .ms-form-table-td-text {
+      padding: 0 8px;
+    }
+    .arco-table-col-fixed-right {
+      .arco-table-cell {
+        padding: 0 8px !important;
+      }
+    }
+    .arco-table-th {
+      .arco-icon-settings {
+        margin-left: 4px;
+      }
+    }
+    .arco-table-tr-checked {
+      .arco-table-td {
+        background-color: var(--color-text-fff);
+      }
+    }
+    .arco-scrollbar-track-direction-horizontal {
+      bottom: -8px;
+    }
+    .arco-textarea-disabled,
+    .arco-input-disabled,
+    .arco-select-view-disabled {
+      @apply !bg-transparent;
+      .arco-select-view-value {
+        color: var(--color-text-4) !important;
+      }
+    }
+  }
+  .ms-form-table--disabled {
+    :deep(.arco-table-td-content) {
+      span,
+      div:not(.ms-form-table-required-button--required) {
+        color: var(--color-text-4) !important;
+      }
+    }
+  }
+  :deep(.arco-table-content) {
+    border-top: 1px solid var(--color-text-n8) !important;
+    border-right: 1px solid var(--color-text-n8) !important;
+    border-left: 1px solid var(--color-text-n8) !important;
+    border-radius: var(--border-radius-small);
+  }
   :deep(.arco-table-th) {
-    background-color: var(--color-text-n9);
     line-height: normal;
   }
   :deep(.arco-table .arco-table-cell) {
     padding: 8px 2px;
+  }
+  :deep(.arco-table-expand-btn) {
+    padding: 0 5px;
+    width: auto;
+  }
+  :deep(.arco-table-cell-expand-icon) {
+    .arco-table-cell-inline-icon {
+      margin-right: 0;
+    }
   }
   .ms-form-table-no-left-action {
     :deep(.arco-table .arco-table-cell) {
@@ -447,7 +700,7 @@
   }
   :deep(.ms-table-row-disabled) {
     td {
-      background-color: white !important;
+      background-color: var(--color-text-fff) !important;
     }
     .arco-btn-icon {
       border-color: var(--color-text-n8);
@@ -458,7 +711,8 @@
       color: var(--color-text-4) !important;
     }
   }
-  :deep(.ms-form-table-input:not(.arco-input-focus, .arco-select-view-focus)) {
+  :deep(.ms-form-table-input:not(.arco-input-focus, .arco-select-view-focus, .arco-textarea-focus)) {
+    border-radius: 0;
     &:not(:hover) {
       @apply bg-transparent;
 
@@ -477,6 +731,11 @@
       }
     }
   }
+  :deep(.ms-form-table-input--hasPlaceholder) {
+    .arco-input::placeholder {
+      @apply !visible;
+    }
+  }
   :deep(.ms-form-table-input-trigger) {
     width: 350px;
     .arco-select-dropdown-list {
@@ -489,14 +748,14 @@
   }
   :deep(.ms-form-table-input-number) {
     @apply bg-transparent pr-0;
-    .arco-input {
-      @apply text-right;
-    }
+
+    border-color: transparent !important;
     .arco-input-suffix {
       @apply hidden;
     }
     &:hover,
     &.arco-input-focus {
+      border-color: rgb(var(--primary-5)) !important;
       .arco-input {
         @apply text-left;
       }
@@ -507,22 +766,6 @@
   }
   :deep(.arco-table-expand-btn) {
     background: transparent;
-  }
-  .ms-form-table-popover-title {
-    @apply font-medium;
-
-    margin-bottom: 4px;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 16px;
-    color: var(--color-text-1);
-  }
-  .ms-form-table-popover-value {
-    min-width: 100px;
-    max-width: 280px;
-    font-size: 12px;
-    line-height: 16px;
-    color: var(--color-text-1);
   }
   :deep(.arco-form-item) {
     margin-bottom: 0;
@@ -538,6 +781,22 @@
     }
     .arco-form-item-content-flex {
       flex-wrap: nowrap;
+    }
+  }
+  :deep(.add-row-class) {
+    .arco-table-td {
+      background: rgb(var(--success-1));
+      .arco-table-td-content {
+        background: rgb(var(--success-1));
+      }
+    }
+  }
+  :deep(.delete-row-class) {
+    .arco-table-td {
+      background: rgb(var(--danger-1));
+      .arco-table-td-content {
+        background: rgb(var(--danger-1));
+      }
     }
   }
 </style>

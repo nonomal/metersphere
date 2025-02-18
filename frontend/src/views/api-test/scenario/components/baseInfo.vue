@@ -25,12 +25,13 @@
             threshold: 200,
           },
         }"
+        :filter-tree-node="filterTreeNode"
         allow-search
         @change="() => emit('change')"
       >
         <template #tree-slot-title="node">
           <a-tooltip :content="`${node.name}`" position="tl">
-            <div class="one-line-text w-[300px] text-[var(--color-text-1)]">{{ node.name }}</div>
+            <div class="one-line-text w-[300px]">{{ node.name }}</div>
           </a-tooltip>
         </template>
       </a-tree-select>
@@ -99,6 +100,7 @@
   import apiStatus from '@/views/api-test/components/apiStatus.vue';
 
   import { useI18n } from '@/hooks/useI18n';
+  import { filterTreeNode } from '@/utils';
 
   import { Scenario, ScenarioDetail } from '@/models/apiTest/scenario';
   import { ModuleTreeNode } from '@/models/common';

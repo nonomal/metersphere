@@ -11,11 +11,14 @@ import io.metersphere.api.dto.definition.EnvApiModuleRequest;
 import io.metersphere.api.dto.definition.EnvApiTreeDTO;
 import io.metersphere.api.mapper.*;
 import io.metersphere.api.service.debug.ApiDebugModuleService;
+import io.metersphere.plan.domain.TestPlanConfig;
+import io.metersphere.plan.mapper.TestPlanConfigMapper;
 import io.metersphere.project.dto.ModuleCountDTO;
 import io.metersphere.project.dto.NodeSortDTO;
 import io.metersphere.project.service.ModuleTreeService;
 import io.metersphere.sdk.constants.ModuleConstants;
 import io.metersphere.sdk.exception.MSException;
+import io.metersphere.sdk.util.CommonBeanFactory;
 import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
 import io.metersphere.system.dto.sdk.request.NodeMoveRequest;
@@ -61,14 +64,17 @@ public class ApiDefinitionModuleService extends ModuleTreeService {
     private ExtApiTestCaseMapper extApiTestCaseMapper;
     @Resource
     private ApiTestCaseService apiTestCaseService;
+    @Resource
+    private TestPlanConfigMapper testPlanConfigMapper;
 
     public List<BaseTreeNode> getTree(ApiModuleRequest request, boolean deleted, boolean containRequest) {
         //接口的树结构是  模块：子模块+接口 接口为非delete状态的
         List<BaseTreeNode> fileModuleList = extApiDefinitionModuleMapper.selectBaseByRequest(request);
         List<BaseTreeNode> baseTreeNodes = super.buildTreeAndCountResource(fileModuleList, true, Translator.get(UNPLANNED_API));
-        if (!containRequest) {
+        if (!containRequest || CollectionUtils.isEmpty(request.getProtocols())) {
             return baseTreeNodes;
         }
+
         List<ApiTreeNode> apiTreeNodeList = extApiDefinitionModuleMapper.selectApiDataByRequest(request, deleted);
         return apiDebugModuleService.getBaseTreeNodes(apiTreeNodeList, baseTreeNodes);
 
@@ -76,7 +82,7 @@ public class ApiDefinitionModuleService extends ModuleTreeService {
 
     public List<BaseTreeNode> getTreeOnlyIdsAndResourceCount(ApiModuleRequest request, List<ModuleCountDTO> moduleCountDTOList) {
         //节点内容只有Id和parentId
-        
+
         //构建模块树，并计算每个节点下的所有数量（包含子节点）
         request.setKeyword(null);
         request.setModuleIds(null);
@@ -259,21 +265,41 @@ public class ApiDefinitionModuleService extends ModuleTreeService {
     }
 
     public Map<String, Long> moduleCount(ApiModuleRequest request, boolean deleted) {
+        if (CollectionUtils.isEmpty(request.getProtocols())) {
+            return Collections.emptyMap();
+        }
+        boolean isRepeat = true;
+        if (StringUtils.isNotEmpty(request.getTestPlanId())) {
+            isRepeat = this.checkTestPlanRepeatCase(request);
+        }
         request.setModuleIds(null);
+
+        ApiDefinitionService apiDefinitionService = CommonBeanFactory.getBean(ApiDefinitionService.class);
+        request.setExcludeIds(apiDefinitionService.getQueryExcludeIds(request.getFilter(), request.getProjectId(), request.getProtocols()));
+        request.setIncludeIds(apiDefinitionService.getQueryIncludeIds(request.getFilter(), request.getProjectId(), request.getProtocols()));
+        
         //查找根据moduleIds查找模块下的接口数量 查非delete状态的
-        List<ModuleCountDTO> moduleCountDTOList = extApiDefinitionModuleMapper.countModuleIdByRequest(request, deleted);
+        List<ModuleCountDTO> moduleCountDTOList = extApiDefinitionModuleMapper.countModuleIdByRequest(request, deleted, isRepeat);
         long allCount = getAllCount(moduleCountDTOList);
         Map<String, Long> moduleCountMap = getModuleCountMap(request, moduleCountDTOList);
         moduleCountMap.put(DEBUG_MODULE_COUNT_ALL, allCount);
         return moduleCountMap;
     }
 
+    private boolean checkTestPlanRepeatCase(ApiModuleRequest request) {
+        TestPlanConfig testPlanConfig = testPlanConfigMapper.selectByPrimaryKey(request.getTestPlanId());
+        return BooleanUtils.isTrue(testPlanConfig.getRepeatCase());
+    }
+
     public List<BaseTreeNode> getTrashTree(ApiModuleRequest request) {
+        if (CollectionUtils.isEmpty(request.getProtocols())) {
+            return new ArrayList<>();
+        }
         ApiDefinitionExample example = new ApiDefinitionExample();
         example.createCriteria()
                 .andProjectIdEqualTo(request.getProjectId())
                 .andDeletedEqualTo(true)
-                .andProtocolEqualTo(request.getProtocol());
+                .andProtocolIn(request.getProtocols());
         List<ApiDefinition> apiDefinitions = apiDefinitionMapper.selectByExample(example);
         if (CollectionUtils.isEmpty(apiDefinitions)) {
             return new ArrayList<>();
@@ -302,50 +328,57 @@ public class ApiDefinitionModuleService extends ModuleTreeService {
         EnvApiTreeDTO envApiTreeDTO = new EnvApiTreeDTO();
         ApiModuleRequest apiModuleRequest = new ApiModuleRequest();
         apiModuleRequest.setProjectId(request.getProjectId());
-        apiModuleRequest.setProtocol(ModuleConstants.NODE_PROTOCOL_HTTP);
+        apiModuleRequest.setProtocols(List.of(ModuleConstants.NODE_PROTOCOL_HTTP));
         List<BaseTreeNode> fileModuleList = extApiDefinitionModuleMapper.selectBaseByRequest(apiModuleRequest);
         List<BaseTreeNode> baseTreeNodes = super.buildTreeAndCountResource(fileModuleList, true, Translator.get(UNPLANNED_API));
         envApiTreeDTO.setModuleTree(baseTreeNodes);
         //根据选择的模块id 来补充选中的id
         List<ApiModuleDTO> selectedModules = request.getSelectedModules();
         List<ApiModuleDTO> currentModules = new ArrayList<>();
+        // 选中的模块id
+        List<String> moduleIds = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(selectedModules)) {
             //将选中的模块id转换为Map 方便后面的查询 key为id
             Map<String, ApiModuleDTO> selectedModuleMap = selectedModules.stream().collect(Collectors.toMap(ApiModuleDTO::getModuleId, apiModuleDTO -> apiModuleDTO));
-            getAllModuleIds(baseTreeNodes, currentModules, selectedModuleMap);
+            getAllModuleIds(baseTreeNodes, currentModules, selectedModuleMap, moduleIds);
         }
         envApiTreeDTO.setSelectedModules(currentModules);
         return envApiTreeDTO;
     }
 
-    public void getAllModuleIds(List<BaseTreeNode> baseTreeNodes, List<ApiModuleDTO> currentModules, Map<String, ApiModuleDTO> selectedModuleMap) {
+    public void getAllModuleIds(List<BaseTreeNode> baseTreeNodes, List<ApiModuleDTO> currentModules, Map<String, ApiModuleDTO> selectedModuleMap, List<String> moduleIds) {
         baseTreeNodes.forEach(baseTreeNode -> {
             if (selectedModuleMap.containsKey(baseTreeNode.getId())) {
                 ApiModuleDTO apiModuleDTO = selectedModuleMap.get(baseTreeNode.getId());
-                if (BooleanUtils.isTrue(apiModuleDTO.getContainChildModule())) {
-                    currentModules.add(apiModuleDTO);
-                    if (CollectionUtils.isNotEmpty(baseTreeNode.getChildren())) {
-                        setChildren(baseTreeNode.getChildren(), currentModules);
+                if (!moduleIds.contains(baseTreeNode.getId())) {
+                    moduleIds.add(baseTreeNode.getId());
+                    if (BooleanUtils.isTrue(apiModuleDTO.getContainChildModule())) {
+                        moduleIds.add(baseTreeNode.getId());
+                        currentModules.add(apiModuleDTO);
+                        if (CollectionUtils.isNotEmpty(baseTreeNode.getChildren())) {
+                            setChildren(baseTreeNode.getChildren(), currentModules, moduleIds);
+                        }
+                    } else {
+                        currentModules.add(apiModuleDTO);
                     }
-                } else {
-                    currentModules.add(apiModuleDTO);
                 }
             }
             if (CollectionUtils.isNotEmpty(baseTreeNode.getChildren())) {
-                getAllModuleIds(baseTreeNode.getChildren(), currentModules, selectedModuleMap);
+                getAllModuleIds(baseTreeNode.getChildren(), currentModules, selectedModuleMap, moduleIds);
             }
         });
     }
 
-    public void setChildren(List<BaseTreeNode> baseTreeNodes, List<ApiModuleDTO> currentModules) {
+    public void setChildren(List<BaseTreeNode> baseTreeNodes, List<ApiModuleDTO> currentModules, List<String> moduleIds) {
         baseTreeNodes.forEach(baseTreeNode -> {
             ApiModuleDTO children = new ApiModuleDTO();
             children.setModuleId(baseTreeNode.getId());
             children.setContainChildModule(true);
             children.setDisabled(true);
+            moduleIds.add(baseTreeNode.getId());
             currentModules.add(children);
             if (CollectionUtils.isNotEmpty(baseTreeNode.getChildren())) {
-                setChildren(baseTreeNode.getChildren(), currentModules);
+                setChildren(baseTreeNode.getChildren(), currentModules, moduleIds);
             }
         });
     }

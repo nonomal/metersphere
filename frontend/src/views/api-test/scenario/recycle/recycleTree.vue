@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="h-full">
     <div class="folder" @click="setActiveFolder('all')">
       <div :class="allFolderClass">
         <MsIcon type="icon-icon_folder_filled1" class="folder-icon" />
@@ -14,7 +14,6 @@
         </a-tooltip>
       </div>
     </div>
-    <a-divider class="my-[8px]" />
     <div class="mb-[8px] flex items-center gap-[8px]">
       <a-input
         v-model:model-value="moduleKeyword"
@@ -22,7 +21,7 @@
         allow-clear
       />
     </div>
-    <a-spin class="w-full" :loading="loading">
+    <a-spin class="w-full" :style="{ height: `calc(100vh - 248px)` }" :loading="loading">
       <MsTree
         v-model:focus-node-key="focusNodeKey"
         v-model:selected-keys="selectedKeys"
@@ -102,7 +101,7 @@
 
   const virtualListProps = computed(() => {
     return {
-      height: 'calc(100vh - 343px)',
+      height: '100%',
       threshold: 200,
       fixedSize: true,
       buffer: 15, // 缓冲区默认 10 的时候，虚拟滚动的底部 padding 计算有问题

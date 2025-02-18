@@ -21,12 +21,14 @@
         title-class="step-tree-node-title"
         node-highlight-class="step-tree-node-focus"
         action-on-node-click="expand"
+        :use-map-data="false"
         disabled-title-tooltip
         checkable
         block-node
         draggable
         hide-switcher
-        @select="(selectedKeys, node) => handleStepSelect(selectedKeys, node as ScenarioStepItem)"
+        handle-drop
+        @select="(selectedKeys, node) => handleStepSelect(node as ScenarioStepItem)"
         @expand="handleStepExpand"
         @more-actions-close="() => setFocusNodeKey('')"
         @more-action-select="handleStepMoreActionSelect"
@@ -98,8 +100,10 @@
                 <csvTag
                   :step="step"
                   :csv-variables="scenario.scenarioConfig.variable.csvVariables"
+                  :disabled="!!step.isQuoteScenarioStep"
                   @remove="(id) => removeCsv(step, id)"
                   @replace="(id) => replaceCsv(step, id)"
+                  @remove-deleted="(ids) => removeDeletedCsv(step, ids)"
                 />
                 <!-- 自定义请求、API、CASE、场景步骤名称 -->
                 <template v-if="checkStepIsApi(step)">
@@ -120,7 +124,7 @@
                   </div>
                   <a-tooltip v-else :content="step.name">
                     <div class="step-name-container">
-                      <div class="one-line-text mr-[4px] max-w-[350px] font-medium text-[var(--color-text-1)]">
+                      <div class="step-name-text one-line-text font-medium">
                         {{ step.name }}
                       </div>
                       <MsIcon
@@ -155,11 +159,7 @@
                   </div>
                   <a-tooltip :content="step.name" :disabled="!step.name">
                     <div class="step-name-container">
-                      <div
-                        :class="`one-line-text mr-[4px] ${
-                          step.stepType === ScenarioStepType.ONCE_ONLY_CONTROLLER ? 'max-w-[750px]' : 'max-w-[150px]'
-                        } font-normal text-[var(--color-text-1)]`"
-                      >
+                      <div class="step-name-text one-line-text font-normal">
                         {{ step.name || t('apiScenario.pleaseInputStepDesc') }}
                       </div>
                       <MsIcon
@@ -400,6 +400,7 @@
       v-if="tempApiDetail"
       v-model:visible="saveNewApiModalVisible"
       :detail="tempApiDetail"
+      @close="() => (tempApiDetail = undefined)"
     ></saveAsApiModal>
     <a-modal
       v-model:visible="saveCaseModalVisible"
@@ -461,6 +462,7 @@
   import { cloneDeep } from 'lodash-es';
 
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
+  import { parseTableDataToJsonSchema } from '@/components/pure/ms-json-schema/utils';
   import { ActionsItem } from '@/components/pure/ms-table-more-action/types';
   import MsTagsInput from '@/components/pure/ms-tags-input/index.vue';
   import MsTree from '@/components/business/ms-tree/index.vue';
@@ -480,6 +482,7 @@
   import saveAsApiModal from '@/views/api-test/components/saveAsApiModal.vue';
 
   import { addCase, getDefinitionDetail } from '@/api/modules/api-test/management';
+  import { scenarioCopyStepFiles } from '@/api/modules/api-test/scenario';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import useAppStore from '@/store/modules/app';
@@ -512,6 +515,7 @@
   import useStepNodeEdit from './useStepNodeEdit';
   import useStepOperation from './useStepOperation';
   import { casePriorityOptions, caseStatusOptions } from '@/views/api-test/components/config';
+  import { parseRequestBodyFiles } from '@/views/api-test/components/utils';
   import getStepType from '@/views/api-test/scenario/components/common/stepType/utils';
   import { defaultStepItemCommon } from '@/views/api-test/scenario/components/config';
 
@@ -809,6 +813,7 @@
       tags: [],
     };
     saveCaseModalVisible.value = false;
+    activeStep.value = undefined;
   }
 
   function saveAsCase(done: (closed: boolean) => void) {
@@ -878,6 +883,7 @@
     const realStep = findNodeByKey<ScenarioStepItem>(steps.value, step.uniqueId, 'uniqueId');
     if (id && realStep) {
       realStep.csvIds = realStep.csvIds.filter((item: string) => item !== id);
+      scenario.value.unSaved = true;
     }
   }
 
@@ -887,83 +893,138 @@
     replaceCsvId.value = id || '';
   }
 
-  function handleQuoteCsvConfirm(keys: string[]) {
-    if (activeStep.value) {
-      const realStep = findNodeByKey<ScenarioStepItem>(steps.value, activeStep.value.uniqueId, 'uniqueId');
-      if (replaceCsvId.value && realStep) {
-        const index = realStep.csvIds.findIndex((item: string) => item === replaceCsvId.value);
-        realStep.csvIds?.splice(index, 1, keys[0]);
-      } else if (realStep) {
-        realStep.csvIds?.push(...keys);
-      }
+  function removeDeletedCsv(step: ScenarioStepItem, ids: string[]) {
+    const realStep = findNodeByKey<ScenarioStepItem>(steps.value, step.uniqueId, 'uniqueId');
+    if (realStep) {
+      realStep.csvIds = realStep.csvIds.filter((item: string) => !ids.includes(item));
+      scenario.value.unSaved = true;
     }
   }
 
-  function handleStepMoreActionSelect(item: ActionsItem, node: MsTreeNodeData) {
+  function handleQuoteCsvConfirm(keys: string[]) {
+    if (activeStep.value) {
+      const realStep = findNodeByKey<ScenarioStepItem>(steps.value, activeStep.value.uniqueId, 'uniqueId');
+      if (!!replaceCsvId.value && realStep !== null) {
+        const index = realStep.csvIds.findIndex((item: string) => item === replaceCsvId.value);
+        if (!realStep.csvIds) {
+          realStep.csvIds = [];
+        }
+        realStep.csvIds.splice(index, 1, keys[0]);
+      } else if (realStep !== null) {
+        realStep.csvIds = [...(realStep.csvIds || []), ...keys];
+      }
+      scenario.value.unSaved = true;
+    }
+  }
+
+  /**
+   * 复制步骤
+   * @param node 复制的节点
+   */
+  async function copyStep(node: MsTreeNodeData) {
+    loading.value = true;
+    try {
+      const id = getGenerateId();
+      const stepDetail = stepDetails.value[node.id];
+      const { isQuoteScenario } = getStepType(node as ScenarioStepItem);
+      let { copyFromStepId } = node;
+      if (stepDetail || node.isNew !== true || !node.copyFromStepId) {
+        // 如果复制的步骤查看过详情，则复制来源直接取它的 id
+        // 如果复制的步骤没有查看过详情，且是新建的步骤，则取它本身的 id
+        copyFromStepId = node.id;
+      }
+      let parseRequestBodyResult: Record<string, any> = {
+        uploadFileIds: [],
+        linkFileIds: [],
+        deleteFileIds: [], // 存储对比已保存的文件后，需要删除的文件 id 集合
+        unLinkFileIds: [], // 存储对比已保存的文件后，需要取消关联的文件 id 集合
+      };
+      let newFileRes;
+      if (node.config.protocol === 'HTTP' && (stepDetail as RequestParam)?.body) {
+        if (node.copyFromStepId || node.refType === ScenarioStepRefType.COPY) {
+          // 复制的步骤需要复制文件
+          const fileIds = parseRequestBodyFiles((stepDetail as RequestParam).body, [], [], []).uploadFileIds;
+          if (fileIds.length > 0) {
+            newFileRes = await scenarioCopyStepFiles({
+              copyFromStepId,
+              resourceId: node.resourceId,
+              stepType: node.stepType,
+              refType: node.refType,
+              isTempFile: !!stepDetail, // 复制未保存的步骤时 true
+              fileIds,
+            });
+          }
+          parseRequestBodyFiles((stepDetail as RequestParam).body, [], [], [], newFileRes);
+        } else {
+          parseRequestBodyResult = parseRequestBodyFiles((stepDetail as RequestParam).body, [], [], [], newFileRes); // 解析请求体中的文件，将详情中的文件 id 集合收集，更新时以判断文件是否删除以及是否新上传的文件
+        }
+      }
+      if (stepDetail) {
+        // 如果复制的步骤还有详情数据，则也复制详情数据
+        stepDetails.value[id] = cloneDeep({
+          ...stepDetail,
+          stepId: id,
+          uniqueId: id,
+          ...parseRequestBodyResult,
+        });
+      }
+      insertNodes<ScenarioStepItem>(
+        steps.value,
+        node.uniqueId,
+        {
+          ...cloneDeep(
+            mapTree<ScenarioStepItem>(node, (childNode) => {
+              const childId = getGenerateId();
+              const childStepDetail = stepDetails.value[childNode.id];
+              let childCopyFromStepId = childNode.id;
+              if (childStepDetail) {
+                // 如果复制的步骤下子步骤还有详情数据，则也复制详情数据
+                stepDetails.value[childId] = cloneDeep(childStepDetail);
+              }
+              if (!isQuoteScenario) {
+                // 非引用场景才处理复制来源 id
+                if (childStepDetail || (childNode.isNew && childNode.stepRefType === ScenarioStepRefType.REF)) {
+                  // 如果子步骤查看过详情，则复制来源直接取它的 id
+                  // 如果子步骤没有查看过详情，且是新建的步骤，且子步骤是引用的步骤，则还是取它本身的 id
+                  childCopyFromStepId = childNode.id;
+                } else if (childNode.isNew && childNode.stepRefType === ScenarioStepRefType.COPY) {
+                  // 如果子步骤没有查看过详情，且是新建的步骤，且子步骤是复制的步骤，则取它的来源 id
+                  childCopyFromStepId = childNode.copyFromStepId;
+                }
+              }
+              return {
+                ...cloneDeep(childNode),
+                executeStatus: undefined,
+                copyFromStepId: childCopyFromStepId,
+                id: childId,
+                uniqueId: childId,
+              };
+            })[0]
+          ),
+          name: `copy_${node.name}`.substring(0, 255),
+          copyFromStepId,
+          sort: node.sort + 1,
+          isNew: true,
+          id,
+          uniqueId: id,
+        },
+        'after',
+        selectedIfNeed,
+        'uniqueId'
+      );
+      scenario.value.unSaved = true;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function handleStepMoreActionSelect(item: ActionsItem, node: MsTreeNodeData) {
     switch (item.eventTag) {
       case 'copy':
-        const id = getGenerateId();
-        const stepDetail = stepDetails.value[node.id];
-        const stepFileParam = scenario.value.stepFileParam[node.id];
-        const { isQuoteScenario } = getStepType(node as ScenarioStepItem);
-        if (stepDetail) {
-          // 如果复制的步骤还有详情数据，则也复制详情数据
-          stepDetails.value[id] = cloneDeep(stepDetail);
-        }
-        if (stepFileParam) {
-          // 如果复制的步骤还有详情数据，则也复制详情数据
-          scenario.value.stepFileParam[id] = cloneDeep(stepFileParam);
-        }
-        insertNodes<ScenarioStepItem>(
-          steps.value,
-          node.uniqueId,
-          {
-            ...cloneDeep(
-              mapTree<ScenarioStepItem>(node, (childNode) => {
-                const childId = getGenerateId();
-                const childStepDetail = stepDetails.value[childNode.id];
-                const childStepFileParam = scenario.value.stepFileParam[childNode.id];
-                let childCopyFromStepId = childNode.id;
-                if (childStepDetail) {
-                  // 如果复制的步骤下子步骤还有详情数据，则也复制详情数据
-                  stepDetails.value[childId] = cloneDeep(childStepDetail);
-                }
-                if (childStepFileParam) {
-                  // 如果复制的步骤下子步骤还有详情数据，则也复制详情数据
-                  scenario.value.stepFileParam[childNode.id] = cloneDeep(childStepFileParam);
-                }
-                if (!isQuoteScenario) {
-                  // 非引用场景才处理复制来源 id
-                  if (childStepDetail || (childNode.isNew && childNode.stepRefType === ScenarioStepRefType.REF)) {
-                    // 如果子步骤查看过详情，则复制来源直接取它的 id
-                    // 如果子步骤没有查看过详情，且是新建的步骤，且子步骤是引用的步骤，则还是取它本身的 id
-                    childCopyFromStepId = childNode.id;
-                  } else if (childNode.isNew && childNode.stepRefType === ScenarioStepRefType.COPY) {
-                    // 如果子步骤没有查看过详情，且是新建的步骤，且子步骤是复制的步骤，则取它的来源 id
-                    childCopyFromStepId = childNode.copyFromStepId;
-                  }
-                }
-                return {
-                  ...cloneDeep(childNode),
-                  executeStatus: undefined,
-                  copyFromStepId: childCopyFromStepId,
-                  id: childId,
-                  uniqueId: childId,
-                };
-              })[0]
-            ),
-            name: `copy_${node.name}`.substring(0, 255),
-            copyFromStepId: stepDetail ? node.id : node.copyFromStepId,
-            sort: node.sort + 1,
-            isNew: true,
-            id,
-            uniqueId: id,
-          },
-          'after',
-          selectedIfNeed,
-          'uniqueId'
-        );
-        scenario.value.unSaved = true;
+        copyStep(node);
         break;
       case 'config':
         activeStep.value = node as ScenarioStepItem;
@@ -989,17 +1050,22 @@
           maskClosable: false,
           onBeforeOk: async () => {
             deleteNode(steps.value, node.uniqueId, 'uniqueId');
+            delete stepDetails.value[node.id];
             scenario.value.unSaved = true;
           },
           hideCancel: false,
         });
         break;
       case 'saveAsApi':
-        activeStep.value = node as ScenarioStepItem;
-        const detail = stepDetails.value[activeStep.value.id] as RequestParam;
-        const fileParams = scenario.value.stepFileParam[activeStep.value.id];
+        if (!stepDetails.value[node.id]) {
+          // 详情映射中没有对应数据，初始化步骤详情（复制的步骤没有加载详情前就被复制，打开复制后的步骤就初始化被复制步骤的详情）
+          await getStepDetail(node as ScenarioStepItem);
+        }
+        const detail = stepDetails.value[node.id] as RequestParam;
+        const fileParams = scenario.value.stepFileParam[node.id];
         tempApiDetail.value = {
           ...detail,
+          customizeRequest: false, // 另存为新接口时，不是自定义请求
           uploadFileIds: fileParams?.uploadFileIds || [],
           linkFileIds: fileParams?.linkFileIds || [],
         };
@@ -1064,6 +1130,7 @@
           steps.value.splice(index, 1, newStep);
         }
       }
+      activeStep.value = newStep;
     }
     Message.success(t('apiScenario.replaceSuccess'));
     scenario.value.unSaved = true;
@@ -1075,7 +1142,7 @@
       customApiDrawerVisible.value = false;
       nextTick(() => {
         // 等待抽屉关闭后再打开新的抽屉
-        handleStepSelect([newStep.uniqueId], newStep);
+        handleStepSelect(newStep);
       });
     }
   }
@@ -1155,6 +1222,14 @@
       appStore.currentProjectId
     );
     const insertSteps = insertApiSteps.concat(insertCaseSteps).concat(insertScenarioSteps);
+    insertSteps.forEach((step) => {
+      scenario.value.stepFileParam[step.id] = {
+        linkFileIds: [],
+        uploadFileIds: [],
+        deleteFileIds: [],
+        unLinkFileIds: [],
+      };
+    });
     if (activeStepByCreate.value && activeCreateAction.value) {
       handleCreateSteps(
         activeStepByCreate.value,
@@ -1195,6 +1270,7 @@
           id: request.stepId,
           uniqueId: request.stepId,
           projectId: appStore.currentProjectId,
+          refType: ScenarioStepRefType.DIRECT,
         },
         activeStepByCreate.value,
         steps.value,
@@ -1230,29 +1306,45 @@
       scenario.value.unSaved = true;
     }
     if (activeStep.value) {
-      const _stepType = getStepType(activeStep.value);
-      if (_stepType.isQuoteCase && !activeStep.value.isQuoteScenarioStep) {
-        activeStep.value.name = request.stepName || request.name;
-        stepDetails.value[activeStep.value.id] = request; // 为了设置一次正确的polymorphicName
-        return;
+      const realStep = findNodeByKey<ScenarioStepItem>(steps.value, activeStep.value.uniqueId, 'uniqueId');
+      if (realStep) {
+        const _stepType = getStepType(realStep as ScenarioStepItem);
+        if (_stepType.isQuoteCase && !realStep.isQuoteScenarioStep) {
+          realStep.name = request.stepName || request.name;
+          stepDetails.value[realStep.id] = request; // 为了设置一次正确的polymorphicName
+          activeStep.value = undefined;
+          return;
+        }
       }
+      if (realStep && !realStep.isQuoteScenarioStep) {
+        request.isNew = false;
+        stepDetails.value[realStep.id] = {
+          ...request,
+          body: {
+            ...request.body,
+            jsonBody: {
+              ...request.body?.jsonBody,
+              jsonSchema: request.body?.jsonBody?.jsonSchemaTableData
+                ? parseTableDataToJsonSchema(request.body?.jsonBody?.jsonSchemaTableData?.[0])
+                : undefined,
+            },
+          },
+        };
+        scenario.value.stepFileParam[realStep?.id] = {
+          linkFileIds: request.linkFileIds,
+          uploadFileIds: request.uploadFileIds,
+          deleteFileIds: request.deleteFileIds,
+          unLinkFileIds: request.unLinkFileIds,
+        };
+        realStep.config = {
+          ...realStep.config,
+          method: request.method,
+        };
+        realStep.name = request.stepName || request.name;
+        emit('updateResource', request.uploadFileIds, request.linkFileIds);
+      }
+      activeStep.value = undefined;
     }
-    if (activeStep.value && !activeStep.value.isQuoteScenarioStep) {
-      request.isNew = false;
-      stepDetails.value[activeStep.value.id] = request;
-      scenario.value.stepFileParam[activeStep.value?.id] = {
-        linkFileIds: request.linkFileIds,
-        uploadFileIds: request.uploadFileIds,
-        deleteFileIds: request.deleteFileIds,
-        unLinkFileIds: request.unLinkFileIds,
-      };
-      activeStep.value.config = {
-        ...activeStep.value.config,
-        method: request.method,
-      };
-      emit('updateResource', request.uploadFileIds, request.linkFileIds);
-    }
-    activeStep.value = undefined;
   }
 
   /**
@@ -1334,11 +1426,10 @@
 
 <style lang="less" scoped>
   .add-step-btn {
-    @apply bg-white;
-
     padding: 4px;
     border: 1px dashed rgb(var(--primary-3));
     color: rgb(var(--primary-5));
+    background-color: var(--color-text-fff);
     &:hover,
     &:focus {
       border: 1px dashed rgb(var(--primary-5));
@@ -1366,12 +1457,16 @@
       background-color: var(--color-text-n9) !important;
       .arco-tree-node-title {
         background-color: var(--color-text-n9) !important;
+        .step-name-text {
+          max-width: calc(100% - 244px) !important;
+        }
       }
     }
     .arco-tree-node-title {
-      @apply !cursor-pointer bg-white;
+      @apply !cursor-pointer;
 
       padding: 8px 4px;
+      background-color: var(--color-text-fff);
       &:hover {
         background-color: var(--color-text-n9) !important;
       }
@@ -1381,13 +1476,18 @@
         gap: 8px;
       }
       .step-name-container {
-        @apply flex items-center;
+        @apply flex flex-1 items-center overflow-hidden;
 
         margin-right: 16px;
         &:hover {
           .edit-script-name-icon {
             @apply visible;
           }
+        }
+        .step-name-text {
+          margin-right: 4px;
+          max-width: calc(100% - 170px);
+          color: var(--color-text-1);
         }
         .edit-script-name-icon {
           @apply invisible cursor-pointer;
@@ -1421,6 +1521,9 @@
       }
     }
   }
+  :deep(.step-tree-node-title) {
+    @apply w-full;
+  }
   :deep(.step-tree-node-focus) {
     background-color: var(--color-text-n9) !important;
     .arco-tree-node-title {
@@ -1434,6 +1537,22 @@
     :deep(.arco-form-item-wrapper-col),
     :deep(.arco-form-item-content) {
       min-height: auto;
+    }
+  }
+  :deep(.value-input) {
+    .input-suffix-icon {
+      width: 12px;
+      height: 12px;
+      @apply cursor-pointer;
+    }
+    .arco-input-suffix {
+      opacity: 0;
+    }
+    &:hover {
+      .arco-input-suffix {
+        color: rgb(var(--primary-5));
+        opacity: 1;
+      }
     }
   }
 </style>

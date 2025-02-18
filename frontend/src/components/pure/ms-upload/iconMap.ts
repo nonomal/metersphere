@@ -76,6 +76,18 @@ export const FileIconMap: FileIconMapping = {
     [UploadStatus.init]: 'icon-a-icon_file-json',
     [UploadStatus.done]: 'icon-a-icon_file-json',
   },
+  jmx: {
+    [UploadStatus.init]: 'icon-a-icon_file-JMX',
+    [UploadStatus.done]: 'icon-a-icon_file-JMX',
+  },
+  har: {
+    [UploadStatus.init]: 'icon-icon_file_har',
+    [UploadStatus.done]: 'icon-icon_file_har',
+  },
+  ms: {
+    [UploadStatus.init]: 'icon-icon_file_ms',
+    [UploadStatus.done]: 'icon-icon_file_ms',
+  },
 };
 
 /**
@@ -101,7 +113,7 @@ export function getFileEnum(fileType?: string): keyof typeof UploadAcceptEnum {
  * @param status 文件状态
  */
 export function getFileIcon(item: MsFileItem, status?: UploadStatus) {
-  const fileType = item.file?.name.split('.').pop(); // 通过文件后缀判断文件类型
+  const fileType = item.file?.name?.split('.').pop(); // 通过文件后缀判断文件类型
   const _status = status || item.status;
   if (_status === UploadStatus.done) {
     return FileIconMap[getFileEnum(fileType)]?.[_status] ?? FileIconMap.unknown[UploadStatus.done];

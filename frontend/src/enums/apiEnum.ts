@@ -80,11 +80,15 @@ export enum ApiScenarioStatus {
 // 接口导入支持格式
 export enum RequestImportFormat {
   SWAGGER = 'Swagger3',
-  // MeterSphere = 'MeterSphere',
-  // Postman= 'Postman',
-  // Plugin = 'Plugin',
-  // Jmeter = 'Jmeter',
-  // Har = 'Har',
+  MeterSphere = 'MeterSphere',
+  Postman = 'Postman',
+  Jmeter = 'Jmeter',
+  Har = 'Har',
+}
+
+export enum RequestExportFormat {
+  SWAGGER = 'Swagger',
+  MeterSphere = 'MeterSphere',
 }
 // 接口导入方式
 export enum RequestImportType {
@@ -165,7 +169,7 @@ export enum RequestAssertionCondition {
   START_WITH = 'START_WITH', // 以 xx 开头
   UNCHECKED = 'UNCHECKED', // 不校验
 }
-// 接口请求-前后置条件-处理器类型
+// 接口请求-前后置操作-处理器类型
 export enum RequestConditionProcessor {
   SCRIPT = 'SCRIPT', // 脚本操作
   SQL = 'SQL', // SQL操作
@@ -174,7 +178,7 @@ export enum RequestConditionProcessor {
   SCENARIO_SCRIPT = 'ENV_SCENARIO_SCRIPT', // 场景脚本
   REQUEST_SCRIPT = 'ENV_REQUEST_SCRIPT', // 请求脚本
 }
-// 接口请求-前后置条件-脚本处理器语言
+// 接口请求-前后置操作-脚本处理器语言
 export enum RequestConditionScriptLanguage {
   BEANSHELL = 'BEANSHELL', // Beanshell
   BEANSHELL_JSR233 = 'BEANSHELL_JSR233', // Beanshell JSR233
@@ -252,11 +256,14 @@ export enum ScenarioExecuteStatus {
   UN_EXECUTE = 'UN_EXECUTE',
   FAKE_ERROR = 'FAKE_ERROR',
 }
+
 // 场景步骤类型
 export enum ScenarioStepType {
   API_CASE = 'API_CASE', // 接口用例
   LOOP_CONTROLLER = 'LOOP_CONTROLLER', // 循环控制器
   API = 'API', // 接口定义
+  TEST_PLAN_API_CASE = 'TEST_PLAN_API_CASE', // 测试计划接口用例
+  JMETER_COMPONENT = 'JMETER_COMPONENT', // Jmeter组件
   CUSTOM_REQUEST = 'CUSTOM_REQUEST', // 自定义请求
   API_SCENARIO = 'API_SCENARIO', // 场景
   IF_CONTROLLER = 'IF_CONTROLLER', // 条件控制器
@@ -334,4 +341,22 @@ export enum FullResponseAssertionType {
   JSON_PATH = 'JSON_PATH',
   XPATH = 'XPATH',
   REGEX = 'REGEX',
+}
+
+export enum ReportExecStatus {
+  PENDING = 'PENDING',
+  RUNNING = 'RUNNING',
+  STOPPED = 'STOPPED',
+  COMPLETED = 'COMPLETED',
+}
+
+export enum ProtocolKeyEnum {
+  API_MODULE_TREE_PROTOCOL = 'API_MODULE_TREE_PROTOCOL',
+  TEST_PLAN_API_CASE_PROTOCOL = 'TEST_PLAN_API_CASE_PROTOCOL',
+  ASSOCIATE_CASE_PROTOCOL = 'ASSOCIATE_CASE_PROTOCOL',
+  API_SCENARIO_IMPORT_PROTOCOL = 'API_SCENARIO_IMPORT_PROTOCOL',
+  API_SCENARIO_CUSTOM_PROTOCOL = 'API_SCENARIO_CUSTOM_PROTOCOL',
+  API_NEW_PROTOCOL = 'API_NEW_PROTOCOL',
+  API_DEBUG_NEW_PROTOCOL = 'API_DEBUG_NEW_PROTOCOL',
+  CASE_MANAGEMENT_ASSOCIATE_PROTOCOL = 'CASE_MANAGEMENT_ASSOCIATE_PROTOCOL', // 功能用例关联用例
 }

@@ -1,14 +1,15 @@
 package io.metersphere.api.parser.step;
 
 import io.metersphere.api.domain.ApiDefinitionBlob;
-import io.metersphere.api.domain.ApiScenarioStep;
-import io.metersphere.project.api.KeyValueParam;
 import io.metersphere.api.dto.request.http.MsHTTPElement;
 import io.metersphere.api.dto.request.http.body.Body;
+import io.metersphere.api.dto.request.http.body.FormDataKV;
 import io.metersphere.api.dto.scenario.ApiScenarioStepCommonDTO;
+import io.metersphere.api.dto.scenario.ApiScenarioStepDetailRequest;
 import io.metersphere.api.mapper.ApiDefinitionBlobMapper;
 import io.metersphere.api.utils.ApiDataUtils;
 import io.metersphere.plugin.api.spi.AbstractMsTestElement;
+import io.metersphere.project.api.KeyValueParam;
 import io.metersphere.sdk.util.CommonBeanFactory;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -51,7 +52,7 @@ public class ApiStepParser extends StepParser {
     }
 
     @Override
-    public Object parseDetail(ApiScenarioStep step) {
+    public Object parseDetail(ApiScenarioStepDetailRequest step) {
         if (isRef(step.getRefType())) {
             ApiDefinitionBlobMapper apiDefinitionBlobMapper = CommonBeanFactory.getBean(ApiDefinitionBlobMapper.class);
             ApiDefinitionBlob apiDefinitionBlob = apiDefinitionBlobMapper.selectByPrimaryKey(step.getResourceId());
@@ -83,13 +84,14 @@ public class ApiStepParser extends StepParser {
         if (refBody == null || valueBody == null) {
             return;
         }
-        if (StringUtils.equals(refBody.getBodyType(), Body.BodyType.FORM_DATA.name()) &&
-                valueBody.getFormDataBody() != null && refBody.getFormDataBody() != null) {
-            replaceKvParam(valueBody.getFormDataBody().getFormValues(), valueBody.getFormDataBody().getFormValues());
+        if (valueBody.getFormDataBody() != null && refBody.getFormDataBody() != null) {
+            replaceKvParam(valueBody.getFormDataBody().getFormValues(), refBody.getFormDataBody().getFormValues());
         }
-        if (StringUtils.equals(refBody.getBodyType(), Body.BodyType.WWW_FORM.name()) &&
-                valueBody.getWwwFormBody() != null && refBody.getWwwFormBody() != null) {
-            replaceKvParam(valueBody.getWwwFormBody().getFormValues(), valueBody.getWwwFormBody().getFormValues());
+        if (valueBody.getWwwFormBody() != null && refBody.getWwwFormBody() != null) {
+            replaceKvParam(valueBody.getWwwFormBody().getFormValues(), refBody.getWwwFormBody().getFormValues());
+        }
+        if (valueBody.getBinaryBody() != null && refBody.getBinaryBody() != null) {
+            refBody.getBinaryBody().setFile(valueBody.getBinaryBody().getFile());
         }
         // todo JsonSchema body
     }
@@ -105,11 +107,14 @@ public class ApiStepParser extends StepParser {
             return;
         }
         refList.forEach(item -> {
-            KeyValueParam keyValueParam = (KeyValueParam) item;
+            KeyValueParam refParam = (KeyValueParam) item;
             for (Object valueItem : valueList) {
                 KeyValueParam valueParam = (KeyValueParam) valueItem;
-                if (StringUtils.equals(keyValueParam.getKey(), valueParam.getKey())) {
-                    keyValueParam.setValue(valueParam.getValue());
+                if (StringUtils.equals(refParam.getKey(), valueParam.getKey())) {
+                    refParam.setValue(valueParam.getValue());
+                    if (refParam instanceof FormDataKV refFormDataKey && valueParam instanceof FormDataKV valueFormDataKey) {
+                        refFormDataKey.setFiles(valueFormDataKey.getFiles());
+                    }
                     break;
                 }
             }

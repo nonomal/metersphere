@@ -28,5 +28,10 @@ public class TestPlanCaseExecuteHistoryDTO extends TestPlanCaseExecuteHistory {
     @Schema(description =  "测试计划id")
     private String testPlanId;
 
+    @Schema(description =  "编辑模式")
+    private String caseEditType;
+
+    @Schema(description = "是否显示步骤信息")
+    private boolean showResult = false;
 
 }

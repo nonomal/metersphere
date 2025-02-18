@@ -1,15 +1,16 @@
 <template>
   <div class="ms-detail-card">
-    <div class="ms-detail-card-title flex items-center justify-between">
-      <div class="flex items-center gap-[8px]">
+    <div class="ms-detail-card-title">
+      <div class="flex flex-1 items-center gap-[8px]">
+        <slot name="titlePrefix"></slot>
         <a-tooltip :content="t(props.title)">
-          <div class="one-line-text flex-1 font-medium text-[var(--color-text-1)]">
+          <div class="one-line-text max-w-[300px] font-medium text-[var(--color-text-1)]">
             {{ t(props.title) }}
           </div>
         </a-tooltip>
         <slot name="titleAppend"></slot>
       </div>
-      <div v-if="$slots.titleRight" class="flex items-center">
+      <div v-if="$slots.titleRight" class="flex items-center overflow-hidden">
         <slot name="titleRight"></slot>
       </div>
     </div>
@@ -17,15 +18,18 @@
       <div
         v-for="item of showingDescription"
         :key="item.key"
-        class="flex w-[calc(100%/3)] items-center gap-[8px]"
+        :class="[
+          `ms-detail-card-desc-item ${
+            Array.isArray(item.value) && item.value.length > 0 ? 'ms-detail-card-desc-tag' : ''
+          } flex w-[calc(100%/3)] items-center gap-[8px]`,
+        ]"
         :style="{ width: item.width }"
       >
         <div class="whitespace-nowrap text-[var(--color-text-4)]">
           {{ t(item.locale) }}
         </div>
-        <div v-if="Array.isArray(item.value)">
-          <MsTagGroup v-if="item.value.length > 0" :tag-list="item.value" size="small" is-string-tag />
-          <div v-else>-</div>
+        <div v-if="Array.isArray(item.value)" class="pr-[24px]">
+          <MsTagGroup :tag-list="item.value" size="small" is-string-tag />
         </div>
         <slot v-else :name="item.key" :value="item.value">
           <a-tooltip :content="item.value" :disabled="isEmpty(item.value)" :position="item.tooltipPosition">
@@ -100,12 +104,12 @@
   .ms-detail-card {
     @apply relative flex flex-col;
 
-    padding: 16px;
     border-radius: var(--border-radius-small);
-    background-color: var(--color-text-n9);
     gap: 8px;
-    .one-line-text {
-      max-width: 300px;
+    .ms-detail-card-title {
+      @apply flex items-center justify-between;
+
+      gap: 16px;
     }
     .ms-detail-card-desc {
       @apply flex flex-wrap overflow-hidden; // TODO:过渡动画

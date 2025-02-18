@@ -11,7 +11,12 @@
         :pagination="false"
       >
         <template #columns>
-          <a-table-column :width="100" :title="t('system.userGroup.function')" data-index="ability" />
+          <a-table-column
+            cell-class="auth-type-class"
+            :width="100"
+            :title="t('system.userGroup.function')"
+            data-index="ability"
+          />
           <a-table-column :width="150" :title="t('system.userGroup.operationObject')" data-index="operationObject" />
           <a-table-column>
             <template #title>
@@ -33,13 +38,15 @@
                   :model-value="record.perChecked"
                   @change="(v, e) => handleCellAuthChange(v, rowIndex, record, e)"
                 >
-                  <a-checkbox
-                    v-for="item in record.permissions"
-                    :key="item.id"
-                    :disabled="item.license || systemAdminDisabled || disabled"
-                    :value="item.id"
-                    >{{ t(item.name) }}</a-checkbox
-                  >
+                  <template v-for="item in record.permissions" :key="item.id">
+                    <a-checkbox
+                      v-if="(item.license && licenseStore.hasLicense()) || !item.license"
+                      :disabled="systemAdminDisabled || disabled"
+                      :value="item.id"
+                    >
+                      {{ t(item.name) }}
+                    </a-checkbox>
+                  </template>
                 </a-checkbox-group>
                 <a-checkbox
                   class="mr-[7px]"
@@ -54,7 +61,11 @@
         </template>
       </a-table>
     </div>
-    <div v-if="props.showBottom" v-permission="props.savePermission || []" class="footer">
+    <div
+      v-if="props.showBottom && props.current.id !== 'admin' && !systemAdminDisabled"
+      v-permission="props.savePermission || []"
+      class="footer"
+    >
       <ms-button :disabled="!canSave" @click="handleReset">{{ t('system.userGroup.reset') }}</ms-button>
       <a-button v-permission="props.savePermission || []" :disabled="!canSave" type="primary" @click="handleSave">
         {{ t('system.userGroup.save') }}
@@ -77,9 +88,9 @@
     saveOrgUSetting,
   } from '@/api/modules/setting/usergroup';
   import { useI18n } from '@/hooks/useI18n';
+  import useLicenseStore from '@/store/modules/setting/license';
 
   import {
-    type AuthScopeType,
     AuthTableItem,
     CurrentUserGroupItem,
     SavePermissions,
@@ -121,21 +132,12 @@
       },
     }
   );
+
+  const licenseStore = useLicenseStore();
+
   const systemType = inject<AuthScopeEnum>('systemType');
 
   const loading = ref(false);
-
-  const systemSpan = ref(1);
-  const projectSpan = ref(1);
-  const organizationSpan = ref(1);
-  const workstationSpan = ref(1);
-  const testPlanSpan = ref(1);
-  const bugManagementSpan = ref(1);
-  const caseManagementSpan = ref(1);
-  const uiTestSpan = ref(1);
-  const apiTestSpan = ref(1);
-  const loadTestSpan = ref(1);
-  const personalSpan = ref(1);
 
   // 表格的总全选
   const allChecked = ref(false);
@@ -165,61 +167,9 @@
   }) => {
     const { record, column } = data;
     if ((column as TableColumnData).dataIndex === 'ability') {
-      if (record.isSystem) {
-        return {
-          rowspan: systemSpan.value,
-        };
-      }
-      if (record.isOrganization) {
-        return {
-          rowspan: organizationSpan.value,
-        };
-      }
-      if (record.isProject) {
-        return {
-          rowspan: projectSpan.value,
-        };
-      }
-      if (record.isWorkstation) {
-        return {
-          rowspan: workstationSpan.value,
-        };
-      }
-      if (record.isTestPlan) {
-        return {
-          rowspan: testPlanSpan.value,
-        };
-      }
-      if (record.isBugManagement) {
-        return {
-          rowspan: bugManagementSpan.value,
-        };
-      }
-      if (record.isCaseManagement) {
-        return {
-          rowspan: caseManagementSpan.value,
-        };
-      }
-      if (record.isUiTest) {
-        return {
-          rowspan: uiTestSpan.value,
-        };
-      }
-      if (record.isApiTest) {
-        return {
-          rowspan: apiTestSpan.value,
-        };
-      }
-      if (record.isLoadTest) {
-        return {
-          rowspan: loadTestSpan.value,
-        };
-      }
-      if (record.isPersonal) {
-        return {
-          rowspan: personalSpan.value,
-        };
-      }
+      return {
+        rowspan: record.rowSpan,
+      };
     }
   };
 
@@ -230,42 +180,34 @@
    * @param item
    * @param type
    */
-  const makeData = (item: UserGroupAuthSetting, type: AuthScopeType) => {
+  const makeData = (item: UserGroupAuthSetting) => {
     const result: AuthTableItem[] = [];
     item.children?.forEach((child, index) => {
-      const perChecked =
-        child?.permissions?.reduce((acc: string[], cur) => {
-          if (cur.enable) {
-            acc.push(cur.id);
-          }
-          return acc;
-        }, []) || [];
-      const perCheckedLength = perChecked.length;
-      let indeterminate = false;
-      if (child?.permissions) {
-        indeterminate = perCheckedLength > 0 && perCheckedLength < child?.permissions?.length;
+      if (!child.license || (child.license && licenseStore.hasLicense())) {
+        const perChecked =
+          child?.permissions?.reduce((acc: string[], cur) => {
+            if (cur.enable) {
+              acc.push(cur.id);
+            }
+            return acc;
+          }, []) || [];
+        const perCheckedLength = perChecked.length;
+        let indeterminate = false;
+        if (child?.permissions) {
+          indeterminate = perCheckedLength > 0 && perCheckedLength < child?.permissions?.length;
+        }
+        result.push({
+          id: child?.id,
+          license: child?.license,
+          enable: child?.enable,
+          permissions: child?.permissions,
+          indeterminate,
+          perChecked,
+          ability: index === 0 ? item.name : undefined,
+          operationObject: t(child.name),
+          rowSpan: index === 0 ? item.children?.length || 1 : undefined,
+        });
       }
-      result.push({
-        id: child?.id,
-        license: child?.license,
-        enable: child?.enable,
-        permissions: child?.permissions,
-        indeterminate,
-        perChecked,
-        ability: index === 0 ? item.name : undefined,
-        operationObject: t(child.name),
-        isSystem: index === 0 && type === 'SYSTEM',
-        isOrganization: index === 0 && type === 'ORGANIZATION',
-        isProject: index === 0 && type === 'PROJECT',
-        isWorkstation: index === 0 && type === 'WORKSTATION',
-        isTestPlan: index === 0 && type === 'TEST_PLAN',
-        isBugManagement: index === 0 && type === 'BUG_MANAGEMENT',
-        isCaseManagement: index === 0 && type === 'CASE_MANAGEMENT',
-        isUiTest: index === 0 && type === 'UI_TEST',
-        isLoadTest: index === 0 && type === 'LOAD_TEST',
-        isApiTest: index === 0 && type === 'API_TEST',
-        isPersonal: index === 0 && type === 'PERSONAL',
-      });
     });
     return result;
   };
@@ -273,30 +215,7 @@
   const transformData = (data: UserGroupAuthSetting[]) => {
     const result: AuthTableItem[] = [];
     data.forEach((item) => {
-      if (item.id === 'SYSTEM') {
-        systemSpan.value = item.children?.length || 0;
-      } else if (item.id === 'PROJECT') {
-        projectSpan.value = item.children?.length || 0;
-      } else if (item.id === 'ORGANIZATION') {
-        organizationSpan.value = item.children?.length || 0;
-      } else if (item.id === 'WORKSTATION') {
-        workstationSpan.value = item.children?.length || 0;
-      } else if (item.id === 'TEST_PLAN') {
-        testPlanSpan.value = item.children?.length || 0;
-      } else if (item.id === 'BUG_MANAGEMENT') {
-        bugManagementSpan.value = item.children?.length || 0;
-      } else if (item.id === 'CASE_MANAGEMENT') {
-        caseManagementSpan.value = item.children?.length || 0;
-      } else if (item.id === 'UI_TEST') {
-        uiTestSpan.value = item.children?.length || 0;
-      } else if (item.id === 'API_TEST') {
-        apiTestSpan.value = item.children?.length || 0;
-      } else if (item.id === 'LOAD_TEST') {
-        loadTestSpan.value = item.children?.length || 0;
-      } else if (item.id === 'PERSONAL') {
-        personalSpan.value = item.children?.length || 0;
-      }
-      result.push(...makeData(item, item.id));
+      result.push(...makeData(item));
     });
     return result;
   };
@@ -358,11 +277,20 @@
       record.perChecked.push(currentValue);
       const preStr = currentValue.split(':')[0];
       const postStr = currentValue.split(':')[1];
+      const lastEditStr = currentValue.split('+')[1]; // 编辑类权限通过+号拼接
       const existRead = record.perChecked.some(
         (item: string) => item.split(':')[0] === preStr && item.split(':')[1] === 'READ'
       );
+      const existCreate = record.perChecked.some(
+        (item: string) => item.split(':')[0] === preStr && item.split(':')[1] === 'ADD'
+      );
       if (!existRead && postStr !== 'READ') {
         record.perChecked.push(`${preStr}:READ`);
+      }
+      if (!existCreate && lastEditStr === 'IMPORT') {
+        // 勾选导入时自动勾选新增和查询
+        record.perChecked.push(`${preStr}:ADD`);
+        record.perChecked.push(`${preStr}:READ+UPDATE`);
       }
     } else {
       // 删除权限值
@@ -488,7 +416,11 @@
   .group-auth-table {
     @apply flex-1 overflow-hidden;
 
-    padding: 0 16px;
+    padding: 0 16px 16px;
+    div,
+    span {
+      color: var(--color-text-1);
+    }
     :deep(.arco-table-container) {
       border-top: 1px solid var(--color-text-n8) !important;
       border-left: 1px solid var(--color-text-n8) !important;
@@ -501,11 +433,14 @@
       line-height: normal;
     }
   }
+  :deep(.auth-type-class) {
+    background-color: var(--color-text-n9);
+  }
   .footer {
     display: flex;
     justify-content: flex-end;
     padding: 24px;
-    background-color: #ffffff;
+    background-color: var(--color-text-fff);
     box-shadow: 0 -1px 4px rgb(2 2 2 / 10%);
     gap: 16px;
   }

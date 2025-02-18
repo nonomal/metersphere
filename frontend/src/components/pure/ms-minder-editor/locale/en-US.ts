@@ -67,7 +67,7 @@ export default {
     main: {
       header: {
         minder: 'Minder',
-        style: 'Appearance style',
+        style: 'style',
       },
       main: {
         save: 'Save',
@@ -76,7 +76,7 @@ export default {
         amplification: 'Amplification',
         narrow: 'Narrow',
         drag: 'Drag',
-        locating_root: 'Locating root node',
+        locating_root: 'Back to the central node',
         navigator: 'Navigator',
       },
       history: {
@@ -93,7 +93,7 @@ export default {
     tag: {
       case: 'Case',
       module: 'Module',
-      precondition: 'Precondition',
+      precondition: 'Pre-condition',
       desc: 'Step desc',
       expect: 'Expected result',
       remark: 'Remark',
@@ -101,13 +101,20 @@ export default {
     hotboxMenu: {
       expand: 'Expand/Collapse',
       insetParent: 'Insert one level up',
-      insetSon: 'Insert next level',
-      insetBrother: 'Insert sibling',
+      insetSon: 'Add next level',
+      insetBrother: 'Add sibling',
       copy: 'Copy',
       cut: 'Cut',
       paste: 'Paste',
       delete: 'Delete',
       enterNode: 'Enter the current node',
     },
+    loading: 'Mind map loading...',
+    shortcut: 'Shortcut',
+    shortcutTitle: 'Shortcut information',
+    expand: 'Expand/Collapse',
+    notSupportClipboard:
+      'Due to browser security policy restrictions, websites that are not HTTPS cannot access the clipboard. Please use keyboard shortcuts to copy/paste.',
+    editNodeText: '编辑节点文本',
   },
 };

@@ -29,6 +29,7 @@ public class ApiTestCaseRecoverService {
     private ApiTestCaseService apiTestCaseService;
 
     public void batchRecover(ApiTestCaseBatchRequest request, String userId) {
+
         List<String> ids = doSelectIds(request, true);
         if (CollectionUtils.isEmpty(ids)) {
             return;

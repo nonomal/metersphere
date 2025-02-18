@@ -86,7 +86,6 @@ public class MsHTTPElementTest {
         JsonSchemaItem jsonSchemaItem = new JsonSchemaItem();
         jsonSchemaItem.setId("11");
         jsonBody.setJsonSchema(jsonSchemaItem);
-        jsonBody.setEnableJsonSchema(false);
         body.setJsonBody(jsonBody);
 
         body.setNoneBody(new NoneBody());
@@ -116,7 +115,6 @@ public class MsHTTPElementTest {
 
         // 测试脚本解析
         ParameterConfig parameterConfig = new ApiParamConfig();
-        parameterConfig.setReportId("reportId");
         TestElementParser defaultParser = TestElementParserFactory.getDefaultParser();
         AbstractMsTestElement msTestElement = ApiDataUtils.parseObject(json, AbstractMsTestElement.class);
         defaultParser.parse(msTestElement, parameterConfig);
@@ -239,7 +237,6 @@ public class MsHTTPElementTest {
 
         // 测试脚本解析
         ParameterConfig parameterConfig = new ApiParamConfig();
-        parameterConfig.setReportId("reportId");
         TestElementParser defaultParser = TestElementParserFactory.getDefaultParser();
         AbstractMsTestElement msTestElement = ApiDataUtils.parseObject(json, AbstractMsTestElement.class);
         defaultParser.parse(msTestElement, parameterConfig);
@@ -268,7 +265,6 @@ public class MsHTTPElementTest {
 
         // 测试脚本解析
         ParameterConfig parameterConfig = new ApiParamConfig();
-        parameterConfig.setReportId("reportId");
         TestElementParser defaultParser = TestElementParserFactory.getDefaultParser();
         AbstractMsTestElement msTestElement = ApiDataUtils.parseObject(json, AbstractMsTestElement.class);
         defaultParser.parse(msTestElement, parameterConfig);

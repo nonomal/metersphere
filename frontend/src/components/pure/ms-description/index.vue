@@ -13,32 +13,52 @@
       v-for="(item, index) of props.descriptions"
       :key="item.label"
       class="ms-description-item"
-      :style="{ marginBottom: props.descriptions.length - index <= props.column ? '' : '16px' }"
+      :class="item.class"
+      :style="{ marginBottom: props.descriptions.length - index <= props.column ? '' : `${props.lineGap}px` }"
     >
-      <div class="ms-description-item-label" :style="{ width: props.labelWidth || '120px' }">
-        <slot name="item-label">{{ item.label }}</slot>
-      </div>
-      <div :class="item.isTag ? 'ms-description-item-value--tagline' : 'ms-description-item-value'">
+      <a-tooltip :content="item.label">
+        <div :class="`ms-description-item-label one-line-text max-w-[${props.labelWidth || '120px'}]`">
+          <slot name="item-label">{{ item.label }}</slot>
+        </div>
+      </a-tooltip>
+      <div :class="getValueClass(item)">
         <slot name="item-value" :item="item">
           <template v-if="item.isTag">
             <slot name="tag" :item="item">
-              <a-tooltip
-                v-for="tag of Array.isArray(item.value) ? item.value : [item.value]"
-                :key="`${tag}`"
-                :content="(tag as string)"
-              >
-                <MsTag
-                  :theme="item.tagTheme || 'outline'"
-                  :type="item.tagType || 'primary'"
-                  :max-width="item.tagMaxWidth"
-                  color="var(--color-text-n8)"
-                  :class="`mb-[8px] mr-[8px] font-normal !text-[var(--color-text-1)] ${item.tagClass || ''}`"
-                  :closable="item.closable"
-                  @close="emit('tagClose', tag, item)"
-                >
-                  {{ tag }}
-                </MsTag>
-              </a-tooltip>
+              <div class="w-[280px] overflow-hidden">
+                <a-overflow-list>
+                  <MsTag
+                    v-for="tag of Array.isArray(item.value) ? item.value : [item.value]"
+                    :key="`${tag}`"
+                    :theme="item.tagTheme || 'outline'"
+                    :type="item.tagType || 'primary'"
+                    :max-width="item.tagMaxWidth"
+                    color="var(--color-text-n8)"
+                    :class="`mr-[8px] font-normal !text-[var(--color-text-1)] ${item.tagClass || ''}`"
+                    :closable="item.closable"
+                    @close="emit('tagClose', tag, item)"
+                  >
+                    {{ tag }}
+                  </MsTag>
+                  <template #overflow="{ number }">
+                    <a-tooltip
+                      :content="(Array.isArray(item.value) ? item.value : [item.value]).join('，')"
+                      :position="item.tooltipPosition ?? 'tl'"
+                    >
+                      <MsTag
+                        :theme="item.tagTheme || 'outline'"
+                        :type="item.tagType || 'primary'"
+                        :max-width="item.tagMaxWidth"
+                        color="var(--color-text-n8)"
+                        :class="`font-normal !text-[var(--color-text-1)] ${item.tagClass || ''}`"
+                        tooltip-disabled
+                      >
+                        +{{ number }}
+                      </MsTag>
+                    </a-tooltip>
+                  </template>
+                </a-overflow-list>
+              </div>
               <span v-if="!item.showTagAdd" v-show="Array.isArray(item.value) && item.value.length === 0">-</span>
               <div v-else>
                 <template v-if="showTagInput">
@@ -81,12 +101,22 @@
           </MsButton>
           <template v-else>
             <slot name="value" :item="item">
-              {{ item.value === undefined || item.value === null || item.value?.toString() === '' ? '-' : item.value }}
+              <a-tooltip
+                :content="`${item.value}`"
+                :disabled="item.value === undefined || item.value === null || item.value?.toString() === ''"
+                :position="item.tooltipPosition ?? 'tl'"
+              >
+                <div class="w-[fit-content]">
+                  {{
+                    item.value === undefined || item.value === null || item.value?.toString() === '' ? '-' : item.value
+                  }}
+                </div>
+              </a-tooltip>
             </slot>
             <template v-if="item.showCopy">
               <MsButton
                 v-if="item.copyTimer !== null && item.copyTimer !== undefined"
-                class="absolute bottom-0 right-0 bg-white pl-[16px] !text-[rgb(var(--success-6))]"
+                class="absolute bottom-0 right-0 bg-[var(--color-text-fff)] pl-[16px] !text-[rgb(var(--success-6))]"
                 type="text"
               >
                 <MsIcon type="icon-icon_succeed_filled" class="mr-[4px]"></MsIcon>
@@ -94,7 +124,7 @@
               </MsButton>
               <MsButton
                 v-else
-                class="absolute bottom-0 right-0 bg-white pl-[16px]"
+                class="absolute bottom-0 right-0 bg-[var(--color-text-fff)] pl-[16px]"
                 type="text"
                 @click="copyValue(item)"
               >
@@ -124,10 +154,25 @@
     label: string;
     value: (string | number) | (string | number)[];
     key?: string;
+    class?: string;
     isTag?: boolean; // 是否标签
     tagClass?: string; // 标签自定义类名
     tagType?: TagType; // 标签类型
     tagTheme?: Theme; // 标签主题
+    tooltipPosition?:
+      | 'top'
+      | 'tl'
+      | 'tr'
+      | 'bottom'
+      | 'bl'
+      | 'br'
+      | 'left'
+      | 'lt'
+      | 'lb'
+      | 'right'
+      | 'rt'
+      | 'rb'
+      | undefined; // 提示位置防止窗口抖动
     tagMaxWidth?: string; // 标签最大宽度
     closable?: boolean; // 标签是否可关闭
     showTagAdd?: boolean; // 是否显示添加标签
@@ -144,10 +189,13 @@
       column?: number;
       descriptions: Description[];
       labelWidth?: string;
+      oneLineValue?: boolean;
+      lineGap?: number;
       addTagFunc?: (val: string, item: Description) => Promise<void>;
     }>(),
     {
       column: 1,
+      lineGap: 16,
     }
   );
   const emit = defineEmits<{
@@ -157,6 +205,16 @@
 
   const { t } = useI18n();
   const { copy } = useClipboard();
+
+  function getValueClass(item: Description) {
+    if (item.isTag) {
+      return 'ms-description-item-value--tagline';
+    }
+    if (props.oneLineValue) {
+      return 'ms-description-item-value ms-description-item-value--one-line';
+    }
+    return 'ms-description-item-value';
+  }
 
   async function copyValue(item: Description) {
     try {
@@ -239,7 +297,7 @@
       width: calc(100% / v-bind(column));
     }
     .ms-description-item-label {
-      @apply whitespace-pre-wrap font-normal;
+      @apply font-normal;
 
       padding-right: 16px;
       color: var(--color-text-3);
@@ -255,6 +313,9 @@
       text-overflow: ellipsis;
       -webkit-line-clamp: 3;
       -webkit-box-orient: vertical;
+    }
+    .ms-description-item-value--one-line {
+      -webkit-line-clamp: 1;
     }
   }
 </style>

@@ -1,11 +1,13 @@
 package io.metersphere.api.service;
 
-import io.metersphere.api.domain.*;
-import io.metersphere.api.mapper.*;
+import io.metersphere.api.mapper.ExtApiReportMapper;
+import io.metersphere.api.mapper.ExtApiScenarioReportMapper;
 import io.metersphere.sdk.constants.ProjectApplicationType;
 import io.metersphere.sdk.util.LogUtils;
+import io.metersphere.sdk.util.SubListUtils;
 import io.metersphere.system.service.BaseCleanUpReport;
 import jakarta.annotation.Resource;
+import org.apache.commons.collections4.CollectionUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,77 +21,30 @@ import static io.metersphere.sdk.util.ShareUtil.getCleanDate;
 public class CleanupApiReportServiceImpl implements BaseCleanUpReport {
 
     @Resource
-    private ApiReportMapper apiReportMapper;
-    @Resource
     private ExtApiReportMapper extApiReportMapper;
-    @Resource
-    private ApiReportStepMapper apiReportStepMapper;
-    @Resource
-    private ApiReportDetailMapper apiReportDetailMapper;
-    @Resource
-    private ApiReportLogMapper apiReportLogMapper;
-    @Resource
-    private ApiScenarioReportMapper apiScenarioReportMapper;
     @Resource
     private ExtApiScenarioReportMapper extApiScenarioReportMapper;
     @Resource
-    private ApiScenarioReportStepMapper apiScenarioReportStepMapper;
-    @Resource
-    private ApiScenarioReportDetailMapper apiScenarioReportDetailMapper;
-    @Resource
-    private ApiScenarioReportLogMapper apiScenarioReportLogMapper;
+    private CleanupApiReportDetailServiceImpl cleanupApiReportDetailService;
 
     @Override
     public void cleanReport(Map<String, String> map, String projectId) {
         LogUtils.info("清理当前项目[" + projectId + "]相关接口测试报告");
         String expr = map.get(ProjectApplicationType.API.API_CLEAN_REPORT.name());
         long timeMills = getCleanDate(expr);
-        int apiReportCount = extApiReportMapper.countApiReportByTime(timeMills, projectId);
-        while (apiReportCount > 0) {
-            List<String> ids = extApiReportMapper.selectApiReportByProjectIdAndTime(timeMills, projectId);
-            ApiReportExample reportExample = new ApiReportExample();
-            reportExample.createCriteria().andIdIn(ids);
-            ApiReport report = new ApiReport();
-            report.setDeleted(true);
-            apiReportMapper.updateByExampleSelective(report, reportExample);
-            deleteApiReport(ids);
-            apiReportCount = extApiReportMapper.countApiReportByTime(timeMills, projectId);
+        List<String> apiReportIds = extApiReportMapper.selectApiReportByProjectIdAndTime(timeMills, projectId);
+        List<String> scenarioReportIds = extApiScenarioReportMapper.selectApiReportByProjectIdAndTime(timeMills, projectId);
+        LogUtils.info("清理当前项目[" + projectId + "]相关接口测试报告, 共[" + (apiReportIds.size() + scenarioReportIds.size()) + "]条");
+        if (CollectionUtils.isNotEmpty(apiReportIds)) {
+            SubListUtils.dealForSubList(apiReportIds, 100, (subIds) -> {
+                cleanupApiReportDetailService.cleanApiReportOrDetail(subIds);
+            });
         }
-        int scenarioReportCount = extApiScenarioReportMapper.countScenarioReportByTime(timeMills, projectId);
-        while (scenarioReportCount > 0) {
-            List<String> ids = extApiScenarioReportMapper.selectApiReportByProjectIdAndTime(timeMills, projectId);
-            ApiScenarioReportExample reportExample = new ApiScenarioReportExample();
-            reportExample.createCriteria().andIdIn(ids);
-            ApiScenarioReport report = new ApiScenarioReport();
-            report.setDeleted(true);
-            apiScenarioReportMapper.updateByExampleSelective(report, reportExample);
-            deleteScenarioReport(ids);
-            scenarioReportCount = extApiScenarioReportMapper.countScenarioReportByTime(timeMills, projectId);
+        if (CollectionUtils.isNotEmpty(scenarioReportIds)) {
+            SubListUtils.dealForSubList(scenarioReportIds, 100, (subIds) -> {
+                cleanupApiReportDetailService.cleanScenarioReportOrDetail(subIds);
+            });
         }
+        LogUtils.info("清理当前项目[" + projectId + "]相关接口测试报告结束!");
     }
-
-    private void deleteApiReport(List<String> ids) {
-        ApiReportStepExample stepExample = new ApiReportStepExample();
-        stepExample.createCriteria().andReportIdIn(ids);
-        apiReportStepMapper.deleteByExample(stepExample);
-        ApiReportDetailExample detailExample = new ApiReportDetailExample();
-        detailExample.createCriteria().andReportIdIn(ids);
-        apiReportDetailMapper.deleteByExample(detailExample);
-        ApiReportLogExample logExample = new ApiReportLogExample();
-        logExample.createCriteria().andReportIdIn(ids);
-        apiReportLogMapper.deleteByExample(logExample);
-    }
-
-    private void deleteScenarioReport(List<String> ids) {
-        ApiScenarioReportStepExample stepExample = new ApiScenarioReportStepExample();
-        stepExample.createCriteria().andReportIdIn(ids);
-        apiScenarioReportStepMapper.deleteByExample(stepExample);
-        ApiScenarioReportDetailExample detailExample = new ApiScenarioReportDetailExample();
-        detailExample.createCriteria().andReportIdIn(ids);
-        apiScenarioReportDetailMapper.deleteByExample(detailExample);
-        ApiScenarioReportLogExample logExample = new ApiScenarioReportLogExample();
-        logExample.createCriteria().andReportIdIn(ids);
-        apiScenarioReportLogMapper.deleteByExample(logExample);
-    }
-
 }

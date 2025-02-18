@@ -1,8 +1,8 @@
 <script lang="tsx">
   import { computed, defineComponent, h, ref } from 'vue';
-  import { RouteRecordRaw, useRoute, useRouter } from 'vue-router';
+  import { RouteRecordRaw, useRouter } from 'vue-router';
   import { Message } from '@arco-design/web-vue';
-  import { cloneDeep } from 'lodash-es';
+  import { cloneDeep, debounce } from 'lodash-es';
 
   import MsAvatar from '@/components/pure/ms-avatar/index.vue';
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
@@ -12,18 +12,17 @@
   import { getOrgOptions, switchUserOrg } from '@/api/modules/system';
   import { useI18n } from '@/hooks/useI18n';
   import useUser from '@/hooks/useUser';
-  import { BOTTOM_MENU_LIST, NO_PROJECT_ROUTE_NAME } from '@/router/constants';
+  import { BOTTOM_MENU_LIST } from '@/router/constants';
   import { useAppStore, useUserStore } from '@/store';
   import useLicenseStore from '@/store/modules/setting/license';
   import { openWindow, regexUrl } from '@/utils';
   import { scrollIntoView } from '@/utils/dom';
-  import { getFirstRouterNameByCurrentRoute } from '@/utils/permission';
+  import { getFirstRouteNameByPermission, getFirstRouterNameByCurrentRoute } from '@/utils/permission';
   import { listenerRouteChange } from '@/utils/route-listener';
 
-  import { ProjectManagementRouteEnum, SettingRouteEnum } from '@/enums/routeEnum';
+  import { SettingRouteEnum } from '@/enums/routeEnum';
 
   import useMenuTree from './use-menu-tree';
-  import type { RouteMeta } from 'vue-router';
 
   export default defineComponent({
     emit: ['collapse'],
@@ -33,7 +32,6 @@
       const userStore = useUserStore();
       const { logout } = useUser();
       const router = useRouter();
-      const route = useRoute();
       // @desc: 初始化配置的项目模块
       appStore.getProjectInfos();
       const { menuTree } = useMenuTree();
@@ -50,37 +48,35 @@
       const openKeys = ref<string[]>([]);
       const selectedKey = ref<string[]>([]);
 
-      const goto = (item: RouteRecordRaw | null) => {
-        if (item) {
-          // 如果菜单是外链
-          if (regexUrl.test(item.path)) {
-            openWindow(item.path);
-            selectedKey.value = [item.name as string];
-            return;
-          }
-          // 已激活的菜单重复点击不处理
-          const { hideInMenu, activeMenu } = item.meta as RouteMeta;
-          if (route.name === item.name && !hideInMenu && !activeMenu) {
-            selectedKey.value = [item.name as string];
-            return;
-          }
-          if (item.meta?.hideChildrenInMenu) {
-            // 顶级菜单路由跳转到该菜单下有权限的第一个顶部子菜单
-            const childName = getFirstRouterNameByCurrentRoute(item.name as string);
-            router.push({
-              name: childName,
-            });
+      const goto = debounce(
+        (item: RouteRecordRaw | null) => {
+          if (item) {
+            // 如果菜单是外链
+            if (regexUrl.test(item.path)) {
+              openWindow(item.path);
+              selectedKey.value = [item.name as string];
+              return;
+            }
+            if (item.meta?.hideChildrenInMenu) {
+              // 顶级菜单路由跳转到该菜单下有权限的第一个顶部子菜单
+              const childName = getFirstRouterNameByCurrentRoute(item.name as string);
+              router.push({
+                name: childName,
+              });
+            } else {
+              router.push({
+                name: item.name,
+              });
+            }
           } else {
             router.push({
-              name: item.name,
+              name: 'notFound',
             });
           }
-        } else {
-          router.push({
-            name: 'notFound',
-          });
-        }
-      };
+        },
+        500,
+        { leading: true, trailing: false, maxWait: 500 }
+      );
       /**
        * 查找激活的菜单项
        * @param target 目标菜单名
@@ -147,38 +143,15 @@
           Message.success(t('personal.switchOrgSuccess'));
           personalMenusVisible.value = false;
           orgKeyword.value = '';
-          await userStore.isLogin(true);
-          if (
-            (!appStore.currentProjectId || appStore.currentProjectId === 'no_such_project') &&
-            !(route.name as string).startsWith(SettingRouteEnum.SETTING)
-          ) {
-            // 没有项目权限(组织没有项目, 或项目全被禁用)且访问的页面非系统菜单模块，则重定向到无项目权限页面
-            router.push({
-              name: NO_PROJECT_ROUTE_NAME,
-            });
-            return;
-          }
-          if (route.name === NO_PROJECT_ROUTE_NAME) {
-            // 无项目权限组织切换到正常组织, 默认跳转到项目基本信息页面
-            router.replace({
-              name: ProjectManagementRouteEnum.PROJECT_MANAGEMENT_PERMISSION_BASIC_INFO,
-              query: {
-                ...route.query,
-                orgId: appStore.currentOrgId,
-                pId: appStore.currentProjectId,
-              },
-            });
-          } else {
-            // 正常切换组织
-            router.replace({
-              path: route.path,
-              query: {
-                ...route.query,
-                orgId: appStore.currentOrgId,
-                pId: appStore.currentProjectId,
-              },
-            });
-          }
+          await userStore.checkIsLogin(true);
+          appStore.hideLoading();
+          router.replace({
+            name: getFirstRouteNameByPermission(router.getRoutes()),
+            query: {
+              orgId: appStore.currentOrgId,
+              pId: appStore.currentProjectId,
+            },
+          });
         } catch (error) {
           // eslint-disable-next-line no-console
           console.log(error);
@@ -198,7 +171,7 @@
           label: t('personal.switchOrg'),
           icon: () => (
             <MsIcon
-              type="icon-icon_switch_outlined1"
+              type="icon-icon_switch_outlined"
               class={isActiveSwitchOrg.value ? 'text-[rgb(var(--primary-5))]' : 'text-[var(--color-text-4)]'}
             />
           ),
@@ -214,7 +187,7 @@
         {
           label: t('personal.exit'),
           icon: <MsIcon type="icon-icon_into-item_outlined" class="text-[var(--color-text-4)]" />,
-          event: () => logout(),
+          event: () => logout(undefined, true),
         },
       ]);
 
@@ -229,7 +202,7 @@
           orgListLoading.value = true;
           const res = await getOrgOptions();
           originOrgList.value = res || [];
-          appStore.setOrdList(originOrgList.value);
+          appStore.setOrgList(originOrgList.value);
         } catch (error) {
           // eslint-disable-next-line no-console
           console.log(error);
@@ -239,11 +212,11 @@
       }
 
       watch(
-        () => xPack.value,
-        async (val) => {
+        () => [xPack.value, appStore.getPackageType],
+        async ([val, packageType]) => {
           if (val) {
             personalMenus.value = [...copyPersonalMenus.value];
-            if (appStore.packageType === 'enterprise' && licenseStore.hasLicense()) {
+            if (packageType === 'enterprise') {
               getOrgList();
             }
           } else {
@@ -266,7 +239,7 @@
 
       watchEffect(() => {
         if (switchOrgVisible.value || menuSwitchOrgVisible.value) {
-          if (appStore.packageType === 'enterprise' && licenseStore.hasLicense()) {
+          if (appStore.getPackageType === 'enterprise' && licenseStore.hasLicense()) {
             getOrgList();
           }
           nextTick(() => {
@@ -394,7 +367,10 @@
             }}
           >
             <a-menu-item
-              class={['flex w-full items-center justify-between', collapsed.value ? 'h-[56px] w-[56px]' : '']}
+              class={[
+                'flex w-full items-center justify-between overflow-hidden',
+                collapsed.value ? 'h-[56px] w-[56px]' : '',
+              ]}
               key="personalInfo"
             >
               {
@@ -402,14 +378,16 @@
                   class={[
                     collapsed.value
                       ? 'relative flex h-full items-center justify-center hover:!bg-transparent'
-                      : 'relative flex items-center gap-[8px] hover:!bg-transparent',
+                      : 'relative flex flex-1 items-center gap-[8px] overflow-hidden hover:!bg-transparent',
                   ]}
                 >
-                  <MsAvatar is-user size={20} class="!mr-0 hover:!bg-transparent" />
-                  {collapsed.value ? null : userStore.name}
+                  <MsAvatar is-user size={28} class="!mr-0 w-[20px] hover:!bg-transparent" />
+                  <div class="one-line-text flex-1 hover:!bg-transparent">
+                    {collapsed.value ? null : userStore.name}
+                  </div>
                 </div>
               }
-              {collapsed.value ? null : <icon-caret-down class="!m-0" />}
+              {collapsed.value ? null : <icon-caret-down class="!m-0 w-[16px]" />}
             </a-menu-item>
           </a-trigger>
         );
@@ -426,7 +404,10 @@
         );
       };
 
-      let mouseEnterTimer: NodeJS.Timeout;
+      const currentOrgName = computed(() => {
+        const org = originOrgList.value.find((e) => e.id === appStore.currentOrgId);
+        return org?.name || '';
+      });
       // 渲染菜单项
       const renderMenuItem = (element: RouteRecordRaw | null, icon: (() => any) | null) =>
         element?.name === SettingRouteEnum.SETTING_ORGANIZATION ? (
@@ -439,23 +420,17 @@
               ) : (
                 t(element?.meta?.locale || '')
               )}
-              {xPack.value
-                ? orgTrigger(element, menuSwitchOrgVisible, () => (
-                    <div
-                      class={collapsed.value ? 'hidden' : '!bg-transparent'} // 菜单折叠时隐藏切换组织按钮
-                      onMouseenter={() => {
-                        mouseEnterTimer = setTimeout(() => {
-                          menuSwitchOrgVisible.value = true;
-                        }, 500);
-                      }}
-                      onMouseleave={() => {
-                        clearTimeout(mouseEnterTimer);
-                      }}
-                    >
-                      <MsIcon type="icon-icon_switch_outlined1" class="text-[var(--color-text-4)]" />
-                    </div>
-                  ))
-                : ''}
+              {xPack.value ? (
+                <a-tooltip content={currentOrgName.value} position="right">
+                  <div
+                    class={collapsed.value ? 'hidden' : 'current-org-tag'} // 菜单折叠时隐藏切换组织按钮
+                  >
+                    {currentOrgName.value.substring(0, 1)}
+                  </div>
+                </a-tooltip>
+              ) : (
+                ''
+              )}
             </div>
           </a-menu-item>
         ) : (
@@ -538,9 +513,12 @@
 </script>
 
 <style lang="less">
+  .arco-menu-light {
+    background-color: transparent;
+  }
   .arco-menu-vertical {
     .menu-wrapper {
-      background-color: var(--color-bg-3);
+      background-color: var(--color-text-fff);
     }
     .arco-menu-inner {
       @apply flex flex-col justify-between;
@@ -563,6 +541,7 @@
       .arco-menu-item {
         @apply mb-0 !bg-transparent;
 
+        min-width: 56px;
         color: var(--color-text-1) !important;
         &:hover,
         .arco-icon:hover {
@@ -626,6 +605,12 @@
 
       padding-top: 12px !important;
       padding-bottom: 32px !important;
+      &::-webkit-scrollbar {
+        display: none; /* 隐藏滚动条 */
+      }
+
+      -ms-overflow-style: none; /* 适用于 Internet Explorer 和 Edge */
+      scrollbar-width: none; /* 适用于 Firefox */
       .arco-menu-item,
       .arco-menu-inline--bottom {
         @apply flex-col p-0;
@@ -689,5 +674,20 @@
   .active-org {
     color: rgb(var(--primary-5));
     background-color: rgb(var(--primary-1));
+  }
+  .current-org-tag {
+    @apply rounded-full text-center align-middle;
+
+    top: 24px;
+    right: -12px;
+    z-index: 101;
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+    border: 1px solid #ffffff;
+    color: var(--color-text-2);
+    background: linear-gradient(90deg, rgb(var(--primary-9)) 3.36%, #ffffff 100%);
+    box-shadow: 0 0 7px rgb(15 0 78 / 9%);
+    line-height: 14px;
   }
 </style>

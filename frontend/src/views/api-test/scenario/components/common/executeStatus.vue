@@ -26,12 +26,12 @@
     [ScenarioExecuteStatus.STOP]: {
       bgColor: 'rgb(var(--link-2))',
       color: 'rgb(var(--link-6))',
-      text: 'common.stop',
+      text: 'common.stopped',
     },
     [ScenarioExecuteStatus.EXECUTING]: {
       bgColor: 'rgb(var(--link-2))',
       color: 'rgb(var(--link-6))',
-      text: 'apiScenario.running',
+      text: 'common.running',
     },
     [ScenarioExecuteStatus.FAILED]: {
       bgColor: 'rgb(var(--danger-2))',
@@ -41,7 +41,7 @@
     [ScenarioExecuteStatus.FAKE_ERROR]: {
       bgColor: 'rgb(var(--warning-2))',
       color: 'rgb(var(--warning-5))',
-      text: 'report.fake.error',
+      text: 'common.fakeError',
     },
     [ScenarioExecuteStatus.SUCCESS]: {
       bgColor: 'rgb(var(--success-2))',
@@ -51,7 +51,7 @@
     [ScenarioExecuteStatus.UN_EXECUTE]: {
       bgColor: 'var(--color-text-n8)',
       color: 'var(--color-text-1)',
-      text: 'apiScenario.unExecute',
+      text: 'common.unExecute',
     },
   };
   const status = computed(() => {

@@ -9,9 +9,6 @@
         "name": "permission.project_base_info.name",
         "permissions": [
           {
-            "id": "PROJECT_BASE_INFO:READ"
-          },
-          {
             "id": "PROJECT_BASE_INFO:READ+UPDATE"
           }
         ]
@@ -25,6 +22,10 @@
           },
           {
             "id": "PROJECT_USER:READ+ADD"
+          },
+          {
+            "id": "PROJECT_USER:READ+INVITE",
+            "name": "permission.project_user.invite"
           },
           {
             "id": "PROJECT_USER:READ+UPDATE"
@@ -137,8 +138,15 @@
       {
         "id": "PROJECT_APPLICATION",
         "name": "permission.project_application.name",
-        "license": true,
         "permissions": [
+          {
+            "id": "PROJECT_APPLICATION_TEST_PLAN:READ",
+            "name": "permission.project_application_test_plan.read"
+          },
+          {
+            "id": "PROJECT_APPLICATION_TEST_PLAN:UPDATE",
+            "name": "permission.project_application_test_plan.update"
+          },
           {
             "id": "PROJECT_APPLICATION_API:READ",
             "name": "permission.project_application_api.read"
@@ -162,6 +170,14 @@
           {
             "id": "PROJECT_APPLICATION_BUG:UPDATE",
             "name": "permission.project_application_bug.update"
+          },
+          {
+            "id": "PROJECT_APPLICATION_TASK:READ",
+            "name": "permission.project_application_task.read"
+          },
+          {
+            "id": "PROJECT_APPLICATION_TASK:UPDATE",
+            "name": "permission.project_application_task.update"
           }
         ]
       },
@@ -190,13 +206,52 @@
       {
         "id": "PROJECT_LOG",
         "name": "permission.project_log.name",
-        "license": true,
         "permissions": [
           {
             "id": "PROJECT_LOG:READ"
           }
         ]
       }
-    ]
+    ],
+    "order": 4
+  },
+  {
+    "id": "PROJECT_TASK_CENTER",
+    "name": "permission.project_task_center.name",
+    "type": "PROJECT",
+    "children": [
+      {
+        "id": "PROJECT_CASE_TASK_CENTER",
+        "name": "permission.project_case_task_center.name",
+        "permissions": [
+          {
+            "id": "PROJECT_CASE_TASK_CENTER:READ"
+          },
+          {
+            "id": "PROJECT_CASE_TASK_CENTER:EXEC+STOP",
+            "name": "permission.project_case_task_center.exec"
+          },
+          {
+            "id": "PROJECT_CASE_TASK_CENTER:READ+DELETE"
+          }
+        ]
+      },
+      {
+        "id": "PROJECT_SCHEDULE_TASK_CENTER",
+        "name": "permission.project_schedule_task_center.name",
+        "permissions": [
+          {
+            "id": "PROJECT_SCHEDULE_TASK_CENTER:READ"
+          },
+          {
+            "id": "PROJECT_SCHEDULE_TASK_CENTER:READ+UPDATE"
+          },
+          {
+            "id": "PROJECT_SCHEDULE_TASK_CENTER:READ+DELETE"
+          }
+        ]
+      }
+    ],
+    "order": 9
   }
 ]

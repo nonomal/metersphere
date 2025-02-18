@@ -21,45 +21,22 @@
             v-model:raw="form.prerequisite"
             v-model:filed-ids="prerequisiteFileIds"
             :upload-image="handleUploadImage"
-            :preview-url="PreviewEditorImageUrl"
+            :preview-url="`${PreviewEditorImageUrl}/${currentProjectId}`"
           />
         </a-form-item>
-        <a-form-item
-          field="step"
-          :label="
-            form.caseEditType === 'STEP'
-              ? t('system.orgTemplate.stepDescription')
-              : t('system.orgTemplate.textDescription')
-          "
-          class="relative"
-        >
-          <div class="absolute left-16 top-0">
-            <a-divider direction="vertical" />
-            <a-dropdown :popup-max-height="false" @select="handleSelectType">
-              <span class="changeType">{{ t('system.orgTemplate.changeType') }} <icon-down /></span>
-              <template #content>
-                <a-doption value="STEP" :class="getSelectTypeClass('STEP')">
-                  {{ t('system.orgTemplate.stepDescription') }}</a-doption
-                >
-                <a-doption value="TEXT" :class="getSelectTypeClass('TEXT')">{{
-                  t('system.orgTemplate.textDescription')
-                }}</a-doption>
-              </template>
-            </a-dropdown>
-          </div>
-          <!-- 步骤描述 -->
-          <div v-if="form.caseEditType === 'STEP'" class="w-full">
-            <AddStep v-model:step-list="stepData" :is-disabled="false" />
-          </div>
-          <!-- 文本描述 -->
-          <MsRichText
-            v-else
-            v-model:raw="form.textDescription"
-            v-model:filed-ids="textDescriptionFileIds"
-            :upload-image="handleUploadImage"
-            :preview-url="PreviewEditorImageUrl"
-          />
-        </a-form-item>
+        <StepDescription v-model:caseEditType="form.caseEditType" />
+        <div v-if="form.caseEditType === 'STEP'" class="mb-[20px] w-full">
+          <AddStep v-model:step-list="stepData" :is-disabled="false" />
+        </div>
+        <!-- 文本描述 -->
+        <MsRichText
+          v-else
+          v-model:raw="form.textDescription"
+          v-model:filed-ids="textDescriptionFileIds"
+          class="mb-[20px]"
+          :upload-image="handleUploadImage"
+          :preview-url="`${PreviewEditorImageUrl}/${currentProjectId}`"
+        />
         <a-form-item
           v-if="form.caseEditType === 'TEXT'"
           field="remark"
@@ -69,7 +46,7 @@
             v-model:raw="form.expectedResult"
             v-model:filed-ids="expectedResultFileIds"
             :upload-image="handleUploadImage"
-            :preview-url="PreviewEditorImageUrl"
+            :preview-url="`${PreviewEditorImageUrl}/${currentProjectId}`"
           />
         </a-form-item>
         <a-form-item field="description" :label="t('caseManagement.featureCase.remark')">
@@ -77,7 +54,7 @@
             v-model:raw="form.description"
             v-model:filed-ids="descriptionFileIds"
             :upload-image="handleUploadImage"
-            :preview-url="PreviewEditorImageUrl"
+            :preview-url="`${PreviewEditorImageUrl}/${currentProjectId}`"
           />
         </a-form-item>
         <AddAttachment v-model:file-list="fileList" multiple @change="handleChange" @link-file="associatedFile" />
@@ -90,20 +67,23 @@
           mode="static"
           :init-file-save-tips="t('ms.upload.waiting_save')"
           :show-upload-type-desc="true"
+          :show-delete="false"
         >
           <template #actions="{ item }">
             <!-- 本地文件 -->
-            <div v-if="item.local || item.status === 'init'" class="flex flex-nowrap">
+            <div v-if="item.local || item.status === 'init'" class="flex items-center font-normal">
               <MsButton
                 v-if="item.status !== 'init' && item.file.type.includes('image/')"
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="handlePreview(item)"
               >
                 {{ t('ms.upload.preview') }}
               </MsButton>
+              <a-divider v-if="item.status !== 'init' && item.file.type.includes('image/')" direction="vertical" />
               <SaveAsFilePopover
+                v-if="item.uid === activeTransferFileParams?.uid"
                 v-model:visible="transferVisible"
                 :saving-file="activeTransferFileParams"
                 :file-save-as-source-id="(form.id as string)"
@@ -116,54 +96,72 @@
                 v-if="item.status !== 'init'"
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="transferFile(item)"
               >
                 {{ t('caseManagement.featureCase.storage') }}
               </MsButton>
+              <a-divider v-if="item.status !== 'init'" direction="vertical" />
               <MsButton
                 v-if="item.status !== 'init'"
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="downloadFile(item)"
               >
                 {{ t('caseManagement.featureCase.download') }}
               </MsButton>
+              <a-divider v-if="item.status !== 'init'" direction="vertical" />
+              <MsButton
+                v-if="item.status !== 'uploading'"
+                type="button"
+                :status="item.deleteContent ? 'primary' : 'danger'"
+                class="!mr-0"
+                @click="deleteFile(item)"
+              >
+                {{ t(item.deleteContent) || t('ms.upload.delete') }}
+              </MsButton>
             </div>
             <!-- 关联文件 -->
-            <div v-else class="flex flex-nowrap">
+            <div v-else class="flex items-center font-normal">
               <MsButton
                 v-if="item.file.type.includes('/image')"
                 type="button"
                 status="primary"
-                class="!mr-[4px]"
+                class="!mr-0"
                 @click="handlePreview(item)"
               >
                 {{ t('ms.upload.preview') }}
               </MsButton>
-              <MsButton
-                v-if="props.caseId"
-                type="button"
-                status="primary"
-                class="!mr-[4px]"
-                @click="downloadFile(item)"
-              >
+              <a-divider v-if="item.file.type.includes('/image')" direction="vertical" />
+              <MsButton v-if="props.caseId" type="button" status="primary" class="!mr-0" @click="downloadFile(item)">
                 {{ t('caseManagement.featureCase.download') }}
               </MsButton>
+              <a-divider v-if="props.caseId" direction="vertical" />
               <MsButton
                 v-if="props.caseId && item.isUpdateFlag"
                 type="button"
+                class="!mx-0"
                 status="primary"
                 @click="handleUpdateFile(item)"
               >
                 {{ t('common.update') }}
               </MsButton>
+              <a-divider v-if="props.caseId && item.isUpdateFlag" direction="vertical" />
+              <MsButton
+                v-if="item.status !== 'uploading'"
+                type="button"
+                :status="item.deleteContent ? 'primary' : 'danger'"
+                class="!mr-0"
+                @click="deleteFile(item)"
+              >
+                {{ t(item.deleteContent) }}
+              </MsButton>
             </div>
           </template>
           <template #title="{ item }">
-            <span v-if="item.isUpdateFlag" class="ml-4 flex items-center font-normal text-[rgb(var(--warning-6))]"
-              ><icon-exclamation-circle-fill /> <span>{{ t('caseManagement.featureCase.fileIsUpdated') }}</span>
+            <span v-if="item.isUpdateFlag" class="ml-4 flex items-center font-normal text-[rgb(var(--warning-6))]">
+              <icon-exclamation-circle-fill /> <span>{{ t('caseManagement.featureCase.fileIsUpdated') }} </span>
             </span>
           </template>
         </MsFileList>
@@ -201,10 +199,11 @@
                   height: 200,
                 },
               }"
+              :filter-tree-node="filterTreeNode"
             >
               <template #tree-slot-title="node">
                 <a-tooltip :content="`${node.name}`" position="tl">
-                  <div class="one-line-text w-[300px] text-[var(--color-text-1)]">{{ node.name }}</div>
+                  <div class="one-line-text w-[300px]">{{ node.name }}</div>
                 </a-tooltip>
               </template>
             </a-tree-select>
@@ -229,11 +228,12 @@
       v-model:file-list="fileList"
       accept="none"
       :auto-upload="false"
-      :sub-text="acceptType === 'jar' ? '' : t('project.fileManagement.normalFileSubText', { size: 50 })"
+      :sub-text="
+        acceptType === 'jar' ? '' : t('project.fileManagement.normalFileSubText', { size: appStore.getFileMaxSize })
+      "
       multiple
       draggable
       size-unit="MB"
-      :max-size="50"
       :is-all-screen="true"
       class="mb-[16px]"
       @change="handleChange"
@@ -267,6 +267,7 @@
   import SaveAsFilePopover from '@/components/business/ms-add-attachment/saveAsFilePopover.vue';
   import LinkFileDrawer from '@/components/business/ms-link-file/associatedFileDrawer.vue';
   import AddStep from './addStep.vue';
+  import StepDescription from '@/views/case-management/caseManagementFeature/components/tabContent/stepDescription.vue';
 
   import {
     checkFileIsUpdateRequest,
@@ -286,8 +287,7 @@
   import { useI18n } from '@/hooks/useI18n';
   import useAppStore from '@/store/modules/app';
   import useFeatureCaseStore from '@/store/modules/case/featureCase';
-  import useUserStore from '@/store/modules/user';
-  import { downloadByteFile, getGenerateId } from '@/utils';
+  import { downloadByteFile, filterTreeNode, getGenerateId } from '@/utils';
 
   import type {
     AssociatedList,
@@ -295,14 +295,13 @@
     CreateOrUpdateCase,
     CustomAttributes,
     DetailCase,
-    OptionsFieldId,
     StepList,
   } from '@/models/caseManagement/featureCase';
   import type { ModuleTreeNode, TableQueryParams } from '@/models/common';
+  import type { CustomField, FieldOptions } from '@/models/setting/template';
 
   import { convertToFile, initFormCreate } from './utils';
-
-  const userStore = useUserStore();
+  import { getDefaultMemberValue } from '@/views/bug-management/utils';
 
   const { t } = useI18n();
   const route = useRoute();
@@ -319,19 +318,19 @@
   const formRef = ref<FormInstance>();
   const caseFormRef = ref<FormInstance>();
 
+  const initStepData: StepList = {
+    id: getGenerateId(),
+    step: '',
+    expected: '',
+    showStep: false,
+    showExpected: false,
+  };
+
   // 步骤描述
-  const stepData = ref<StepList[]>([
-    {
-      id: getGenerateId(),
-      step: '',
-      expected: '',
-      showStep: false,
-      showExpected: false,
-    },
-  ]);
+  const stepData = ref<StepList[]>([{ ...initStepData }]);
 
   const featureCaseStore = useFeatureCaseStore();
-  const modelId = computed(() => featureCaseStore.moduleId[0]);
+  const modelId = computed(() => featureCaseStore.moduleId[0] || 'root');
 
   const initForm: DetailCase = {
     id: '',
@@ -377,38 +376,49 @@
     fileList: [], // 总文件列表
   });
 
-  // 获取类型样式
-  function getSelectTypeClass(type: string) {
-    return form.value.caseEditType === type ? ['bg-[rgb(var(--primary-1))]', '!text-[rgb(var(--primary-5))]'] : [];
-  }
-
-  // 更改类型
-  const handleSelectType = (value: string | number | Record<string, any> | undefined) => {
-    form.value.caseEditType = value as string;
-  };
-
   const isLoading = ref<boolean>(true);
 
   const rowLength = ref<number>(0);
   const formRules = ref<FormItem[]>([]);
   const formItem = ref<FormRuleItem[]>([]);
   const fApi = ref<any>(null);
+
+  function getStepData(steps: string) {
+    stepData.value = JSON.parse(steps).map((item: any) => {
+      return {
+        id: item.id,
+        step: item.desc,
+        expected: item.result,
+      };
+    });
+  }
+
+  // 回显模板默认表单值
+  function setSystemDefault(systemFields: CustomField[]) {
+    systemFields.forEach((item: CustomField) => {
+      form.value[item.fieldId] = item.defaultValue;
+    });
+    const { steps } = form.value;
+
+    if (steps) {
+      getStepData(steps);
+    }
+  }
+
   // 初始化模板默认字段
   async function initDefaultFields() {
     formRules.value = [];
     try {
       isLoading.value = true;
       const res = await getCaseDefaultFields(currentProjectId.value);
-      const { customFields, id } = res;
+      const { customFields, id, systemFields } = res;
       form.value.templateId = id;
       const result = customFields.map((item: any) => {
         const memberType = ['MEMBER', 'MULTIPLE_MEMBER'];
         let initValue = item.defaultValue;
-        const optionsValue: OptionsFieldId[] = item.options;
+        const optionsValue: FieldOptions[] = item.options;
         if (memberType.includes(item.type)) {
-          if (item.defaultValue === 'CREATE_USER' || item.defaultValue.includes('CREATE_USER')) {
-            initValue = item.type === 'MEMBER' ? userStore.id : [userStore.id];
-          }
+          initValue = getDefaultMemberValue(item, optionsValue);
         }
 
         return {
@@ -425,6 +435,7 @@
         };
       });
       formRules.value = result;
+      setSystemDefault(systemFields || []);
       isLoading.value = false;
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -479,7 +490,7 @@
       .map((item: any) => item.id);
   });
 
-  // 取消关联文件id TODO
+  // 取消关联文件id
   const unLinkFilesIds = computed(() => {
     const deleteAssociateFileIds = fileList.value
       .filter(
@@ -498,7 +509,6 @@
   // 预览图片
   async function handlePreview(item: MsFileItem) {
     try {
-      previewVisible.value = true;
       if (item.status !== 'init') {
         const res = await previewFile({
           projectId: currentProjectId.value,
@@ -511,6 +521,7 @@
       } else {
         imageUrl.value = item.url || '';
       }
+      previewVisible.value = true;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -518,6 +529,24 @@
   }
 
   const checkUpdateFileIds = ref<string[]>([]);
+  // 前置操作附件id
+  const prerequisiteFileIds = ref<string[]>([]);
+  // 文本描述附件id
+  const textDescriptionFileIds = ref<string[]>([]);
+  // 预期结果附件id
+  const expectedResultFileIds = ref<string[]>([]);
+  // 描述附件id
+  const descriptionFileIds = ref<string[]>([]);
+
+  // 所有附近文件id
+  const allAttachmentsFileIds = computed(() => {
+    return [
+      ...prerequisiteFileIds.value,
+      ...textDescriptionFileIds.value,
+      ...expectedResultFileIds.value,
+      ...descriptionFileIds.value,
+    ];
+  });
 
   // 处理详情字段
   function getDetailData(detailResult: DetailCase) {
@@ -530,19 +559,14 @@
 
     form.value = {
       ...detailResult,
+      caseDetailFileIds: allAttachmentsFileIds.value,
       name: route.params.mode === 'copy' ? copyName : detailResult.name,
     };
     // 处理自定义字段
     formRules.value = initFormCreate(customFields as CustomAttributes[], ['FUNCTIONAL_CASE:READ+UPDATE']);
     // 处理步骤
     if (steps) {
-      stepData.value = JSON.parse(steps).map((item: any) => {
-        return {
-          id: item.id,
-          step: item.desc,
-          expected: item.result,
-        };
-      });
+      getStepData(steps);
     }
     if (attachments) {
       attachmentsList.value = attachments;
@@ -607,6 +631,13 @@
     featureCaseStore.setModuleId([value]);
   }
 
+  function deleteFile(item: MsFileItem) {
+    const index = fileList.value.findIndex((e) => e.uid === item.uid);
+    if (index !== -1) {
+      fileList.value.splice(index, 1);
+    }
+  }
+
   // 监视文件列表处理关联和本地文件
   watch(
     () => fileList.value,
@@ -629,7 +660,7 @@
     (val) => {
       if (val) {
         if (val) {
-          params.value.request = { ...form.value };
+          params.value.request = { ...form.value, caseDetailFileIds: allAttachmentsFileIds.value };
           emit('update:formModeValue', params.value);
         }
       }
@@ -730,31 +761,10 @@
     }
   }
 
-  // 前置条件附件id
-  const prerequisiteFileIds = ref<string[]>([]);
-  // 文本描述附件id
-  const textDescriptionFileIds = ref<string[]>([]);
-  // 预期结果附件id
-  const expectedResultFileIds = ref<string[]>([]);
-  // 描述附件id
-  const descriptionFileIds = ref<string[]>([]);
-
-  // 所有附近文件id
-  const allAttachmentsFileIds = computed(() => {
-    return [
-      ...prerequisiteFileIds.value,
-      ...textDescriptionFileIds.value,
-      ...expectedResultFileIds.value,
-      ...descriptionFileIds.value,
-    ];
-  });
-
   watch(
     () => allAttachmentsFileIds.value,
     (val) => {
-      if (val) {
-        params.value.request.caseDetailFileIds = val;
-      }
+      params.value.request.caseDetailFileIds = val;
     }
   );
 
@@ -764,9 +774,11 @@
     });
     return data;
   }
-
+  // 重置包含重置到默认模板状态
   async function resetForm() {
+    caseFormRef.value?.resetFields();
     form.value = { ...initForm, templateId: form.value.templateId };
+    stepData.value = [{ ...initStepData }];
     await initDefaultFields();
     form.value.customFields = formItem.value.map((item: any) => {
       return {
@@ -776,16 +788,6 @@
     });
     fileList.value = [];
     form.value.tags = [];
-    stepData.value = [
-      {
-        id: getGenerateId(),
-        step: '',
-        expected: '',
-        showStep: false,
-        showExpected: false,
-      },
-    ];
-    caseFormRef.value?.resetFields();
   }
 
   const caseId = ref(props.caseId);

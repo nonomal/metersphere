@@ -13,7 +13,6 @@ import io.metersphere.project.domain.FileAssociationExample;
 import io.metersphere.project.dto.ProjectUserDTO;
 import io.metersphere.project.mapper.FileAssociationMapper;
 import io.metersphere.project.request.ProjectMemberRequest;
-import io.metersphere.project.service.FileService;
 import io.metersphere.project.service.ProjectApplicationService;
 import io.metersphere.project.service.ProjectMemberService;
 import io.metersphere.sdk.constants.DefaultRepositoryDir;
@@ -23,8 +22,10 @@ import io.metersphere.sdk.util.FileAssociationSourceUtil;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.LogUtils;
 import io.metersphere.system.domain.ServiceIntegration;
+import io.metersphere.system.service.FileService;
 import io.metersphere.system.service.PlatformPluginService;
 import io.metersphere.system.service.PluginLoadService;
+import io.metersphere.system.service.UserPlatformAccountService;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -34,14 +35,19 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+/**
+ * @author song-cc-rock
+ */
 @Service
-@Transactional(rollbackFor = Exception.class)
 public class BugCommonService {
 
 	@Resource
 	private FileService fileService;
+	@Resource
+	private ExtBugMapper extBugMapper;
 	@Resource
 	private BugStatusService bugStatusService;
 	@Resource
@@ -66,6 +72,8 @@ public class BugCommonService {
 	private BugLocalAttachmentMapper bugLocalAttachmentMapper;
 	@Resource
 	private ProjectApplicationService projectApplicationService;
+	@Resource
+	private UserPlatformAccountService userPlatformAccountService;
 
 	/**
 	 * 获取表头处理人选项
@@ -134,6 +142,7 @@ public class BugCommonService {
 	 * @param projectId 项目ID
 	 * @param bugIds 缺陷ID集合
 	 */
+	@Transactional(rollbackFor = Exception.class)
 	public void clearAssociateResource(String projectId, List<String> bugIds) {
 		// 清空附件(关联, 本地上传, 富文本)
 		FileAssociationExample example = new FileAssociationExample();
@@ -188,5 +197,50 @@ public class BugCommonService {
 		List<SelectOption> localOptions = bugStatusService.getAllLocalStatusOptions(projectId);
 		List<SelectOption> allStatusOption = ListUtils.union(headerOptions, localOptions).stream().distinct().toList();
 		return allStatusOption.stream().collect(Collectors.toMap(SelectOption::getValue, SelectOption::getText));
+	}
+
+	/**
+	 * 获取Local状态流结束标识
+	 * @param projectId 项目ID
+	 * @return 状态流结束标识集合
+	 */
+	public List<String> getLocalLastStepStatus(String projectId) {
+		return extBugMapper.getLocalLastStepStatusIds(projectId);
+	}
+
+	/**
+	 * 获取平台状态流结束标识
+	 * @param projectId 项目ID
+	 * @return 状态流结束标识集合
+	 */
+	public List<String> getPlatformLastStepStatus(String projectId) throws Exception {
+		Platform platform = projectApplicationService.getPlatform(projectId, true);
+		List<SelectOption> platformLastSteps = platform.getStatusTransitionsLastSteps(projectApplicationService.getProjectBugThirdPartConfig(projectId));
+		return platformLastSteps.stream().map(SelectOption::getValue).toList();
+	}
+
+	/**
+	 * 获取登录用户平台处理人
+	 * @param projectId 项目ID
+	 * @param currentUserId 当前用户ID
+	 * @param currentOrgId 当前组织ID
+	 * @return 平台处理人
+	 */
+	public String getPlatformHandlerUser(String projectId, String currentUserId, String currentOrgId) {
+		ServiceIntegration serviceIntegration = projectApplicationService.getPlatformServiceIntegrationWithSyncOrDemand(projectId, true);
+		if (serviceIntegration == null) {
+			return null;
+		}
+		String platformUserName = userPlatformAccountService.getPlatformUserName(currentUserId, currentOrgId, serviceIntegration.getPluginId());
+		List<SelectOption> headerHandlerOption = getHeaderHandlerOption(projectId);
+		if (StringUtils.isNotBlank(platformUserName)) {
+			Optional<SelectOption> handleOption = headerHandlerOption.stream().filter(option -> StringUtils.containsAnyIgnoreCase(option.getText(), platformUserName))
+					.findFirst();
+			if (handleOption.isPresent()) {
+				return handleOption.get().getValue();
+			}
+			return platformUserName;
+		}
+		return null;
 	}
 }

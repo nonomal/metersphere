@@ -9,34 +9,29 @@
       >
         {{ t('caseManagement.featureCase.creatingCase') }}
       </a-button>
-      <div class="flex gap-[8px]">
-        <a-input-search
-          v-model:model-value="keyword"
-          :placeholder="t('apiTestManagement.searchPlaceholder')"
-          allow-clear
-          class="mr-[8px] w-[240px]"
-          @search="loadCaseList"
-          @press-enter="loadCaseList"
-          @clear="loadCaseList"
-        />
-        <a-button type="outline" class="arco-btn-outline--secondary !p-[8px]" @click="loadCaseList">
-          <template #icon>
-            <icon-refresh class="text-[var(--color-text-4)]" />
-          </template>
-        </a-button>
-      </div>
+      <MsAdvanceFilter
+        ref="msAdvanceFilterRef"
+        v-model:keyword="keyword"
+        :view-type="ViewTypeEnum.API_CASE"
+        :filter-config-list="filterConfigList"
+        :search-placeholder="t('apiTestManagement.searchPlaceholder')"
+        :view-name="viewName"
+        @keyword-search="loadCaseList()"
+        @adv-search="handleAdvSearch"
+        @refresh="loadCaseList()"
+      />
     </div>
     <ms-base-table
       v-bind="propsRes"
       :action-config="batchActions"
       :first-column-width="44"
       no-disable
+      :not-show-table-filter="isAdvancedSearchMode"
       filter-icon-align-left
       v-on="propsEvent"
       @selected-change="handleTableSelect"
       @batch-action="handleTableBatch"
       @drag-change="handleDragChange"
-      @module-change="loadCaseList"
     >
       <template v-if="hasAnyPermission(['PROJECT_API_DEFINITION_CASE:READ+ADD']) && props.isApi" #empty>
         <div class="flex w-full items-center justify-center p-[8px] text-[var(--color-text-4)]">
@@ -47,9 +42,28 @@
         </div>
       </template>
       <template #num="{ record }">
-        <MsButton type="text" @click="isApi ? openCaseDetailDrawer(record.id) : openCaseTab(record)">
-          {{ record.num }}
-        </MsButton>
+        <div class="flex items-center">
+          <MsButton type="text" @click="openCaseTab(record)">
+            {{ record.num }}
+          </MsButton>
+          <a-tooltip v-if="record.apiChange" class="ms-tooltip-white">
+            <!-- 接口参数发生变更提示 -->
+            <MsIcon type="icon-icon_warning_colorful" size="16" />
+            <template #content>
+              <div class="flex flex-row">
+                <span class="text-[var(--color-text-1)]">
+                  {{ t('case.apiParamsHasChange') }}
+                </span>
+                <MsButton class="ml-[8px]" @click="showDifferences(record)">
+                  {{ t('case.changeDifferences') }}
+                </MsButton>
+              </div>
+            </template>
+          </a-tooltip>
+        </div>
+      </template>
+      <template #protocol="{ record }">
+        <apiMethodName :method="record.protocol" />
       </template>
       <template #caseLevel="{ record }">
         <a-select
@@ -93,12 +107,12 @@
         <apiStatus :status="filterContent.value" />
       </template>
       <template #createName="{ record }">
-        <a-tooltip :content="`${record.createName}`" position="tl">
-          <div class="one-line-text">{{ characterLimit(record.createName) }}</div>
+        <a-tooltip :content="`${record.createName}`" position="tr">
+          <div class="one-line-text">{{ record.createName }}</div>
         </a-tooltip>
       </template>
       <template #[FilterSlotNameEnum.API_TEST_CASE_API_LAST_EXECUTE_STATUS]="{ filterContent }">
-        <apiStatus :status="filterContent.value" />
+        <ExecutionStatus :module-type="ReportEnum.API_REPORT" :status="filterContent.value" />
       </template>
       <template #lastReportStatus="{ record }">
         <ExecutionStatus
@@ -190,10 +204,22 @@
       </a-form-item>
       <a-form-item
         v-if="batchForm.attr === 'tags'"
+        :class="`${selectedTagType === TagUpdateTypeEnum.CLEAR ? 'mb-0' : 'mb-[16px]'}`"
+        field="type"
+        :label="t('common.type')"
+      >
+        <a-radio-group v-model:model-value="selectedTagType" size="small">
+          <a-radio :value="TagUpdateTypeEnum.UPDATE"> {{ t('common.update') }}</a-radio>
+          <a-radio :value="TagUpdateTypeEnum.APPEND"> {{ t('caseManagement.featureCase.appendTag') }}</a-radio>
+          <a-radio :value="TagUpdateTypeEnum.CLEAR">{{ t('common.clear') }}</a-radio>
+        </a-radio-group>
+      </a-form-item>
+      <a-form-item
+        v-if="batchForm.attr === 'tags' && selectedTagType !== TagUpdateTypeEnum.CLEAR"
         field="values"
-        :label="t('apiTestManagement.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :validate-trigger="['blur', 'input']"
-        :rules="[{ required: true, message: t('apiTestManagement.valueRequired') }]"
+        :rules="[{ required: false, message: t('common.inputPleaseEnterTags') }]"
         asterisk-position="end"
         class="mb-0"
         required
@@ -203,13 +229,15 @@
           placeholder="common.tagsInputPlaceholder"
           allow-clear
           unique-value
+          empty-priority-highest
           retain-input-value
         />
+        <div class="text-[12px] leading-[20px] text-[var(--color-text-4)]">{{ t('ms.tagsInput.tagLimitTip') }}</div>
       </a-form-item>
       <a-form-item
-        v-else
+        v-if="batchForm.attr !== 'tags'"
         field="value"
-        :label="t('apiTestManagement.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :rules="[{ required: true, message: t('apiTestManagement.valueRequired') }]"
         asterisk-position="end"
         class="mb-0"
@@ -222,26 +250,7 @@
       </a-form-item>
     </a-form>
     <template #footer>
-      <div class="flex" :class="[batchForm.attr === 'tags' ? 'justify-between' : 'justify-end']">
-        <div
-          v-if="batchForm.attr === 'tags'"
-          class="flex flex-row items-center justify-center"
-          style="padding-top: 10px"
-        >
-          <a-switch v-model="batchForm.append" class="mr-1" size="small" type="line" />
-          <span class="flex items-center">
-            <span class="mr-1">{{ t('caseManagement.featureCase.appendTag') }}</span>
-            <span class="mt-[2px]">
-              <a-tooltip>
-                <IconQuestionCircle class="h-[16px] w-[16px] text-[rgb(var(--primary-5))]" />
-                <template #content>
-                  <div>{{ t('caseManagement.featureCase.enableTags') }}</div>
-                  <div>{{ t('caseManagement.featureCase.closeTags') }}</div>
-                </template>
-              </a-tooltip>
-            </span>
-          </span>
-        </div>
+      <div class="flex justify-end">
         <div class="flex justify-end">
           <a-button type="secondary" :disabled="batchEditLoading" @click="cancelBatchEdit">
             {{ t('common.cancel') }}
@@ -255,9 +264,12 @@
   </a-modal>
   <createAndEditCaseDrawer
     ref="createAndEditCaseDrawerRef"
+    v-model:visible="showCaseVisible"
     :api-detail="apiDetail"
     @load-case="loadCaseListAndResetSelector()"
+    @show-diff="showDifferences"
   />
+  <!-- TODO 之后要去掉 使用页面代替抽屉 -->
   <caseDetailDrawer
     v-model:visible="caseDetailDrawerVisible"
     v-model:execute-case="caseExecute"
@@ -276,13 +288,40 @@
     @finished="loadCaseListAndResetSelector"
   />
   <!-- 执行结果抽屉 -->
-  <caseAndScenarioReportDrawer v-model:visible="showExecuteResult" :report-id="activeReportId" />
+  <caseAndScenarioReportDrawer
+    v-model:visible="showExecuteResult"
+    :case-name="currentCaseName"
+    :case-id="currentId"
+    is-filter-step
+    :report-id="activeReportId"
+  />
+  <!-- 同步抽屉 -->
+  <SyncModal
+    ref="syncModalRef"
+    v-model:visible="showSyncModal"
+    :loading="syncLoading"
+    :batch-params="batchParams"
+    @batch-sync="handleBatchSync"
+  />
+  <!-- diff对比抽屉 -->
+  <DifferentDrawer
+    v-model:visible="showDifferentDrawer"
+    :active-api-case-id="activeApiCaseId"
+    :active-defined-id="activeDefinedId"
+    @close="closeDifferent"
+    @clear-this-change="handleClearThisChange"
+    @sync="syncParamsHandler"
+    @load-list="loadCaseListAndResetSelector"
+  />
 </template>
 
 <script setup lang="ts">
+  import { useRoute } from 'vue-router';
   import { FormInstance, Message } from '@arco-design/web-vue';
   import { cloneDeep } from 'lodash-es';
 
+  import MsAdvanceFilter from '@/components/pure/ms-advance-filter/index.vue';
+  import { FilterFormItem, FilterResult } from '@/components/pure/ms-advance-filter/type';
   import MsButton from '@/components/pure/ms-button/index.vue';
   import { TabItem } from '@/components/pure/ms-editable-tab/types';
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
@@ -295,6 +334,9 @@
   import type { CaseLevel } from '@/components/business/ms-case-associate/types';
   import caseDetailDrawer from './caseDetailDrawer.vue';
   import createAndEditCaseDrawer from './createAndEditCaseDrawer.vue';
+  import DifferentDrawer from './differentDrawer.vue';
+  import SyncModal from './syncModal.vue';
+  import apiMethodName from '@/views/api-test/components/apiMethodName.vue';
   import apiStatus from '@/views/api-test/components/apiStatus.vue';
   import BatchRunModal from '@/views/api-test/components/batchRunModal.vue';
   import caseAndScenarioReportDrawer from '@/views/api-test/components/caseAndScenarioReportDrawer.vue';
@@ -304,44 +346,67 @@
     batchDeleteCase,
     batchEditCase,
     batchExecuteCase,
+    caseTableBatchSync,
     deleteCase,
     dragSort,
     getCaseDetail,
     getCasePage,
+    getCaseStatistics,
     updateCasePriority,
     updateCaseStatus,
   } from '@/api/modules/api-test/management';
+  import { NAV_NAVIGATION } from '@/config/workbench';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import useTableStore from '@/hooks/useTableStore';
   import useAppStore from '@/store/modules/app';
-  import { characterLimit } from '@/utils';
+  import useCacheStore from '@/store/modules/cache/cache';
+  import { characterLimit, operationWidth } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
+  import { ProtocolItem } from '@/models/apiTest/common';
+  import type { batchSyncForm } from '@/models/apiTest/management';
   import { ApiCaseDetail } from '@/models/apiTest/management';
   import { DragSortParams } from '@/models/common';
+  import { FilterType, ViewTypeEnum } from '@/enums/advancedFilterEnum';
   import { RequestCaseStatus } from '@/enums/apiEnum';
-  import { ReportEnum, ReportStatus } from '@/enums/reportEnum';
+  import { CacheTabTypeEnum } from '@/enums/cacheTabEnum';
+  import { TagUpdateTypeEnum } from '@/enums/commonEnum';
+  import { ReportEnum } from '@/enums/reportEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
   import { FilterRemoteMethodsEnum, FilterSlotNameEnum } from '@/enums/tableFilterEnum';
+  import { WorkNavValueEnum } from '@/enums/workbenchEnum';
 
-  import { casePriorityOptions, caseStatusOptions } from '@/views/api-test/components/config';
+  import {
+    casePriorityOptions,
+    caseStatusOptions,
+    lastReportStatusListOptions,
+  } from '@/views/api-test/components/config';
   import type { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
   import { parseRequestBodyFiles } from '@/views/api-test/components/utils';
 
+  defineOptions({
+    name: CacheTabTypeEnum.API_TEST_CASE_TABLE,
+  });
   const props = defineProps<{
     isApi: boolean; // 接口定义详情的case tab下
     activeModule: string;
-    protocol: string; // 查看的协议类型
+    selectedProtocols: string[]; // 查看的协议类型
     apiDetail?: RequestParam;
     offspringIds: string[];
-    memberOptions: { label: string; value: string }[];
+    heightUsed?: number;
   }>();
+  const cacheStore = useCacheStore();
 
   const caseExecute = ref(false);
 
-  const emit = defineEmits(['openCaseTab', 'openCaseTabAndExecute']);
+  const emit = defineEmits<{
+    (e: 'openCaseTab', record: ApiCaseDetail): void;
+    (e: 'openCaseTabAndExecute', record: ApiCaseDetail): void;
+    (e: 'handleAdvSearch', isStartAdvance: boolean): void;
+  }>();
 
+  const route = useRoute();
   const appStore = useAppStore();
   const { t } = useI18n();
   const tableStore = useTableStore();
@@ -356,23 +421,7 @@
       'PROJECT_API_DEFINITION_CASE:READ+EXECUTE',
     ])
   );
-
-  const requestCaseStatusOptions = computed(() => {
-    return Object.values(RequestCaseStatus).map((key) => {
-      return {
-        value: key,
-        label: key,
-      };
-    });
-  });
-  const lastReportStatusListOptions = computed(() => {
-    return Object.keys(ReportStatus[ReportEnum.API_REPORT]).map((key) => {
-      return {
-        value: key,
-        ...Object.keys(ReportStatus[ReportEnum.API_REPORT][key]),
-      };
-    });
-  });
+  const protocolList = inject<Ref<ProtocolItem[]>>('protocols', ref([]));
   const columns: MsTableColumn = [
     {
       title: 'ID',
@@ -383,10 +432,7 @@
         sortDirections: ['ascend', 'descend'],
         sorter: true,
       },
-      fixed: 'left',
-      width: 130,
-      ellipsis: true,
-      showTooltip: true,
+      width: 150,
       columnSelectorDisabled: true,
     },
     {
@@ -401,6 +447,14 @@
       columnSelectorDisabled: true,
     },
     {
+      title: 'apiTestManagement.protocol',
+      dataIndex: 'protocol',
+      slotName: 'protocol',
+      showTooltip: true,
+      width: 80,
+      showDrag: true,
+    },
+    {
       title: 'case.caseLevel',
       dataIndex: 'priority',
       slotName: 'caseLevel',
@@ -408,7 +462,7 @@
         options: casePriorityOptions,
         filterSlotName: FilterSlotNameEnum.CASE_MANAGEMENT_CASE_LEVEL,
       },
-      width: 150,
+      width: 100,
       showDrag: true,
     },
     {
@@ -420,8 +474,9 @@
         sorter: true,
       },
       filterConfig: {
-        options: requestCaseStatusOptions.value,
+        options: caseStatusOptions,
         filterSlotName: FilterSlotNameEnum.API_TEST_CASE_API_STATUS,
+        disabledTooltip: true,
       },
       width: 150,
       showDrag: true,
@@ -439,7 +494,6 @@
       isTag: true,
       isStringTag: true,
       showDrag: true,
-      width: 400,
     },
     {
       title: 'case.lastReportStatus',
@@ -472,7 +526,7 @@
     },
     {
       title: 'case.tableColumnUpdateUser',
-      dataIndex: 'updateUser',
+      dataIndex: 'updateName',
       showInTable: false,
       showTooltip: true,
       width: 180,
@@ -500,10 +554,8 @@
           projectId: appStore.currentProjectId,
         },
         remoteMethod: FilterRemoteMethodsEnum.PROJECT_PERMISSION_MEMBER,
-        placeholderText: t('caseManagement.featureCase.PleaseSelect'),
       },
       showInTable: true,
-      showTooltip: true,
       width: 180,
       showDrag: true,
     },
@@ -524,26 +576,26 @@
       slotName: 'operation',
       dataIndex: 'operation',
       fixed: 'right',
-      width: hasOperationPermission.value ? 200 : 50,
+      width: operationWidth(230, hasOperationPermission.value ? 200 : 50),
     },
   ];
-  const { propsRes, propsEvent, loadList, setLoadListParams, resetSelector } = useTable(getCasePage, {
-    scroll: { x: '100%' },
-    tableKey: TableKeyEnum.API_TEST_MANAGEMENT_CASE,
-    showSetting: true,
-    selectable: hasAnyPermission([
-      'PROJECT_API_DEFINITION_CASE:READ+DELETE',
-      'PROJECT_API_DEFINITION_CASE:READ+EXECUTE',
-      'PROJECT_API_DEFINITION_CASE:READ+UPDATE',
-    ]),
-    showSelectAll: true,
-    draggable: hasAnyPermission(['PROJECT_API_DEFINITION_CASE:READ+UPDATE'])
-      ? { type: 'handle', width: 32 }
-      : undefined,
-    heightUsed: 282,
-    showSubdirectory: true,
-    paginationSize: 'mini',
-  });
+  const { propsRes, propsEvent, viewId, advanceFilter, setAdvanceFilter, loadList, setLoadListParams, resetSelector } =
+    useTable(getCasePage, {
+      scroll: { x: '100%' },
+      tableKey: TableKeyEnum.API_TEST_MANAGEMENT_CASE,
+      showSetting: true,
+      selectable: hasAnyPermission([
+        'PROJECT_API_DEFINITION_CASE:READ+DELETE',
+        'PROJECT_API_DEFINITION_CASE:READ+EXECUTE',
+        'PROJECT_API_DEFINITION_CASE:READ+UPDATE',
+      ]),
+      showSelectAll: true,
+      draggable: hasAnyPermission(['PROJECT_API_DEFINITION_CASE:READ+UPDATE'])
+        ? { type: 'handle', width: 32 }
+        : undefined,
+      heightUsed: (props.heightUsed || 0) + 282,
+      paginationSize: 'mini',
+    });
   const batchActions = {
     baseAction: [
       {
@@ -555,6 +607,11 @@
         label: 'system.log.operateType.execute',
         eventTag: 'execute',
         permission: ['PROJECT_API_DEFINITION_CASE:READ+EXECUTE'],
+      },
+      {
+        label: 'case.apiSyncChange',
+        eventTag: 'sync',
+        permission: ['PROJECT_API_DEFINITION_CASE:READ+UPDATE'],
       },
       {
         label: 'common.delete',
@@ -573,9 +630,11 @@
     },
   ];
 
+  const msAdvanceFilterRef = ref<InstanceType<typeof MsAdvanceFilter>>();
+  const isAdvancedSearchMode = computed(() => msAdvanceFilterRef.value?.isAdvancedSearchMode);
   async function getModuleIds() {
     let moduleIds: string[] = [];
-    if (props.activeModule !== 'all') {
+    if (props.activeModule !== 'all' && !isAdvancedSearchMode.value) {
       moduleIds = [props.activeModule];
       const getAllChildren = await tableStore.getSubShow(TableKeyEnum.API_TEST_MANAGEMENT_CASE);
       if (getAllChildren) {
@@ -584,41 +643,201 @@
     }
     return moduleIds;
   }
+
+  async function initStatistics() {
+    try {
+      const res = await getCaseStatistics(propsRes.value.data.map((item) => item.id));
+      propsRes.value.data.forEach((e) => {
+        const item = res.find((i: any) => i.scenarioId === e.id);
+        if (item) {
+          e.passRate = item.passRate;
+        }
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  }
+
+  watch(
+    () => propsRes.value.data,
+    (arr) => {
+      if (arr.length > 0) {
+        initStatistics();
+      }
+    }
+  );
+
   async function loadCaseList() {
     const selectModules = await getModuleIds();
+
     const params = {
       apiDefinitionId: props.apiDetail?.id,
       keyword: keyword.value,
       projectId: appStore.currentProjectId,
       moduleIds: selectModules,
-      protocol: props.protocol,
+      protocols: isAdvancedSearchMode.value ? protocolList.value.map((item) => item.protocol) : props.selectedProtocols,
+      filter: propsRes.value.filter,
+      viewId: viewId.value,
+      combineSearch: advanceFilter,
     };
     setLoadListParams(params);
-    loadList();
+    await loadList();
   }
   function loadCaseListAndResetSelector() {
     resetSelector();
     loadCaseList();
   }
 
+  const isActivated = computed(() => cacheStore.cacheViews.includes(CacheTabTypeEnum.API_TEST_CASE_TABLE));
+
   onBeforeMount(() => {
-    loadCaseList();
+    cacheStore.clearCache();
+    if (!isActivated.value) {
+      loadCaseList();
+      cacheStore.setCache(CacheTabTypeEnum.API_TEST_CASE_TABLE);
+    }
+  });
+
+  onActivated(() => {
+    if (isActivated.value) {
+      loadCaseList();
+    }
   });
 
   watch(
     () => props.activeModule,
     () => {
+      if (isAdvancedSearchMode.value) return;
       loadCaseListAndResetSelector();
     }
   );
 
   watch(
-    () => props.protocol,
+    () => props.selectedProtocols,
     () => {
       if (props.isApi) return;
       loadCaseListAndResetSelector();
     }
   );
+
+  const filterConfigList = computed<FilterFormItem[]>(() => [
+    {
+      title: 'caseManagement.featureCase.tableColumnID',
+      dataIndex: 'num',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'case.caseName',
+      dataIndex: 'name',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'apiTestManagement.protocol',
+      dataIndex: 'protocol',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'protocol',
+        valueKey: 'protocol',
+        options: protocolList.value,
+      },
+    },
+    {
+      title: 'case.caseLevel',
+      dataIndex: 'priority',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        options: casePriorityOptions,
+      },
+    },
+    {
+      title: 'case.apiParamsChange',
+      dataIndex: 'apiChange',
+      type: FilterType.SELECT_EQUAL,
+      selectProps: {
+        options: [
+          { label: t('case.withoutChanges'), value: false },
+          { label: t('case.withChanges'), value: true },
+        ],
+      },
+    },
+    {
+      title: 'apiTestManagement.path',
+      dataIndex: 'path',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'apiTestManagement.apiStatus',
+      dataIndex: 'status',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        options: caseStatusOptions.map((item) => ({ label: t(item.label), value: item.value })),
+      },
+    },
+    {
+      title: 'case.lastReportStatus',
+      dataIndex: 'lastReportStatus',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        options: lastReportStatusListOptions.value,
+      },
+    },
+    {
+      title: 'case.caseEnvironment',
+      dataIndex: 'environmentName',
+      type: FilterType.SELECT,
+      selectProps: {
+        labelKey: 'name',
+        valueKey: 'id',
+        multiple: true,
+        options: appStore.envList,
+      },
+    },
+    {
+      title: 'common.tag',
+      dataIndex: 'tags',
+      type: FilterType.TAGS_INPUT,
+      numberProps: {
+        min: 0,
+        precision: 0,
+      },
+    },
+    {
+      title: 'common.creator',
+      dataIndex: 'createUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.createTime',
+      dataIndex: 'createTime',
+      type: FilterType.DATE_PICKER,
+    },
+    {
+      title: 'common.updateUserName',
+      dataIndex: 'updateUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.updateTime',
+      dataIndex: 'updateTime',
+      type: FilterType.DATE_PICKER,
+    },
+  ]);
+
+  const viewName = ref('');
+
+  // 高级检索
+  const handleAdvSearch = async (filter: FilterResult, id: string, isStartAdvance: boolean) => {
+    resetSelector();
+    emit('handleAdvSearch', isStartAdvance);
+    keyword.value = '';
+    setAdvanceFilter(filter, id);
+    await loadCaseList(); // 基础筛选都清空
+  };
 
   async function handleStatusChange(record: ApiCaseDetail) {
     try {
@@ -666,9 +885,11 @@
       condition: {
         keyword: keyword.value,
         filter: propsRes.value.filter,
+        viewId: viewId.value,
+        combineSearch: advanceFilter,
       },
       projectId: appStore.currentProjectId,
-      protocol: props.protocol,
+      protocols: isAdvancedSearchMode.value ? protocolList.value.map((item) => item.protocol) : props.selectedProtocols,
       moduleIds: selectModules,
       apiDefinitionId: props.apiDetail?.id as string,
     };
@@ -770,6 +991,8 @@
     }
   });
 
+  const selectedTagType = ref<TagUpdateTypeEnum>(TagUpdateTypeEnum.UPDATE);
+
   function cancelBatchEdit() {
     showBatchEditModal.value = false;
     batchFormRef.value?.resetFields();
@@ -779,7 +1002,9 @@
       values: [],
       append: false,
     };
+    selectedTagType.value = TagUpdateTypeEnum.UPDATE;
   }
+
   function handleBatchEditCase() {
     batchFormRef.value?.validate(async (errors) => {
       if (!errors) {
@@ -792,7 +1017,8 @@
             excludeIds: batchParams.value?.excludeIds || [],
             ...batchConditionParams,
             type: batchForm.value.attr.charAt(0).toUpperCase() + batchForm.value.attr.slice(1), // 首字母大写
-            append: batchForm.value.append,
+            append: selectedTagType.value === TagUpdateTypeEnum.APPEND,
+            clear: selectedTagType.value === TagUpdateTypeEnum.CLEAR,
             [batchForm.value.attr]: batchForm.value.attr === 'tags' ? batchForm.value.values : batchForm.value.value,
           });
           Message.success(t('common.updateSuccess'));
@@ -808,8 +1034,12 @@
       }
     });
   }
-
   const batchConditionParams = ref<any>();
+
+  const showSyncModal = ref<boolean>(false);
+  function syncParams() {
+    showSyncModal.value = true;
+  }
 
   // 处理表格选中后批量操作
   function handleTableBatch(event: BatchActionParams, params: BatchActionQueryParams) {
@@ -827,6 +1057,9 @@
           batchConditionParams.value = data;
           showBatchExecute.value = true;
         });
+        break;
+      case 'sync':
+        syncParams();
         break;
       default:
         break;
@@ -868,11 +1101,6 @@
       console.log(error);
     }
   }
-  async function openCaseDetailDrawer(id: string) {
-    await getCaseDetailInfo(id);
-    caseExecute.value = false;
-    caseDetailDrawerVisible.value = true;
-  }
 
   async function openCaseDetailDrawerAndExecute(id: string) {
     await getCaseDetailInfo(id);
@@ -901,15 +1129,93 @@
   }
 
   const activeReportId = ref('');
+  const currentId = ref<string>('');
+  const currentCaseName = ref<string>('');
   const showExecuteResult = ref(false);
   async function showResult(record: ApiCaseDetail) {
     if (!record.lastReportId) return;
     activeReportId.value = record.lastReportId;
+    currentId.value = record.id;
+    currentCaseName.value = record.name;
     showExecuteResult.value = true;
   }
 
+  const activeApiCaseId = ref<string>('');
+  const activeDefinedId = ref<string>('');
+  const showDifferentDrawer = ref<boolean>(false);
+
+  async function showDifferences(record: ApiCaseDetail) {
+    activeApiCaseId.value = record.id;
+    activeDefinedId.value = record.apiDefinitionId;
+    showDifferentDrawer.value = true;
+  }
+  function closeDifferent() {
+    showDifferentDrawer.value = false;
+    activeApiCaseId.value = '';
+    activeDefinedId.value = '';
+  }
+
+  const syncLoading = ref<boolean>(false);
+  const syncModalRef = ref<InstanceType<typeof SyncModal>>();
+  // 批量同步
+  async function handleBatchSync(syncForm: batchSyncForm) {
+    try {
+      syncLoading.value = true;
+      const selectModules = await getModuleIds();
+      const params = await genBatchConditionParams();
+      await caseTableBatchSync({
+        selectIds: batchParams.value?.selectedIds || [],
+        selectAll: !!batchParams.value?.selectAll,
+        excludeIds: batchParams.value?.excludeIds || [],
+        ...params,
+        ...syncForm,
+        moduleIds: selectModules,
+      });
+      Message.success(t('bugManagement.syncSuccess'));
+      syncModalRef.value?.resetForm();
+      resetSelector();
+      loadCaseListAndResetSelector();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    } finally {
+      syncLoading.value = false;
+    }
+  }
+  const showCaseVisible = ref(false);
+  // 清除本次变更
+  async function handleClearThisChange(isEvery: boolean) {
+    await loadCaseList();
+    await getCaseDetailInfo(activeApiCaseId.value);
+    if (showCaseVisible.value) {
+      createAndEditCaseDrawerRef.value?.open(caseDetail.value.apiDefinitionId, caseDetail.value as RequestParam, false);
+    }
+    if (isEvery) {
+      showDifferentDrawer.value = false;
+    }
+  }
+
+  // 对比抽屉同步成功打开编辑
+  async function syncParamsHandler(mergedRequestParam: RequestParam) {
+    await getCaseDetailInfo(activeApiCaseId.value);
+    caseDetail.value = { ...caseDetail.value, ...mergedRequestParam };
+    createAndEditCaseDrawerRef.value?.open(caseDetail.value.apiDefinitionId, caseDetail.value as RequestParam, false);
+  }
+
+  onBeforeMount(() => {
+    if (route.query.view) {
+      setAdvanceFilter({ conditions: [], searchMode: 'AND' }, route.query.view as string);
+      viewName.value = route.query.view as string;
+    }
+
+    if (route.query.home) {
+      propsRes.value.filter = { ...NAV_NAVIGATION[route.query.home as WorkNavValueEnum] };
+    }
+  });
+
   defineExpose({
     loadCaseList,
+    isAdvancedSearchMode,
   });
 
   await tableStore.initColumn(TableKeyEnum.API_TEST_MANAGEMENT_CASE, columns, 'drawer', true);

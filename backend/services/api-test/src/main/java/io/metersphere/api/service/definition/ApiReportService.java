@@ -5,7 +5,9 @@ import io.metersphere.api.dto.definition.*;
 import io.metersphere.api.dto.report.ApiReportListDTO;
 import io.metersphere.api.mapper.*;
 import io.metersphere.api.utils.ApiDataUtils;
-import io.metersphere.sdk.constants.ApiReportStatus;
+import io.metersphere.plan.domain.TestPlan;
+import io.metersphere.plan.mapper.TestPlanMapper;
+import io.metersphere.sdk.constants.ExecStatus;
 import io.metersphere.sdk.domain.Environment;
 import io.metersphere.sdk.domain.EnvironmentGroup;
 import io.metersphere.sdk.dto.api.result.RequestResult;
@@ -15,7 +17,12 @@ import io.metersphere.sdk.mapper.EnvironmentMapper;
 import io.metersphere.sdk.util.BeanUtils;
 import io.metersphere.sdk.util.SubListUtils;
 import io.metersphere.sdk.util.Translator;
+import io.metersphere.system.domain.ExecTaskItem;
+import io.metersphere.system.domain.TestResourcePool;
 import io.metersphere.system.domain.User;
+import io.metersphere.system.dto.taskhub.ExecTaskItemDetailDTO;
+import io.metersphere.system.mapper.ExecTaskItemMapper;
+import io.metersphere.system.mapper.ExtExecTaskMapper;
 import io.metersphere.system.mapper.TestResourcePoolMapper;
 import io.metersphere.system.mapper.UserMapper;
 import io.metersphere.system.notice.constants.NoticeConstants;
@@ -53,8 +60,6 @@ public class ApiReportService {
     @Resource
     private ApiReportLogService apiReportLogService;
     @Resource
-    private ApiTestCaseRecordMapper apiTestCaseRecordMapper;
-    @Resource
     private ApiReportLogMapper apiReportLogMapper;
     @Resource
     private UserMapper userMapper;
@@ -66,10 +71,42 @@ public class ApiReportService {
     private EnvironmentGroupMapper environmentGroupMapper;
     @Resource
     private ApiReportNoticeService apiReportNoticeService;
+    @Resource
+    private ApiReportRelateTaskMapper apiReportRelateTaskMapper;
+    @Resource
+    private ApiReportStepMapper apiReportStepMapper;
+    @Resource
+    private ExtExecTaskMapper extExecTaskMapper;
+    @Resource
+    private ExecTaskItemMapper execTaskItemMapper;
+    @Resource
+    private TestPlanMapper testPlanMapper;
+    @Resource
+    private ApiTestCaseRecordMapper apiTestCaseRecordMapper;
 
+    public void insertApiReport(ApiReport report) {
+        apiReportMapper.insertSelective(report);
+    }
+
+    public void insertApiReportDetail(ApiReportStep apiReportStep, ApiTestCaseRecord apiTestCaseRecord, ApiReportRelateTask apiReportRelateTask) {
+        apiReportStepMapper.insertSelective(apiReportStep);
+        apiTestCaseRecordMapper.insertSelective(apiTestCaseRecord);
+        apiReportRelateTaskMapper.insertSelective(apiReportRelateTask);
+    }
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void insertApiReport(ApiReport report, ApiReportRelateTask taskRelation) {
+        apiReportMapper.insertSelective(report);
+        apiReportRelateTaskMapper.insertSelective(taskRelation);
+    }
 
     @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
     public void insertApiReport(List<ApiReport> reports, List<ApiTestCaseRecord> records) {
+        this.insertApiReport(reports, records, null);
+    }
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void insertApiReport(List<ApiReport> reports, List<ApiTestCaseRecord> records, List<ApiReportRelateTask> taskRelations) {
         SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH);
         if (CollectionUtils.isNotEmpty(reports)) {
             ApiReportMapper reportMapper = sqlSession.getMapper(ApiReportMapper.class);
@@ -81,6 +118,13 @@ public class ApiReportService {
             ApiTestCaseRecordMapper detailMapper = sqlSession.getMapper(ApiTestCaseRecordMapper.class);
             SubListUtils.dealForSubList(records, 1000, subList -> {
                 subList.forEach(detailMapper::insertSelective);
+            });
+        }
+
+        if (CollectionUtils.isNotEmpty(taskRelations)) {
+            ApiReportRelateTaskMapper taskRelationMapper = sqlSession.getMapper(ApiReportRelateTaskMapper.class);
+            SubListUtils.dealForSubList(taskRelations, 1000, subList -> {
+                subList.forEach(taskRelationMapper::insertSelective);
             });
         }
         sqlSession.flushStatements();
@@ -192,11 +236,12 @@ public class ApiReportService {
         List<ApiReportLog> apiReportLogs = apiReportLogMapper.selectByExampleWithBLOBs(consoleExample);
         if (CollectionUtils.isNotEmpty(apiReportLogs)) {
             //获取所有的console,生成集合
-            List<String> consoleList = apiReportLogs.stream().map(c -> new String (c.getConsole())).toList();
+            List<String> consoleList = apiReportLogs.stream().map(c -> new String(c.getConsole())).toList();
             apiReportDTO.setConsole(String.join("\n", consoleList));
         }
         //查询资源池名称
-        apiReportDTO.setPoolName(testResourcePoolMapper.selectByPrimaryKey(apiReportDTO.getPoolId()).getName());
+        TestResourcePool testResourcePool = testResourcePoolMapper.selectByPrimaryKey(apiReportDTO.getPoolId());
+        apiReportDTO.setPoolName(testResourcePool != null ? testResourcePool.getName() : null);
         //查询环境名称
         String environmentName = null;
         if (StringUtils.isNoneBlank(apiReportDTO.getEnvironmentId())) {
@@ -220,7 +265,7 @@ public class ApiReportService {
         apiReportSteps.sort(Comparator.comparingLong(ApiReportStepDTO::getSort));
         apiReportDTO.setChildren(apiReportSteps);
         apiReportDTO.setTotal((long) apiReportSteps.size());
-        apiReportDTO.setPendingCount(apiReportSteps.stream().filter(step -> StringUtils.equals(ApiReportStatus.PENDING.name(), step.getStatus()) || StringUtils.isBlank(step.getStatus())).count());
+        apiReportDTO.setPendingCount(apiReportSteps.stream().filter(step -> StringUtils.equals(ExecStatus.PENDING.name(), step.getStatus()) || StringUtils.isBlank(step.getStatus())).count());
         return apiReportDTO;
     }
 
@@ -230,7 +275,7 @@ public class ApiReportService {
         apiReportDetails.forEach(apiReportDetail -> {
             ApiReportDetailDTO apiReportDetailDTO = new ApiReportDetailDTO();
             BeanUtils.copyBean(apiReportDetailDTO, apiReportDetail);
-            apiReportDetailDTO.setContent(apiReportDetail.getContent() != null ? ApiDataUtils.parseObject(new String(apiReportDetail.getContent()), RequestResult.class): null);
+            apiReportDetailDTO.setContent(apiReportDetail.getContent() != null ? ApiDataUtils.parseObject(new String(apiReportDetail.getContent()), RequestResult.class) : null);
             results.add(apiReportDetailDTO);
         });
         return results;
@@ -248,13 +293,123 @@ public class ApiReportService {
 
     /**
      * 更新执行中的用例报告
+     *
+     * @param reportId
+     */
+    public void updateReportRunningStatus(String reportId) {
+        ApiReport apiReport = new ApiReport();
+        apiReport.setId(reportId);
+        apiReport.setExecStatus(ExecStatus.RUNNING.name());
+        apiReport.setStartTime(System.currentTimeMillis());
+        apiReport.setUpdateTime(System.currentTimeMillis());
+        apiReportMapper.updateByPrimaryKeySelective(apiReport);
+    }
+
+
+    /**
+     * 更新执行中的用例报告
+     *
      * @param reportId
      */
     public void updateReportStatus(String reportId, String status) {
         ApiReport apiReport = new ApiReport();
         apiReport.setId(reportId);
-        apiReport.setStatus(status);
+        apiReport.setExecStatus(status);
         apiReport.setUpdateTime(System.currentTimeMillis());
         apiReportMapper.updateByPrimaryKeySelective(apiReport);
+    }
+
+    public void exportLog(String reportId, String userId, String projectId) {
+        ApiReport apiReport = apiReportMapper.selectByPrimaryKey(reportId);
+        Optional.ofNullable(apiReport).ifPresent(report -> apiReportLogService.exportLog(List.of(report), userId, projectId, "/api/report/case/export/" + reportId));
+    }
+
+    public void batchExportLog(ApiReportBatchRequest request, String userId, String projectId) {
+        List<String> ids = doSelectIds(request);
+        if (CollectionUtils.isNotEmpty(ids)) {
+            ApiReportExample example = new ApiReportExample();
+            example.createCriteria().andIdIn(ids);
+            List<ApiReport> reports = apiReportMapper.selectByExample(example);
+            apiReportLogService.exportLog(reports, userId, projectId, "/api/report/case/batch-export");
+        }
+    }
+
+    public ApiTaskReportDTO viewCaseTaskItemReport(String id) {
+        List<ExecTaskItemDetailDTO> taskList = extExecTaskMapper.selectTypeByItemId(id);
+        ApiTaskReportDTO apiTaskReportDTO = new ApiTaskReportDTO();
+
+        if (CollectionUtils.isNotEmpty(taskList)) {
+            ExecTaskItemDetailDTO task = taskList.getFirst();
+            //设置 顶部数据
+            BeanUtils.copyBean(apiTaskReportDTO, task);
+            //计划组处理来源
+            if (StringUtils.isNotBlank(apiTaskReportDTO.getTaskOrigin())) {
+                TestPlan testPlan = testPlanMapper.selectByPrimaryKey(apiTaskReportDTO.getTaskOrigin());
+                Optional.ofNullable(testPlan).ifPresent(item -> apiTaskReportDTO.setTaskOriginName(testPlan.getName()));
+            }
+            //资源池名称
+            if (StringUtils.isNotBlank(apiTaskReportDTO.getResourcePoolId())) {
+                TestResourcePool testResourcePool = testResourcePoolMapper.selectByPrimaryKey(apiTaskReportDTO.getResourcePoolId());
+                Optional.ofNullable(testResourcePool).ifPresent(item -> apiTaskReportDTO.setResourcePoolName(testResourcePool.getName()));
+            }
+
+            if (task.getIntegrated()) {
+                //集合报告
+                apiTaskReportDTO.setApiReportDetailDTOList(getIntegratedItemDetail(id, task.getId(), apiTaskReportDTO));
+            } else {
+                //非集合报告
+                apiTaskReportDTO.setApiReportDetailDTOList(reportDetail(id, apiTaskReportDTO));
+            }
+        }
+        return apiTaskReportDTO;
+    }
+
+    private List<ApiReportDetailDTO> getIntegratedItemDetail(String taskItemId, String taskId, ApiTaskReportDTO apiTaskReportDTO) {
+        ExecTaskItem taskItem = execTaskItemMapper.selectByPrimaryKey(taskItemId);
+        ApiReportRelateTaskExample example = new ApiReportRelateTaskExample();
+        example.createCriteria().andTaskResourceIdEqualTo(taskId);
+        List<ApiReportRelateTask> apiReportRelateTasks = apiReportRelateTaskMapper.selectByExample(example);
+        if (CollectionUtils.isEmpty(apiReportRelateTasks)) {
+            return new ArrayList<>();
+        }
+        String reportId = apiReportRelateTasks.getFirst().getReportId();
+        setEnvironment(reportId, apiTaskReportDTO);
+        return getDetail(reportId, taskItem.getResourceId());
+    }
+
+    private List<ApiReportDetailDTO> reportDetail(String id, ApiTaskReportDTO apiTaskReportDTO) {
+        List<ApiReportDetailDTO> list = new ArrayList<>();
+        ApiReportRelateTaskExample example = new ApiReportRelateTaskExample();
+        example.createCriteria().andTaskResourceIdEqualTo(id);
+        List<ApiReportRelateTask> apiReportRelateTasks = apiReportRelateTaskMapper.selectByExample(example);
+        if (CollectionUtils.isNotEmpty(apiReportRelateTasks)) {
+            //报告id
+            String reportId = apiReportRelateTasks.getFirst().getReportId();
+            //获取步骤id
+            String stepId = getStepId(reportId);
+            setEnvironment(reportId, apiTaskReportDTO);
+
+            list = getDetail(reportId, stepId);
+        }
+        return list;
+    }
+
+    private void setEnvironment(String reportId, ApiTaskReportDTO apiTaskReportDTO) {
+        ApiReport apiReport = apiReportMapper.selectByPrimaryKey(reportId);
+        if (StringUtils.isNotBlank(apiReport.getEnvironmentId())) {
+            Environment environment = environmentMapper.selectByPrimaryKey(apiReport.getEnvironmentId());
+            apiTaskReportDTO.setEnvironmentId(environment.getName());
+            apiTaskReportDTO.setEnvironmentName(environment.getName());
+        }
+    }
+
+    private String getStepId(String reportId) {
+        ApiReportStepExample example = new ApiReportStepExample();
+        example.createCriteria().andReportIdEqualTo(reportId);
+        List<ApiReportStep> apiReportSteps = apiReportStepMapper.selectByExample(example);
+        if (CollectionUtils.isNotEmpty(apiReportSteps)) {
+            return apiReportSteps.getFirst().getStepId();
+        }
+        return null;
     }
 }

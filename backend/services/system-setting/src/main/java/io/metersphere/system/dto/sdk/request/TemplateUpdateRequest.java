@@ -1,7 +1,7 @@
 package io.metersphere.system.dto.sdk.request;
 
 import io.metersphere.sdk.constants.TemplateScene;
-import io.metersphere.system.valid.EnumValue;
+import io.metersphere.sdk.valid.EnumValue;
 import io.metersphere.validation.groups.Created;
 import io.metersphere.validation.groups.Updated;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -49,4 +49,7 @@ public class TemplateUpdateRequest {
     @Valid
     @Schema(title = "系统字段列表")
     private List<TemplateSystemCustomFieldRequest> systemFields;
+
+    @Schema(description = "模板中新上传的文件ID列表")
+    private List<String> uploadImgFileIds;
 }

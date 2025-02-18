@@ -28,6 +28,8 @@
     :params="innerParams"
     :disabled="props.disabledExceptParam"
     :default-param-item="defaultRequestParamsItem"
+    :accept-types="restParamsTypes"
+    has-standard
     @apply="handleBatchParamApply"
   />
 </template>
@@ -61,7 +63,9 @@
   const { t } = useI18n();
 
   const innerParams = useVModel(props, 'params', emit);
-
+  const restParamsTypes = Object.values(RequestParamsType).filter(
+    (val) => ![RequestParamsType.JSON, RequestParamsType.FILE].includes(val)
+  );
   const columns = computed<ParamTableColumn[]>(() => [
     {
       title: 'apiTestDebug.paramName',
@@ -74,7 +78,7 @@
       dataIndex: 'paramType',
       slotName: 'paramType',
       hasRequired: true,
-      typeOptions: Object.values(RequestParamsType)
+      options: Object.values(RequestParamsType)
         .filter((val) => ![RequestParamsType.JSON, RequestParamsType.FILE].includes(val as RequestParamsType))
         .map((val) => ({
           label: val,
@@ -102,7 +106,7 @@
       width: 80,
     },
     {
-      title: 'apiTestDebug.desc',
+      title: 'common.desc',
       dataIndex: 'description',
       slotName: 'description',
     },

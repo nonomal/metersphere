@@ -2,13 +2,16 @@
   <MsCard simple no-content-padding>
     <div class="h-full p-[16px]">
       <MsAdvanceFilter
+        ref="msAdvanceFilterRef"
         v-model:keyword="keyword"
-        :search-placeholder="t('caseManagement.featureCase.searchByNameAndId')"
+        :view-type="ViewTypeEnum.BUG"
         :filter-config-list="filterConfigList"
-        :row-count="filterRowCount"
-        @keyword-search="fetchData"
+        :custom-fields-config-list="searchCustomFields"
+        :search-placeholder="t('caseManagement.featureCase.searchByNameAndId')"
+        :view-name="viewName"
+        @keyword-search="fetchData()"
         @adv-search="handleAdvSearch"
-        @refresh="handleAdvSearch"
+        @refresh="searchData()"
       >
         <template #left>
           <div class="flex gap-[12px]">
@@ -17,7 +20,7 @@
             </a-button>
             <a-button
               v-if="currentPlatform !== 'Local'"
-              v-permission="['PROJECT_BUG:READ+ADD']"
+              v-permission="['PROJECT_BUG:READ+UPDATE']"
               :loading="!isComplete"
               type="outline"
               @click="handleSync"
@@ -30,6 +33,7 @@
         class="mt-[16px]"
         v-bind="propsRes"
         :action-config="tableBatchActions"
+        :not-show-table-filter="isAdvancedSearchMode"
         v-on="propsEvent"
         @batch-action="handleTableBatch"
         @sorter-change="saveSort"
@@ -69,6 +73,20 @@
         </template>
         <template #statusName="{ record }">
           {{ record.statusName || '-' }}
+        </template>
+        <template #handleUserTitle>
+          <div class="flex items-center text-[var(--color-text-3)]">
+            {{ t('bugManagement.handleMan') }}
+            <a-tooltip :content="t('bugManagement.handleManTips')" position="right">
+              <icon-question-circle
+                class="ml-[4px] text-[var(--color-text-4)] hover:text-[rgb(var(--primary-5))]"
+                size="16"
+              />
+            </a-tooltip>
+          </div>
+        </template>
+        <template v-for="item in richPreviewColumns" :key="item.slotName" #[item.slotName]="{ record }">
+          <BugNamePopover :content="record[item.dataIndex] || ''" />
         </template>
       </MsBaseTable>
     </div>
@@ -116,15 +134,13 @@
     v-model:visible="exportVisible"
     :export-loading="exportLoading"
     :all-data="exportOptionData"
+    :disabled-cancel-keys="['name']"
+    :drawer-title-props="{
+      title: t('bugManagement.exportBug'),
+      count: currentSelectParams.currentSelectCount,
+    }"
     @confirm="exportConfirm"
-  >
-    <template #title>
-      <span class="text-[var(--color-text-1)]">{{ t('bugManagement.exportBug') }}</span>
-      <span v-if="currentSelectParams.currentSelectCount" class="text-[var(--color-text-4)]"
-        >({{ t('bugManagement.exportBugCount', { count: currentSelectParams.currentSelectCount }) }})</span
-      >
-    </template>
-  </MsExportDrawer>
+  />
   <BugDetailDrawer
     v-model:visible="detailVisible"
     :detail-id="activeDetailId"
@@ -156,10 +172,9 @@
   import { useRoute } from 'vue-router';
   import { useIntervalFn } from '@vueuse/core';
   import { Message, TableData } from '@arco-design/web-vue';
-  import { cloneDeep } from 'lodash-es';
 
-  import { MsAdvanceFilter, timeSelectOptions } from '@/components/pure/ms-advance-filter';
-  import { BackEndEnum, FilterFormItem, FilterResult, FilterType } from '@/components/pure/ms-advance-filter/type';
+  import { getFilterCustomFields, MsAdvanceFilter, timeSelectOptions } from '@/components/pure/ms-advance-filter';
+  import { FilterFormItem, FilterResult } from '@/components/pure/ms-advance-filter/type';
   import MsButton from '@/components/pure/ms-button/index.vue';
   import MsCard from '@/components/pure/ms-card/index.vue';
   import { MsExportDrawerMap, MsExportDrawerOption } from '@/components/pure/ms-export-drawer/types';
@@ -168,6 +183,7 @@
   import MsTableMoreAction from '@/components/pure/ms-table-more-action/index.vue';
   import { ActionsItem } from '@/components/pure/ms-table-more-action/types';
   import BugDetailDrawer from './components/bug-detail-drawer.vue';
+  import BugNamePopover from '@/views/case-management/caseManagementFeature/components/tabContent/tabBug/bugNamePopover.vue';
 
   import {
     checkBugExist,
@@ -181,22 +197,30 @@
     getPlatform,
     getSyncStatus,
     syncBugEnterprise,
-    syncBugOpenSource,
   } from '@/api/modules/bug-management';
+  import { getPlatformOptions } from '@/api/modules/project-management/menuManagement';
+  import { NAV_NAVIGATION } from '@/config/workbench';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import router from '@/router';
   import { useAppStore, useTableStore } from '@/store';
-  import useLicenseStore from '@/store/modules/setting/license';
+  import useCacheStore from '@/store/modules/cache/cache';
   import { customFieldDataToTableData, customFieldToColumns, downloadByteFile } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { BugEditCustomField, BugListItem, BugOptionItem } from '@/models/bug-management';
+  import { PoolOption } from '@/models/projectManagement/menuManagement';
+  import { FilterType, ViewTypeEnum } from '@/enums/advancedFilterEnum';
+  import { MenuEnum } from '@/enums/commonEnum';
   import { RouteEnum } from '@/enums/routeEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
+  import { WorkNavValueEnum } from '@/enums/workbenchEnum';
 
   import { makeColumns } from '@/views/case-management/caseManagementFeature/components/utils';
 
+  defineOptions({
+    name: RouteEnum.BUG_MANAGEMENT_INDEX,
+  });
   const { t } = useI18n();
   const MsExportDrawer = defineAsyncComponent(() => import('@/components/pure/ms-export-drawer/index.vue'));
   const DeleteModal = defineAsyncComponent(() => import('./components/deleteModal.vue'));
@@ -206,8 +230,6 @@
   const tableStore = useTableStore();
   const appStore = useAppStore();
   const projectId = computed(() => appStore.currentProjectId);
-  const filterVisible = ref(false);
-  const filterRowCount = ref(0);
   const syncVisible = ref(false);
   const exportVisible = ref(false);
   const exportOptionData = ref<MsExportDrawerMap>({});
@@ -221,12 +243,10 @@
   const deleteVisible = ref(false);
   const batchEditVisible = ref(false);
   const keyword = ref('');
-  const filterResult = ref<FilterResult>({ accordBelow: 'AND', combine: {} });
-  const licenseStore = useLicenseStore();
-  const isXpack = computed(() => licenseStore.hasLicense());
   const { openDeleteModal } = useModal();
   const route = useRoute();
   const severityFilterOptions = ref<BugOptionItem[]>([]);
+  const cacheStore = useCacheStore();
 
   // 是否同步完成
   const isComplete = ref(false);
@@ -245,32 +265,16 @@
   const handleSyncCancel = () => {
     syncVisible.value = false;
   };
-  const filterConfigList = reactive<FilterFormItem[]>([
-    {
-      title: 'bugManagement.ID',
-      dataIndex: 'num',
-      type: FilterType.INPUT,
-      backendType: BackEndEnum.NUMBER,
-    },
-    {
-      title: 'bugManagement.bugName',
-      dataIndex: 'title',
-      type: FilterType.INPUT,
-      backendType: BackEndEnum.STRING,
-    },
-    {
-      title: 'bugManagement.createTime',
-      dataIndex: 'createTime',
-      type: FilterType.DATE_PICKER,
-    },
-  ]);
 
-  const heightUsed = computed(() => 286 + (filterVisible.value ? 160 + (filterRowCount.value - 1) * 60 : 0));
+  const searchCustomFields = ref<FilterFormItem[]>([]);
 
   // 获取自定义字段
   const getCustomFieldColumns = async () => {
     const res = await getCustomFieldHeader(projectId.value);
     customFields.value = res;
+    searchCustomFields.value = getFilterCustomFields(
+      res.filter((item: BugEditCustomField) => item.fieldId !== 'title')
+    );
 
     //  实例化自定义字段的filters
     customFields.value.forEach((item) => {
@@ -316,7 +320,7 @@
       title: 'bugManagement.status',
       dataIndex: 'status',
       width: 100,
-      showTooltip: true,
+      showTooltip: false,
       slotName: 'statusName',
       filterConfig: {
         options: [],
@@ -329,6 +333,7 @@
       title: 'bugManagement.handleMan',
       dataIndex: 'handleUser',
       slotName: 'handleUser',
+      titleSlotName: 'handleUserTitle',
       showTooltip: true,
       width: 125,
       filterConfig: {
@@ -424,25 +429,34 @@
     },
   ];
 
-  const { propsRes, propsEvent, setKeyword, setAdvanceFilter, setLoadListParams, setProps, resetSelector, loadList } =
-    useTable(
-      getBugList,
-      {
-        tableKey: TableKeyEnum.BUG_MANAGEMENT,
-        selectable: true,
-        noDisable: false,
-        showSetting: true,
-        heightUsed: 106,
-        paginationSize: 'mini',
-      },
-      (record: TableData) => ({
-        ...record,
-        handleUser: record.handleUserName,
-        createUser: record.createUserName,
-        updateUser: record.updateUserName,
-        ...customFieldDataToTableData(record.customFields, customFields.value),
-      })
-    );
+  const {
+    propsRes,
+    propsEvent,
+    viewId,
+    advanceFilter,
+    setAdvanceFilter,
+    setKeyword,
+    setLoadListParams,
+    resetSelector,
+    loadList,
+  } = useTable(
+    getBugList,
+    {
+      tableKey: TableKeyEnum.BUG_MANAGEMENT,
+      selectable: true,
+      noDisable: false,
+      showSetting: true,
+      heightUsed: 256,
+      paginationSize: 'mini',
+    },
+    (record: TableData) => ({
+      ...record,
+      handleUser: record.handleUserName,
+      createUser: record.createUserName,
+      updateUser: record.updateUserName,
+      ...customFieldDataToTableData(record.customFields, customFields.value),
+    })
+  );
 
   const tableBatchActions = {
     baseAction: [
@@ -465,14 +479,23 @@
     ],
   };
 
+  const msAdvanceFilterRef = ref<InstanceType<typeof MsAdvanceFilter>>();
+  const isAdvancedSearchMode = computed(() => msAdvanceFilterRef.value?.isAdvancedSearchMode);
+
   function initTableParams() {
+    let workFilterParams = {};
+    if (route.query.home) {
+      workFilterParams = {
+        ...NAV_NAVIGATION[route.query.home as WorkNavValueEnum],
+      };
+    }
+
     return {
       keyword: keyword.value,
       projectId: projectId.value,
-      condition: {
-        keyword: keyword.value,
-        filter: propsRes.value.filter,
-      },
+      viewId: viewId.value,
+      combineSearch: advanceFilter,
+      ...workFilterParams,
     };
   }
 
@@ -486,20 +509,109 @@
     searchData();
   };
 
-  const handleAdvSearch = (filter: FilterResult) => {
-    filterResult.value = filter;
-    const { accordBelow, combine } = filter;
-    setAdvanceFilter(filter);
-    currentSelectParams.value = {
-      ...currentSelectParams.value,
-      condition: {
-        keyword: keyword.value,
-        searchMode: accordBelow,
-        filter: propsRes.value.filter,
-        combine,
+  const statusOption = ref<BugOptionItem[]>([]);
+  const handleUserOption = ref<BugOptionItem[]>([]);
+
+  const platformOption = ref<PoolOption[]>([]);
+  const initPlatformOption = async () => {
+    try {
+      const res = await getPlatformOptions(appStore.currentOrgId, MenuEnum.bugManagement);
+      platformOption.value = [...res, { id: 'Local', name: 'Local' }];
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  };
+
+  const filterConfigList = computed<FilterFormItem[]>(() => [
+    {
+      title: 'bugManagement.ID',
+      dataIndex: 'num',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'bugManagement.bugName',
+      dataIndex: 'title',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'bugManagement.belongPlatform',
+      dataIndex: 'platform',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'name',
+        valueKey: 'name',
+        options: platformOption.value,
       },
-    };
-    fetchData();
+    },
+    {
+      title: 'bugManagement.status',
+      dataIndex: 'status',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'text',
+        options: statusOption.value,
+      },
+    },
+    {
+      title: 'bugManagement.numberOfCase',
+      dataIndex: 'relationCaseCount',
+      type: FilterType.NUMBER,
+      numberProps: {
+        min: 0,
+        precision: 0,
+      },
+    },
+    {
+      title: 'bugManagement.handleMan',
+      dataIndex: 'handleUser',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'text',
+        options: handleUserOption.value,
+      },
+    },
+    {
+      title: 'common.tag',
+      dataIndex: 'tags',
+      type: FilterType.TAGS_INPUT,
+      numberProps: {
+        min: 0,
+        precision: 0,
+      },
+    },
+    {
+      title: 'common.creator',
+      dataIndex: 'createUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.createTime',
+      dataIndex: 'createTime',
+      type: FilterType.DATE_PICKER,
+    },
+    {
+      title: 'apiScenario.table.columns.updateUser',
+      dataIndex: 'updateUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.updateTime',
+      dataIndex: 'updateTime',
+      type: FilterType.DATE_PICKER,
+    },
+  ]);
+
+  const viewName = ref('');
+  // 高级检索
+  const handleAdvSearch = (filter: FilterResult, id: string) => {
+    resetSelector();
+    keyword.value = '';
+    setAdvanceFilter(filter, id);
+    searchData(); // 基础筛选都清空
   };
 
   const exportConfirm = async (option: MsExportDrawerOption[]) => {
@@ -579,23 +691,7 @@
   });
   // 同步缺陷按钮触发
   const handleSync = async () => {
-    if (isXpack.value) {
-      // 企业版
-      syncVisible.value = true;
-    } else {
-      try {
-        // 开源版
-        await syncBugOpenSource(appStore.currentProjectId);
-        Message.warning(t('bugManagement.synchronizing'));
-        isComplete.value = false;
-        isShowCompleteMsg.value = true;
-        // 开始轮询
-        resume();
-      } catch (error) {
-        // eslint-disable-next-line no-console
-        console.log(error);
-      }
-    }
+    syncVisible.value = true;
   };
   const handleSyncModalOk = async () => {
     try {
@@ -733,9 +829,9 @@
     }
     const condition = {
       keyword: keyword.value,
-      searchMode: filterResult.value.accordBelow,
       filter: propsRes.value.filter,
-      combine: filterResult.value.combine,
+      viewId: viewId.value,
+      combineSearch: advanceFilter,
     };
     currentSelectParams.value = {
       excludeIds: params.excludeIds,
@@ -762,6 +858,8 @@
 
   async function initFilterOptions() {
     const res = await getCustomOptionHeader(appStore.currentProjectId);
+    statusOption.value = res.statusOption;
+    handleUserOption.value = res.handleUserOption;
     const filterOptionsMaps: Record<string, any> = {
       status: res.statusOption,
       handleUser: res.handleUserOption,
@@ -776,13 +874,13 @@
     sort.value = sortObj;
   }
 
-  watchEffect(() => {
-    setProps({ heightUsed: heightUsed.value });
-  });
-
   onBeforeMount(() => {
     // 进入页面时检查当前项目轮训状态
     checkSyncStatus();
+    if (route.query.view) {
+      setAdvanceFilter({ conditions: [], searchMode: 'AND' }, route.query.view as string);
+      viewName.value = route.query.view as string;
+    }
   });
 
   let customColumns: MsTableColumn = [];
@@ -790,16 +888,20 @@
     try {
       customColumns = await getCustomFieldColumns();
       customColumns.forEach((item) => {
+        // 目前自定义字段的过滤只支持严重程度
         if (item.title === '严重程度' || item.title === 'Bug Degree') {
           item.showInTable = true;
           item.slotName = 'severity';
-          item.dataIndex = `custom_single_${item.dataIndex}`;
           item.filterConfig = {
-            options: cloneDeep(unref(severityFilterOptions.value)) || [],
+            options: item.options || [],
             labelKey: 'text',
           };
         } else {
           item.showInTable = false;
+        }
+        if (item.type === 'RICH_TEXT') {
+          item.slotName = item.dataIndex;
+          item.showTooltip = false;
         }
       });
     } catch (error) {
@@ -808,19 +910,41 @@
     }
   }
 
+  const richPreviewColumns = computed<Record<string, any>[]>(() => {
+    return customColumns.filter((item) => item.type === 'RICH_TEXT');
+  });
+
   await getColumnHeaders();
   await initFilterOptions();
+  await initPlatformOption();
   await tableStore.initColumn(TableKeyEnum.BUG_MANAGEMENT, columns.concat(customColumns), 'drawer');
 
-  onMounted(() => {
+  function mountedLoad() {
     setLoadListParams({ projectId: projectId.value });
     setCurrentPlatform();
     setExportOptionData();
     fetchData();
     if (route.query.id) {
       // 分享或成功进来的页面
-      handleShowDetail(route.query.id as string, 0);
+      handleShowDetail(route.query.id as string, -1);
     }
+  }
+  const isActivated = computed(() => cacheStore.cacheViews.includes(RouteEnum.BUG_MANAGEMENT_INDEX));
+
+  onMounted(() => {
+    if (!isActivated.value) {
+      mountedLoad();
+    }
+  });
+
+  onActivated(() => {
+    if (isActivated.value) {
+      mountedLoad();
+    }
+  });
+
+  onDeactivated(() => {
+    detailVisible.value = false;
   });
 
   onBeforeUnmount(() => {

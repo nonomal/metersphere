@@ -1,6 +1,5 @@
 package io.metersphere.api.service.debug;
 
-import io.metersphere.sdk.constants.ApiFileResourceType;
 import io.metersphere.api.constants.ApiResourceType;
 import io.metersphere.api.domain.ApiDebug;
 import io.metersphere.api.domain.ApiDebugBlob;
@@ -24,7 +23,9 @@ import io.metersphere.project.domain.FileMetadata;
 import io.metersphere.project.dto.MoveNodeSortDTO;
 import io.metersphere.project.service.MoveNodeService;
 import io.metersphere.project.service.ProjectService;
+import io.metersphere.sdk.constants.ApiFileResourceType;
 import io.metersphere.sdk.constants.DefaultRepositoryDir;
+import io.metersphere.sdk.dto.api.task.TaskInfo;
 import io.metersphere.sdk.dto.api.task.TaskRequestDTO;
 import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.util.BeanUtils;
@@ -210,13 +211,17 @@ public class ApiDebugService extends MoveNodeService {
 
     public TaskRequestDTO debug(ApiDebugRunRequest request) {
         ApiResourceRunRequest runRequest = apiExecuteService.getApiResourceRunRequest(request);
-        ApiParamConfig apiParamConfig = apiExecuteService.getApiParamConfig(request.getReportId());
+        ApiParamConfig apiParamConfig = apiExecuteService.getApiParamConfig();
 
         TaskRequestDTO taskRequest = apiExecuteService.getTaskRequest(request.getReportId(), request.getId(), request.getProjectId());
-        taskRequest.setSaveResult(false);
-        taskRequest.setRealTime(true);
-        taskRequest.setResourceType(ApiResourceType.API_DEBUG.name());
-        taskRequest.setRunMode(apiExecuteService.getDebugRunModule(request.getFrontendDebug()));
+        TaskInfo taskInfo = taskRequest.getTaskInfo();
+        taskInfo.setTaskId(request.getReportId());
+        taskInfo.setSaveResult(false);
+        taskInfo.setRealTime(true);
+        taskInfo.setResourceType(ApiResourceType.API_DEBUG.name());
+        taskInfo.setRunMode(apiExecuteService.getDebugRunModule(request.getFrontendDebug()));
+        taskRequest.getTaskItem().setId(request.getReportId());
+        apiParamConfig.setTaskItemId(taskRequest.getTaskItem().getId());
         return apiExecuteService.apiExecute(runRequest, taskRequest, apiParamConfig);
     }
 
@@ -265,7 +270,7 @@ public class ApiDebugService extends MoveNodeService {
     }
 
     public void moveNode(PosRequest posRequest) {
-        NodeMoveRequest request = super.getNodeMoveRequest(posRequest);
+        NodeMoveRequest request = super.getNodeMoveRequest(posRequest, true);
         MoveNodeSortDTO sortDTO = super.getNodeSortDTO(
                 posRequest.getProjectId(),
                 request,

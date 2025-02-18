@@ -6,6 +6,9 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+/**
+ * @author song-cc-rock
+ */
 @Data
 @EqualsAndHashCode(callSuper = false)
 public class BugPageRequest extends BasePageRequest {
@@ -14,6 +17,24 @@ public class BugPageRequest extends BasePageRequest {
     @NotBlank(message = "{bug.project_id.not_blank}")
     private String projectId;
 
-    @Schema(description = "是否回收站")
+    @Schema(description = "是否回收站, 后台默认设置")
     private boolean useTrash;
+
+    @Schema(description = "待办参数: 后台默认设置")
+    private BugTodoRequest todoParam;
+
+    @Schema(description = "工作台参数: 是否属于测试计划")
+    private Boolean relatedToPlan = false;
+
+    @Schema(description = "工作台参数: 是否我创建的")
+    private Boolean createByMe = false;
+
+    @Schema(description = "工作台参数: 是否待我处理的")
+    private Boolean assignedToMe = false;
+
+    @Schema(description = "工作台参数: 缺陷数")
+    private Boolean boardCount = false;
+
+    @Schema(description = "工作台参数: 是否遗留的")
+    private Boolean unresolved = false;
 }

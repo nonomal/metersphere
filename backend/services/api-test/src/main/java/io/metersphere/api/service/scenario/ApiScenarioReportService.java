@@ -8,18 +8,25 @@ import io.metersphere.api.dto.report.ApiScenarioReportListDTO;
 import io.metersphere.api.dto.scenario.ApiScenarioReportDTO;
 import io.metersphere.api.dto.scenario.ApiScenarioReportDetailDTO;
 import io.metersphere.api.dto.scenario.ApiScenarioReportStepDTO;
+import io.metersphere.api.dto.scenario.ExecTaskDetailDTO;
 import io.metersphere.api.mapper.*;
-import io.metersphere.api.utils.ApiDataUtils;
-import io.metersphere.sdk.constants.ApiReportStatus;
+import io.metersphere.plan.domain.TestPlan;
+import io.metersphere.plan.mapper.TestPlanMapper;
+import io.metersphere.sdk.constants.ExecStatus;
+import io.metersphere.sdk.constants.ResultStatus;
 import io.metersphere.sdk.domain.Environment;
 import io.metersphere.sdk.domain.EnvironmentGroup;
-import io.metersphere.sdk.dto.api.result.RequestResult;
 import io.metersphere.sdk.mapper.EnvironmentGroupMapper;
 import io.metersphere.sdk.mapper.EnvironmentMapper;
 import io.metersphere.sdk.util.BeanUtils;
 import io.metersphere.sdk.util.SubListUtils;
 import io.metersphere.sdk.util.Translator;
+import io.metersphere.system.domain.ExecTaskItem;
+import io.metersphere.system.domain.TestResourcePool;
 import io.metersphere.system.domain.User;
+import io.metersphere.system.dto.taskhub.ExecTaskItemDetailDTO;
+import io.metersphere.system.mapper.ExecTaskItemMapper;
+import io.metersphere.system.mapper.ExtExecTaskMapper;
 import io.metersphere.system.mapper.TestResourcePoolMapper;
 import io.metersphere.system.mapper.UserMapper;
 import io.metersphere.system.notice.constants.NoticeConstants;
@@ -53,9 +60,11 @@ public class ApiScenarioReportService {
     @Resource
     private ApiScenarioReportMapper apiScenarioReportMapper;
     @Resource
+    private ApiReportRelateTaskMapper apiReportRelateTaskMapper;
+    @Resource
     private ApiScenarioReportLogService apiScenarioReportLogService;
     @Resource
-    private ApiScenarioReportDetailMapper apiScenarioReportDetailMapper;
+    private ExtApiScenarioReportDetailBlobMapper extApiScenarioReportDetailBlobMapper;
     @Resource
     private ApiScenarioReportLogMapper apiScenarioReportLogMapper;
     @Resource
@@ -69,9 +78,39 @@ public class ApiScenarioReportService {
     @Resource
     private ApiScenarioReportNoticeService apiScenarioReportNoticeService;
     private static final String SPLITTER = "_";
+    private static final int MAX = 50000;
+    private static final int BATCH_SIZE = 1000;
+    @Resource
+    private ExtExecTaskMapper extExecTaskMapper;
+    @Resource
+    private ExecTaskItemMapper execTaskItemMapper;
+    @Resource
+    private TestPlanMapper testPlanMapper;
+    @Resource
+    private ApiScenarioRecordMapper apiScenarioRecordMapper;
+
+    public void insertApiScenarioReport(ApiScenarioReport report) {
+        apiScenarioReportMapper.insertSelective(report);
+    }
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void insertApiScenarioReport(ApiScenarioReport report, ApiReportRelateTask taskRelation) {
+        apiScenarioReportMapper.insertSelective(report);
+        apiReportRelateTaskMapper.insertSelective(taskRelation);
+    }
 
     @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
     public void insertApiScenarioReport(List<ApiScenarioReport> reports, List<ApiScenarioRecord> records) {
+        this.insertApiScenarioReport(reports, records, null);
+    }
+
+    public void insertApiScenarioReportDetail(ApiScenarioRecord record, ApiReportRelateTask taskRelation) {
+        apiScenarioRecordMapper.insertSelective(record);
+        apiReportRelateTaskMapper.insertSelective(taskRelation);
+    }
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void insertApiScenarioReport(List<ApiScenarioReport> reports, List<ApiScenarioRecord> records, List<ApiReportRelateTask> taskRelations) {
         SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH);
         if (CollectionUtils.isNotEmpty(reports)) {
             ApiScenarioReportMapper reportMapper = sqlSession.getMapper(ApiScenarioReportMapper.class);
@@ -83,6 +122,12 @@ public class ApiScenarioReportService {
             ApiScenarioRecordMapper detailMapper = sqlSession.getMapper(ApiScenarioRecordMapper.class);
             SubListUtils.dealForSubList(records, 1000, subList -> {
                 subList.forEach(detailMapper::insertSelective);
+            });
+        }
+        if (CollectionUtils.isNotEmpty(taskRelations)) {
+            ApiReportRelateTaskMapper taskRelationMapper = sqlSession.getMapper(ApiReportRelateTaskMapper.class);
+            SubListUtils.dealForSubList(taskRelations, 1000, subList -> {
+                subList.forEach(taskRelationMapper::insertSelective);
             });
         }
         sqlSession.flushStatements();
@@ -189,11 +234,59 @@ public class ApiScenarioReportService {
         BeanUtils.copyBean(scenarioReportDTO, scenarioReport);
         //需要查询出所有的步骤
         List<ApiScenarioReportStepDTO> scenarioReportSteps = extApiScenarioReportMapper.selectStepByReportId(id);
-        //查询所有步骤的detail
+
         List<ApiScenarioReportStepDTO> deatilList = extApiScenarioReportMapper.selectStepDetailByReportId(id);
         //根据stepId进行分组
         Map<String, List<ApiScenarioReportStepDTO>> detailMap = deatilList.stream().collect(Collectors.groupingBy(ApiScenarioReportStepDTO::getStepId));
         //只处理请求的
+        detailRequest(scenarioReportSteps, detailMap);
+
+        //将scenarioReportSteps按照parentId进行分组 值为list 然后根据sort进行排序
+        Map<String, List<ApiScenarioReportStepDTO>> scenarioReportStepMap = scenarioReportSteps.stream().collect(Collectors.groupingBy(ApiScenarioReportStepDTO::getParentId));
+
+        List<ApiScenarioReportStepDTO> steps = Optional.ofNullable(scenarioReportStepMap.get("NONE")).orElse(new ArrayList<>(0));
+        steps.sort(Comparator.comparingLong(ApiScenarioReportStepDTO::getSort));
+
+        getStepTree(steps, scenarioReportStepMap);
+
+        scenarioReportDTO.setStepTotal(steps.size());
+        scenarioReportDTO.setRequestTotal(getRequestTotal(scenarioReportDTO));
+        scenarioReportDTO.setChildren(steps);
+
+        scenarioReportDTO.setStepErrorCount(steps.stream().filter(step -> StringUtils.equals(ResultStatus.ERROR.name(), step.getStatus())).count());
+        scenarioReportDTO.setStepSuccessCount(steps.stream().filter(step -> StringUtils.equals(ResultStatus.SUCCESS.name(), step.getStatus())).count());
+        scenarioReportDTO.setStepPendingCount(steps.stream().filter(step -> StringUtils.equals(ExecStatus.PENDING.name(), step.getStatus()) || StringUtils.isBlank(step.getStatus())).count());
+        scenarioReportDTO.setStepFakeErrorCount(steps.stream().filter(step -> StringUtils.equals(ResultStatus.FAKE_ERROR.name(), step.getStatus())).count());
+        //控制台信息 console
+        ApiScenarioReportLogExample example = new ApiScenarioReportLogExample();
+        example.createCriteria().andReportIdEqualTo(id);
+        List<ApiScenarioReportLog> apiScenarioReportLogs = apiScenarioReportLogMapper.selectByExampleWithBLOBs(example);
+        if (CollectionUtils.isNotEmpty(apiScenarioReportLogs)) {
+            //获取所有的console,生成集合
+            List<String> consoleList = apiScenarioReportLogs.stream().map(c -> new String(c.getConsole())).toList();
+            scenarioReportDTO.setConsole(String.join("\n", consoleList));
+        }
+        //查询资源池名称
+        TestResourcePool testResourcePool = testResourcePoolMapper.selectByPrimaryKey(scenarioReport.getPoolId());
+        scenarioReportDTO.setPoolName(testResourcePool != null ? testResourcePool.getName() : null);
+        //查询环境名称
+        String environmentName = null;
+        if (StringUtils.isNotBlank(scenarioReport.getEnvironmentId())) {
+            Environment environment = environmentMapper.selectByPrimaryKey(scenarioReport.getEnvironmentId());
+            if (environment != null) {
+                environmentName = environment.getName();
+            }
+            EnvironmentGroup environmentGroup = environmentGroupMapper.selectByPrimaryKey(scenarioReport.getEnvironmentId());
+            if (environmentGroup != null) {
+                environmentName = environmentGroup.getName();
+            }
+        }
+        scenarioReportDTO.setEnvironmentName(environmentName);
+        scenarioReportDTO.setCreatUserName(userMapper.selectByPrimaryKey(scenarioReport.getCreateUser()).getName());
+        return scenarioReportDTO;
+    }
+
+    private static void detailRequest(List<ApiScenarioReportStepDTO> scenarioReportSteps, Map<String, List<ApiScenarioReportStepDTO>> detailMap) {
         List<String> stepTypes = Arrays.asList(ApiScenarioStepType.API_CASE.name(),
                 ApiScenarioStepType.API.name(),
                 ApiScenarioStepType.CUSTOM_REQUEST.name(),
@@ -201,9 +294,9 @@ public class ApiScenarioReportService {
         scenarioReportSteps.parallelStream().forEach(step -> {
             if (StringUtils.equals(ApiScenarioStepType.CONSTANT_TIMER.name(), step.getStepType())) {
                 if (CollectionUtils.isNotEmpty(detailMap.get(step.getStepId()))) {
-                    step.setStatus(ApiReportStatus.SUCCESS.name());
+                    step.setStatus(ResultStatus.SUCCESS.name());
                 } else {
-                    step.setStatus(ApiReportStatus.PENDING.name());
+                    step.setStatus(ExecStatus.PENDING.name());
                 }
             }
             if (stepTypes.contains(step.getStepType())) {
@@ -223,15 +316,21 @@ public class ApiScenarioReportService {
                         step.setRequestTime(details.stream().mapToLong(ApiScenarioReportStepDTO::getRequestTime).sum());
                         step.setResponseSize(details.stream().mapToLong(ApiScenarioReportStepDTO::getResponseSize).sum());
                         List<String> requestStatus = details.stream().map(ApiScenarioReportStepDTO::getStatus).toList();
-                        List<String> successStatus = requestStatus.stream().filter(status -> StringUtils.equals(ApiReportStatus.SUCCESS.name(), status)).toList();
-                        if (requestStatus.contains(ApiReportStatus.ERROR.name())) {
-                            step.setStatus(ApiReportStatus.ERROR.name());
-                        } else if (requestStatus.contains(ApiReportStatus.FAKE_ERROR.name())) {
-                            step.setStatus(ApiReportStatus.FAKE_ERROR.name());
+                        List<String> successStatus = requestStatus.stream().filter(status -> StringUtils.equals(ResultStatus.SUCCESS.name(), status)).toList();
+                        if (requestStatus.contains(ResultStatus.ERROR.name())) {
+                            step.setStatus(ResultStatus.ERROR.name());
+                        } else if (requestStatus.contains(ResultStatus.FAKE_ERROR.name())) {
+                            step.setStatus(ResultStatus.FAKE_ERROR.name());
                         } else if (successStatus.size() == details.size()) {
-                            step.setStatus(ApiReportStatus.SUCCESS.name());
+                            step.setStatus(ResultStatus.SUCCESS.name());
                         } else {
-                            step.setStatus(ApiReportStatus.PENDING.name());
+                            step.setStatus(ExecStatus.PENDING.name());
+                        }
+
+                        // 重试的话，取最后一次的状态
+                        ApiScenarioReportStepDTO lastDetail = details.getLast();
+                        if (lastDetail.getName().contains("MsRetry_")) {
+                            step.setStatus(lastDetail.getStatus());
                         }
                     }
                     step.setChildren(details);
@@ -247,49 +346,6 @@ public class ApiScenarioReportService {
                 }
             }
         });
-
-        //将scenarioReportSteps按照parentId进行分组 值为list 然后根据sort进行排序
-        Map<String, List<ApiScenarioReportStepDTO>> scenarioReportStepMap = scenarioReportSteps.stream().collect(Collectors.groupingBy(ApiScenarioReportStepDTO::getParentId));
-        // TODO 查询修改
-        List<ApiScenarioReportStepDTO> steps = Optional.ofNullable(scenarioReportStepMap.get("NONE")).orElse(new ArrayList<>(0));
-        steps.sort(Comparator.comparingLong(ApiScenarioReportStepDTO::getSort));
-
-        getStepTree(steps, scenarioReportStepMap);
-
-        scenarioReportDTO.setStepTotal(steps.size());
-        scenarioReportDTO.setRequestTotal(getRequestTotal(scenarioReportDTO));
-        scenarioReportDTO.setChildren(steps);
-
-        scenarioReportDTO.setStepErrorCount(steps.stream().filter(step -> StringUtils.equals(ApiReportStatus.ERROR.name(), step.getStatus())).count());
-        scenarioReportDTO.setStepSuccessCount(steps.stream().filter(step -> StringUtils.equals(ApiReportStatus.SUCCESS.name(), step.getStatus())).count());
-        scenarioReportDTO.setStepPendingCount(steps.stream().filter(step -> StringUtils.equals(ApiReportStatus.PENDING.name(), step.getStatus()) || StringUtils.isBlank(step.getStatus())).count());
-        scenarioReportDTO.setStepFakeErrorCount(steps.stream().filter(step -> StringUtils.equals(ApiReportStatus.FAKE_ERROR.name(), step.getStatus())).count());
-        //控制台信息 console
-        ApiScenarioReportLogExample example = new ApiScenarioReportLogExample();
-        example.createCriteria().andReportIdEqualTo(id);
-        List<ApiScenarioReportLog> apiScenarioReportLogs = apiScenarioReportLogMapper.selectByExampleWithBLOBs(example);
-        if (CollectionUtils.isNotEmpty(apiScenarioReportLogs)) {
-            //获取所有的console,生成集合
-            List<String> consoleList = apiScenarioReportLogs.stream().map(c -> new String (c.getConsole())).toList();
-            scenarioReportDTO.setConsole(String.join("\n", consoleList));
-        }
-        //查询资源池名称
-        scenarioReportDTO.setPoolName(testResourcePoolMapper.selectByPrimaryKey(scenarioReport.getPoolId()).getName());
-        //查询环境名称
-        String environmentName = null;
-        if (StringUtils.isNotBlank(scenarioReport.getEnvironmentId())) {
-            Environment environment = environmentMapper.selectByPrimaryKey(scenarioReport.getEnvironmentId());
-            if (environment != null) {
-                environmentName = environment.getName();
-            }
-            EnvironmentGroup environmentGroup = environmentGroupMapper.selectByPrimaryKey(scenarioReport.getEnvironmentId());
-            if (environmentGroup != null) {
-                environmentName = environmentGroup.getName();
-            }
-        }
-        scenarioReportDTO.setEnvironmentName(environmentName);
-        scenarioReportDTO.setCreatUserName(userMapper.selectByPrimaryKey(scenarioReport.getCreateUser()).getName());
-        return scenarioReportDTO;
     }
 
     public long getRequestTotal(ApiScenarioReport report) {
@@ -315,19 +371,19 @@ public class ApiScenarioReportService {
                     //获取所有的子请求的状态
                     List<String> requestStatus = children.stream().map(ApiScenarioReportStepDTO::getStatus).toList();
                     //获取为执行的状态
-                    List<String> pendingStatus = requestStatus.stream().filter(status -> StringUtils.equals(ApiReportStatus.PENDING.name(), status) || StringUtils.isBlank(status)).toList();
+                    List<String> pendingStatus = requestStatus.stream().filter(status -> StringUtils.equals(ExecStatus.PENDING.name(), status) || StringUtils.isBlank(status)).toList();
                     //过滤出来SUCCESS的状态
-                    List<String> successStatus = requestStatus.stream().filter(status -> StringUtils.equals(ApiReportStatus.SUCCESS.name(), status)).toList();
+                    List<String> successStatus = requestStatus.stream().filter(status -> StringUtils.equals(ResultStatus.SUCCESS.name(), status)).toList();
                     //只要包含ERROR 就是ERROR
-                    if (requestStatus.contains(ApiReportStatus.ERROR.name())) {
-                        step.setStatus(ApiReportStatus.ERROR.name());
-                    } else if (requestStatus.contains(ApiReportStatus.FAKE_ERROR.name())) {
-                        step.setStatus(ApiReportStatus.FAKE_ERROR.name());
+                    if (requestStatus.contains(ResultStatus.ERROR.name())) {
+                        step.setStatus(ResultStatus.ERROR.name());
+                    } else if (requestStatus.contains(ResultStatus.FAKE_ERROR.name())) {
+                        step.setStatus(ResultStatus.FAKE_ERROR.name());
                     } else if (successStatus.size() + pendingStatus.size() == children.size() && !successStatus.isEmpty()) {
-                        step.setStatus(ApiReportStatus.SUCCESS.name());
+                        step.setStatus(ResultStatus.SUCCESS.name());
                     }
                 } else if (stepTypes.contains(step.getStepType())) {
-                    step.setStatus(ApiReportStatus.PENDING.name());
+                    step.setStatus(ExecStatus.PENDING.name());
                 }
             });
         }
@@ -340,43 +396,96 @@ public class ApiScenarioReportService {
             index = StringUtils.substringAfter(stepId, SPLITTER);
             stepId = StringUtils.substringBefore(stepId, SPLITTER);
         }
-        List<ApiScenarioReportDetail> apiReportDetails = checkResourceStep(stepId, reportId);
-        apiReportDetails.sort(Comparator.comparingLong(ApiScenarioReportDetail::getSort));
+        List<ApiScenarioReportDetailDTO> apiReportDetails = checkResourceStep(stepId, reportId);
+        apiReportDetails.sort(Comparator.comparingLong(ApiScenarioReportDetailDTO::getSort));
 
         if (StringUtils.isNotBlank(index)) {
-            ApiScenarioReportDetail apiScenarioReportDetail = apiReportDetails.get(Integer.parseInt(index) - 1);
+            ApiScenarioReportDetailDTO apiScenarioReportDetail = apiReportDetails.get(Integer.parseInt(index) - 1);
             apiReportDetails = Collections.singletonList(apiScenarioReportDetail);
         }
-        List<ApiScenarioReportDetailDTO> results = new ArrayList<>();
-        apiReportDetails.forEach(apiReportDetail -> {
-            ApiScenarioReportDetailDTO apiReportDetailDTO = new ApiScenarioReportDetailDTO();
-            BeanUtils.copyBean(apiReportDetailDTO, apiReportDetail);
-            apiReportDetailDTO.setContent(apiReportDetail.getContent() != null ? ApiDataUtils.parseObject(new String(apiReportDetail.getContent()), RequestResult.class) : null);
-            results.add(apiReportDetailDTO);
-        });
-        return results;
+        return apiReportDetails;
     }
 
-    private List<ApiScenarioReportDetail> checkResourceStep(String stepId, String reportId) {
-        ApiScenarioReportDetailExample detailExample = new ApiScenarioReportDetailExample();
-        detailExample.createCriteria().andStepIdEqualTo(stepId).andReportIdEqualTo(reportId);
-        List<ApiScenarioReportDetail> apiReportDetails = apiScenarioReportDetailMapper.selectByExampleWithBLOBs(detailExample);
+    private List<ApiScenarioReportDetailDTO> checkResourceStep(String stepId, String reportId) {
+        List<ApiScenarioReportDetailDTO> apiReportDetails = extApiScenarioReportDetailBlobMapper.selectByExampleWithBLOBs(stepId, reportId);
         if (CollectionUtils.isEmpty(apiReportDetails)) {
             return new ArrayList<>();
         }
         return apiReportDetails;
     }
 
-    /**
-     * 更新执行中的场景报告
-     *
-     * @param reportId
-     */
-    public void updateReportStatus(String reportId, String status) {
-        ApiScenarioReport scenarioReport = new ApiScenarioReport();
-        scenarioReport.setId(reportId);
-        scenarioReport.setStatus(status);
-        scenarioReport.setUpdateTime(System.currentTimeMillis());
-        apiScenarioReportMapper.updateByPrimaryKeySelective(scenarioReport);
+    public List<ApiScenarioReport> getApiScenarioReportByIds(List<String> reportIds) {
+        if (CollectionUtils.isEmpty(reportIds)) {
+            return List.of();
+        }
+        ApiScenarioReportExample reportExample = new ApiScenarioReportExample();
+        reportExample.createCriteria().andIdIn(reportIds);
+        return apiScenarioReportMapper.selectByExample(reportExample);
+    }
+
+    public void exportLog(String reportId, String userId, String projectId) {
+        ApiScenarioReport apiScenarioReport = apiScenarioReportMapper.selectByPrimaryKey(reportId);
+        Optional.ofNullable(apiScenarioReport).ifPresent(report -> apiScenarioReportLogService.exportLog(List.of(report), userId, projectId, "/api/report/scenario/export/" + reportId));
+    }
+
+    public void batchExportLog(ApiReportBatchRequest request, String userId, String projectId) {
+        List<String> ids = doSelectIds(request);
+        if(CollectionUtils.isNotEmpty(ids)){
+            ApiScenarioReportExample example = new ApiScenarioReportExample();
+            example.createCriteria().andIdIn(ids);
+            List<ApiScenarioReport> reports = apiScenarioReportMapper.selectByExample(example);
+            apiScenarioReportLogService.exportLog(reports, userId, projectId, "/api/report/scenario/batch-export");
+        }
+    }
+
+    public ExecTaskDetailDTO viewScenarioItemReport(String id) {
+        List<ExecTaskItemDetailDTO> taskList = extExecTaskMapper.selectTypeByItemId(id);
+        ExecTaskDetailDTO apiTaskReportDTO = new ExecTaskDetailDTO();
+
+        if (CollectionUtils.isNotEmpty(taskList)) {
+            ExecTaskItemDetailDTO task = taskList.getFirst();
+            //设置 顶部数据
+            BeanUtils.copyBean(apiTaskReportDTO, task);
+            //计划组处理来源
+            if (StringUtils.isNotBlank(apiTaskReportDTO.getTaskOrigin())) {
+                TestPlan testPlan = testPlanMapper.selectByPrimaryKey(apiTaskReportDTO.getTaskOrigin());
+                Optional.ofNullable(testPlan).ifPresent(item -> apiTaskReportDTO.setTaskOriginName(testPlan.getName()));
+            }
+            if (task.getIntegrated()) {
+                //场景集合报告
+                ApiScenarioReportDTO scenarioReportDetail = getScenarioReportDetail(id, task.getId());
+                BeanUtils.copyBean(apiTaskReportDTO, scenarioReportDetail);
+            } else {
+                //场景非集合报告
+                ApiScenarioReportDTO scenarioReportDetail = scenarioReportDetail(id);
+                BeanUtils.copyBean(apiTaskReportDTO, scenarioReportDetail);
+            }
+            apiTaskReportDTO.setStartTime(task.getStartTime());
+            apiTaskReportDTO.setEndTime(task.getEndTime());
+        }
+        return apiTaskReportDTO;
+    }
+
+    private ApiScenarioReportDTO getScenarioReportDetail(String taskItemId, String taskId) {
+        ExecTaskItem taskItem = execTaskItemMapper.selectByPrimaryKey(taskItemId);
+        ApiScenarioReportDTO apiScenarioReportDTO = scenarioReportDetail(taskId);
+        if (CollectionUtils.isNotEmpty(apiScenarioReportDTO.getChildren())) {
+            List<ApiScenarioReportStepDTO> list = apiScenarioReportDTO.getChildren().stream()
+                    .filter(step -> StringUtils.equals(step.getStepId(), taskItem.getResourceId())).toList();
+            apiScenarioReportDTO.setChildren(list);
+        }
+        return apiScenarioReportDTO;
+    }
+
+    private ApiScenarioReportDTO scenarioReportDetail(String id) {
+        ApiReportRelateTaskExample example = new ApiReportRelateTaskExample();
+        example.createCriteria().andTaskResourceIdEqualTo(id);
+        List<ApiReportRelateTask> apiReportRelateTasks = apiReportRelateTaskMapper.selectByExample(example);
+        if (CollectionUtils.isNotEmpty(apiReportRelateTasks)) {
+            //报告id
+            String reportId = apiReportRelateTasks.getFirst().getReportId();
+            return get(reportId);
+        }
+        return new ApiScenarioReportDTO();
     }
 }

@@ -2,12 +2,15 @@
   <div>
     <MsCard class="mb-[16px]" :loading="baseLoading" simple auto-height>
       <div class="mb-[16px] flex justify-between">
-        <div class="text-[var(--color-text-000)]">{{ t('system.config.baseInfo') }}</div>
+        <div class="card-title">
+          <div class="card-title-line"></div>
+          <div class="card-title-text">{{ t('system.config.baseInfo') }}</div>
+        </div>
         <a-button
           v-permission="['SYSTEM_PARAMETER_SETTING_BASE:READ+UPDATE']"
           type="outline"
           size="mini"
-          @click="baseInfoDrawerVisible = true"
+          @click="baseInfoModalVisible = true"
         >
           {{ t('system.config.update') }}
         </a-button>
@@ -16,7 +19,10 @@
     </MsCard>
     <MsCard class="mb-[16px]" :loading="emailLoading" simple auto-height>
       <div class="mb-[16px] flex justify-between">
-        <div class="text-[var(--color-text-000)]">{{ t('system.config.emailConfig') }}</div>
+        <div class="card-title">
+          <div class="card-title-line"></div>
+          <div class="card-title-text">{{ t('system.config.emailConfig') }}</div>
+        </div>
         <a-button
           v-permission="['SYSTEM_PARAMETER_SETTING_BASE:READ+UPDATE']"
           type="outline"
@@ -66,13 +72,36 @@
         {{ t('system.config.email.test') }}
       </a-button>
     </MsCard>
-    <MsDrawer
-      v-model:visible="baseInfoDrawerVisible"
+    <MsCard class="mb-[16px]" :loading="fileSizeLimitLoading" simple auto-height>
+      <div class="mb-[16px] flex justify-between">
+        <div class="card-title">
+          <div class="card-title-line"></div>
+          <div class="card-title-text">
+            {{ t('system.config.fileLimit') }}
+            <div class="text-[var(--color-text-4)]">(M)</div>
+          </div>
+        </div>
+      </div>
+      <a-input-number
+        v-model:model-value="fileSizeLimit"
+        class="w-[130px]"
+        :disabled="fileSizeLimitLoading || !hasAnyPermission(['SYSTEM_PARAMETER_SETTING_BASE:READ+UPDATE'])"
+        :min="0"
+        :max="1024"
+        :precision="0"
+        mode="button"
+        model-event="input"
+        @blur="() => saveFileSizeLimitConfig()"
+      />
+    </MsCard>
+    <a-modal
+      v-model:visible="baseInfoModalVisible"
       :title="t('system.config.baseInfo.updateTitle')"
       :ok-text="t('system.config.baseInfo.update')"
-      :ok-loading="baseDrawerLoading"
-      :width="680"
-      @confirm="updateBaseInfo"
+      :ok-loading="baseModalLoading"
+      title-align="start"
+      class="ms-modal-form"
+      :on-before-ok="updateBaseInfo"
       @cancel="baseInfoCancel"
     >
       <a-form ref="baseFormRef" :model="baseInfoForm" layout="vertical">
@@ -82,6 +111,7 @@
           asterisk-position="end"
           :rules="[{ required: true, message: t('system.config.baseInfo.pageUrlRequired') }]"
           required
+          class="mb-0"
         >
           <a-input
             v-model:model-value="baseInfoForm.url"
@@ -92,7 +122,7 @@
           <MsFormItemSub :text="t('system.config.baseInfo.pageUrlSub', { url: defaultUrl })" @fill="fillDefaultUrl" />
         </a-form-item>
       </a-form>
-    </MsDrawer>
+    </a-modal>
     <MsDrawer
       v-model:visible="emailConfigDrawerVisible"
       :title="t('system.config.email.updateTitle')"
@@ -132,6 +162,14 @@
             class="w-[240px]"
             allow-clear
           ></a-input>
+        </a-form-item>
+        <a-form-item :label="t('system.config.email.ssl')" field="ssl" asterisk-position="end">
+          <a-switch v-model:model-value="emailConfigForm.ssl" type="line" />
+          <MsFormItemSub :text="t('system.config.email.sslTip')" :show-fill-icon="false" />
+        </a-form-item>
+        <a-form-item :label="t('system.config.email.tsl')" field="tsl" asterisk-position="end">
+          <a-switch v-model:model-value="emailConfigForm.tsl" type="line" />
+          <MsFormItemSub :text="t('system.config.email.tslTip')" :show-fill-icon="false" />
         </a-form-item>
         <a-form-item
           :label="t('system.config.email.account')"
@@ -183,14 +221,6 @@
             allow-clear
           ></a-input>
         </a-form-item>
-        <a-form-item :label="t('system.config.email.ssl')" field="ssl" asterisk-position="end">
-          <a-switch v-model:model-value="emailConfigForm.ssl" type="line" />
-          <MsFormItemSub :text="t('system.config.email.sslTip')" :show-fill-icon="false" />
-        </a-form-item>
-        <a-form-item :label="t('system.config.email.tsl')" field="tsl" asterisk-position="end">
-          <a-switch v-model:model-value="emailConfigForm.tsl" type="line" />
-          <MsFormItemSub :text="t('system.config.email.tslTip')" :show-fill-icon="false" />
-        </a-form-item>
       </a-form>
       <a-button type="outline" class="flex-1" :loading="drawerTestLoading" @click="testLink('drawer')">
         {{ t('system.config.email.test') }}
@@ -209,10 +239,19 @@
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
   import MsFormItemSub from '@/components/business/ms-form-item-sub/index.vue';
 
-  import { getBaseInfo, getEmailInfo, saveBaseInfo, saveEmailInfo, testEmail } from '@/api/modules/setting/config';
+  import {
+    getBaseInfo,
+    getEmailInfo,
+    saveBaseInfo,
+    saveEmailInfo,
+    saveUploadConfig,
+    testEmail,
+  } from '@/api/modules/setting/config';
   import { useI18n } from '@/hooks/useI18n';
+  import useAppStore from '@/store/modules/app';
   import useLicenseStore from '@/store/modules/setting/license';
   import { desensitize } from '@/utils';
+  import { hasAnyPermission } from '@/utils/permission';
   import { validateEmail } from '@/utils/validate';
 
   import type { EmailConfig, TestEmailParams } from '@/models/setting/config';
@@ -220,10 +259,11 @@
   import type { FormInstance, ValidatedError } from '@arco-design/web-vue';
 
   const { t } = useI18n();
+  const appStore = useAppStore();
 
   const baseLoading = ref(false);
-  const baseDrawerLoading = ref(false);
-  const baseInfoDrawerVisible = ref(false);
+  const baseModalLoading = ref(false);
+  const baseInfoModalVisible = ref(false);
   const baseFormRef = ref<FormInstance>();
   const baseInfo = ref({
     url: 'http://127.0.0.1:8081',
@@ -232,6 +272,7 @@
   const baseInfoDesc = ref<Description[]>([]);
   // 默认示例
   const defaultUrl = 'https://metersphere.com';
+  const fileSizeLimit = ref(50);
 
   function fillDefaultUrl() {
     baseInfoForm.value.url = defaultUrl;
@@ -240,7 +281,6 @@
   /**
    * 初始化基础信息
    */
-
   const licenseStore = useLicenseStore();
   async function initBaseInfo() {
     try {
@@ -263,6 +303,7 @@
           },
         ];
       }
+      fileSizeLimit.value = Number(res.fileMaxSize);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -282,20 +323,21 @@
   /**
    * 保存基础信息
    */
-  function updateBaseInfo() {
+  function updateBaseInfo(done: (closed: boolean) => void) {
     baseFormRef.value?.validate(async (errors: Record<string, ValidatedError> | undefined) => {
       if (!errors) {
         try {
-          baseDrawerLoading.value = true;
+          baseModalLoading.value = true;
           await saveBaseInfo(makeBaseInfoParams());
           Message.success(t('system.config.baseInfo.updateSuccess'));
-          baseInfoDrawerVisible.value = false;
+          done(true);
           initBaseInfo();
         } catch (error) {
           // eslint-disable-next-line no-console
           console.log(error);
+          done(false);
         } finally {
-          baseDrawerLoading.value = false;
+          baseModalLoading.value = false;
         }
       }
     });
@@ -499,6 +541,31 @@
     }
   }
 
+  const fileSizeLimitLoading = ref(false);
+
+  async function saveFileSizeLimitConfig() {
+    try {
+      fileSizeLimitLoading.value = true;
+      if (fileSizeLimit.value === undefined || fileSizeLimit.value === null || fileSizeLimit.value === 0) {
+        fileSizeLimit.value = 1024;
+      }
+      await saveUploadConfig([
+        {
+          paramKey: 'upload.file.size',
+          paramValue: fileSizeLimit.value.toString(),
+          type: 'text',
+        },
+      ]);
+      Message.success(t('common.updateSuccess'));
+      appStore.setFileMaxSize(fileSizeLimit.value);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    } finally {
+      fileSizeLimitLoading.value = false;
+    }
+  }
+
   onBeforeMount(() => {
     initBaseInfo();
     initEmailInfo();
@@ -510,6 +577,23 @@
     .arco-descriptions-item-label,
     .arco-descriptions-item-value {
       @apply pb-0;
+    }
+  }
+  .card-title {
+    @apply flex items-center;
+
+    gap: 8px;
+    .card-title-line {
+      width: 3px;
+      height: 14px;
+      border-radius: var(--border-radius-small);
+      background: rgb(var(--primary-4));
+    }
+    .card-title-text {
+      @apply flex items-center;
+
+      gap: 2px;
+      color: var(--color-text-1);
     }
   }
 </style>

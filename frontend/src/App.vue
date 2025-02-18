@@ -1,41 +1,35 @@
 <template>
   <a-config-provider :locale="locale">
     <router-view />
-    <!-- <global-setting /> -->
   </a-config-provider>
 </template>
 
 <script lang="ts" setup>
-  import { useRoute, useRouter } from 'vue-router';
   import { useEventListener, useWindowSize } from '@vueuse/core';
   import { Message } from '@arco-design/web-vue';
 
   import MsSysUpgradeTip from '@/components/pure/ms-sys-upgrade-tip/index.vue';
 
-  import { getProjectInfo } from '@/api/modules/project-management/basicInfo';
   import { saveBaseUrl } from '@/api/modules/setting/config';
-  import { getUserHasProjectPermission } from '@/api/modules/system';
   import { GetPlatformIconUrl } from '@/api/requrls/setting/config';
-  // import GlobalSetting from '@/components/pure/global-setting/index.vue';
   import useLocale from '@/locale/useLocale';
-  import { NO_PROJECT_ROUTE_NAME, WHITE_LIST } from '@/router/constants';
+  import { WHITE_LIST } from '@/router/constants';
   import { useUserStore } from '@/store';
   import useAppStore from '@/store/modules/app';
   import useLicenseStore from '@/store/modules/setting/license';
+  import { getQueryVariable, getUrlParameterWidthRegExp } from '@/utils';
+  import { setLoginExpires, setLongType, setToken } from '@/utils/auth';
   import { getLocalStorage, setLocalStorage } from '@/utils/local-storage';
   import { setFavicon, watchStyle, watchTheme } from '@/utils/theme';
 
-  import { getPublicKeyRequest } from './api/modules/user';
-  import { getFirstRouteNameByPermission } from './utils/permission';
+  import { getLarkCallback, getLarkSuiteCallback, getPublicKeyRequest } from './api/modules/user';
+  import { hasAnyPermission } from './utils/permission';
   import enUS from '@arco-design/web-vue/es/locale/lang/en-us';
   import zhCN from '@arco-design/web-vue/es/locale/lang/zh-cn';
 
   const appStore = useAppStore();
   const userStore = useUserStore();
   const licenseStore = useLicenseStore();
-  const router = useRouter();
-  const route = useRoute();
-
   const { currentLocale } = useLocale();
   const locale = computed(() => {
     switch (currentLocale.value) {
@@ -56,8 +50,11 @@
   onBeforeMount(async () => {
     try {
       appStore.initSystemVersion(); // 初始化系统版本
+      if (hasAnyPermission(['SYSTEM_PARAMETER_SETTING_BASE:READ'])) {
+        appStore.initFileSizeLimit(); // 初始化文件大小限制
+      }
       // 企业版才校验license
-      if (appStore.packageType === 'enterprise') {
+      if (appStore.getPackageType === 'enterprise') {
         licenseStore.getValidateLicense();
       }
       if (licenseStore.hasLicense()) {
@@ -74,43 +71,6 @@
     }
   });
 
-  const checkIsLogin = async () => {
-    const isLogin = await userStore.isLogin();
-    const isLoginPage = route.name === 'login';
-    if (isLogin && appStore.currentProjectId !== 'no_such_project') {
-      // 当前为登陆状态，且已经选择了项目，初始化当前项目配置
-      try {
-        const HasProjectPermission = await getUserHasProjectPermission(appStore.currentProjectId);
-        if (!HasProjectPermission) {
-          // 没有项目权限（用户所在的当前项目被禁用&用户被移除出去该项目）
-          router.push({
-            name: NO_PROJECT_ROUTE_NAME,
-          });
-          return;
-        }
-        const res = await getProjectInfo(appStore.currentProjectId);
-        if (!res) {
-          // 如果项目被删除或者被禁用，跳转到无项目页面
-          router.push({
-            name: NO_PROJECT_ROUTE_NAME,
-          });
-        }
-
-        if (res) {
-          appStore.setCurrentMenuConfig(res?.moduleIds || []);
-        }
-      } catch (err) {
-        appStore.setCurrentMenuConfig([]);
-        // eslint-disable-next-line no-console
-        console.log(err);
-      }
-    }
-    if (isLoginPage && isLogin) {
-      // 当前页面为登录页面，且已经登录，跳转到首页
-      const currentRouteName = getFirstRouteNameByPermission(router.getRoutes());
-      router.push({ name: currentRouteName });
-    }
-  };
   // 获取公钥
   const getPublicKey = async () => {
     const publicKey = await getPublicKeyRequest();
@@ -119,12 +79,61 @@
 
   onBeforeMount(async () => {
     await getPublicKey();
-    if (WHITE_LIST.find((el) => el.path === window.location.hash.split('#')[1]) === undefined) {
-      await checkIsLogin();
+    if (WHITE_LIST.find((el) => window.location.hash.split('#')[1].includes(el.path)) === undefined) {
+      const TOKEN = getQueryVariable('_token');
+      const CSRF = getQueryVariable('_csrf');
+      if (TOKEN !== null && TOKEN !== undefined && CSRF !== null && CSRF !== undefined) {
+        setToken(window.atob(TOKEN), CSRF);
+        setLoginExpires();
+      }
+      const state = ref('');
+      const code = getQueryVariable('code');
+      state.value = getQueryVariable('state') || '';
+      if (state.value.split('#')[0] === 'fit2cloud-lark-qr') {
+        try {
+          appStore.setLoginLoading(true);
+          const larkCallback = await getLarkCallback(code || '');
+          userStore.qrCodeLogin(larkCallback);
+          setLongType('LARK');
+          setLoginExpires();
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.log(err);
+        }
+      }
+      if (state.value.split('#')[0] === 'fit2cloud-lark-suite-qr') {
+        try {
+          appStore.setLoginLoading(true);
+          const larkCallback = await getLarkSuiteCallback(code || '');
+          userStore.qrCodeLogin(larkCallback);
+          setLongType('LARK_SUITE');
+          setLoginExpires();
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.log(err);
+        }
+      }
+      await userStore.checkIsLogin();
+      appStore.setLoginLoading(false);
     }
+    if (getQueryVariable('code') && getQueryVariable('state')) {
+      const currentUrl = window.location.href;
+      const url = new URL(currentUrl);
+      getUrlParameterWidthRegExp('code');
+      getUrlParameterWidthRegExp('state');
+      url.searchParams.delete('code');
+      url.searchParams.delete('state');
+      const newUrl = url.toString();
+      // 或者在不刷新页面的情况下更新URL（比如使用 History API）
+      window.history.replaceState({}, document.title, newUrl);
+    }
+
     const { height } = useWindowSize();
     appStore.innerHeight = height.value;
-    userStore.initLocalConfig(); // 获取本地执行配置
+    if (userStore.id) {
+      userStore.initLocalConfig(); // 获取本地执行配置
+    }
+
     // @desc: TODO待优化主要是为了拿到初始化配置的项目模块方便接下来过滤菜单权限 解决刷新菜单空白问题
     appStore.getProjectInfos();
   });

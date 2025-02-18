@@ -1,7 +1,7 @@
 package io.metersphere.plan.dto.response;
 
-import io.metersphere.bug.dto.CaseRelateBugDTO;
 import io.metersphere.functional.dto.FunctionalCaseCustomFieldDTO;
+import io.metersphere.plan.dto.TestPlanCaseBugDTO;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -25,6 +25,9 @@ public class TestPlanCasePageResponse implements Serializable {
 
     @Schema(description = "模块ID")
     private String moduleId;
+
+    @Schema(description = "模块名称")
+    private String moduleName;
 
     @Schema(description = "项目ID")
     private String projectId;
@@ -84,14 +87,20 @@ public class TestPlanCasePageResponse implements Serializable {
     private String executeUserName;
 
     @Schema(description = "缺陷数量")
-    private int bugCount;
+    private Integer bugCount;
 
     @Schema(description = "关联的缺陷数据")
-    private List<CaseRelateBugDTO> bugList;
+    private List<TestPlanCaseBugDTO> bugList;
 
     @Schema(description = "用例的id")
     private String caseId;
 
     @Schema(description = "测试计划id")
     private String testPlanId;
+
+    @Schema(description = "测试集id")
+    private String testPlanCollectionId;
+
+    @Schema(description = "测试集名称")
+    private String testPlanCollectionName;
 }

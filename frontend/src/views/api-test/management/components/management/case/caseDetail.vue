@@ -1,71 +1,100 @@
 <template>
-  <div class="h-full w-full overflow-hidden">
-    <a-tabs v-model:active-key="activeKey" class="h-full px-[16px]" animation lazy-load @change="changeActiveKey">
+  <div class="flex h-full w-full flex-col overflow-hidden">
+    <div class="p-[16px]">
+      <MsDetailCard :title="`[${caseDetail.num}] ${caseDetail.name}`" :description="description" class="mb-[8px]">
+        <template #titlePrefix>
+          <caseLevel :case-level="caseDetail.priority as CaseLevel" />
+        </template>
+        <template v-if="!props.isDrawer" #titleAppend>
+          <a-tooltip :content="t('report.detail.api.copyLink')">
+            <MsIcon
+              type="icon-icon_unlink"
+              class="cursor-pointer text-[var(--color-text-4)] hover:bg-[var(--color-bg-3)]"
+              :size="16"
+              @click="share"
+            />
+          </a-tooltip>
+          <a-tooltip :content="t(caseDetail.follow ? 'common.forked' : 'common.notForked')">
+            <MsIcon
+              v-permission="['PROJECT_API_DEFINITION_CASE:READ+UPDATE']"
+              :loading="followLoading"
+              :type="caseDetail.follow ? 'icon-icon_collect_filled' : 'icon-icon_collection_outlined'"
+              :class="`${
+                caseDetail.follow
+                  ? 'text-[rgb(var(--warning-6))]'
+                  : 'text-[var(--color-text-4)] hover:bg-[var(--color-bg-3)]'
+              }`"
+              class="cursor-pointer"
+              :size="16"
+              @click="follow"
+            />
+          </a-tooltip>
+        </template>
+        <template #titleRight>
+          <div class="flex gap-[8px]">
+            <a-button
+              v-permission="['PROJECT_API_DEFINITION_CASE:READ+DELETE']"
+              type="outline"
+              class="arco-btn-outline--secondary"
+              size="small"
+              @click="handleDelete"
+            >
+              {{ t('common.delete') }}
+            </a-button>
+            <a-button
+              v-if="!props.isDrawer"
+              v-permission="['PROJECT_API_DEFINITION_CASE:READ+UPDATE']"
+              type="outline"
+              size="small"
+              @click="editCase"
+            >
+              {{ t('common.edit') }}
+            </a-button>
+            <executeButton
+              ref="executeRef"
+              v-permission="['PROJECT_API_DEFINITION_CASE:READ+EXECUTE']"
+              size="small"
+              :execute-loading="caseDetail.executeLoading"
+              @stop-debug="stopDebug"
+              @execute="handleExecute"
+            />
+          </div>
+        </template>
+        <template #type="{ value }">
+          <apiMethodName :method="value as RequestMethods" tag-size="small" is-tag />
+        </template>
+      </MsDetailCard>
+    </div>
+
+    <a-tabs
+      v-model:active-key="activeKey"
+      class="no-left-tab flex-1 px-[16px]"
+      animation
+      lazy-load
+      @change="changeActiveKey"
+    >
       <template #extra>
         <div class="flex gap-[12px]">
           <MsEnvironmentSelect v-if="props.isDrawer" :env="environmentIdByDrawer" />
-          <executeButton
-            ref="executeRef"
-            v-permission="['PROJECT_API_DEFINITION_CASE:READ+EXECUTE']"
-            :execute-loading="caseDetail.executeLoading"
-            @stop-debug="stopDebug"
-            @execute="handleExecute"
-          />
-          <a-dropdown-button v-if="!props.isDrawer" type="outline" @click="editCase">
-            {{ t('common.edit') }}
-            <template #icon>
-              <icon-down />
-            </template>
-            <template #content>
-              <a-doption
-                v-permission="['PROJECT_API_DEFINITION_CASE:READ+DELETE']"
-                value="delete"
-                class="error-6 text-[rgb(var(--danger-6))]"
-                @click="handleDelete"
-              >
-                <MsIcon type="icon-icon_delete-trash_outlined" class="text-[rgb(var(--danger-6))]" />
-                {{ t('common.delete') }}
-              </a-doption>
-            </template>
-          </a-dropdown-button>
         </div>
       </template>
       <a-tab-pane key="detail" :title="t('case.detail')" class="px-[18px] py-[16px]">
-        <MsDetailCard :title="`【${caseDetail.num}】${caseDetail.name}`" :description="description" class="mb-[8px]">
-          <template v-if="!props.isDrawer" #titleAppend>
-            <a-tooltip :content="t(caseDetail.follow ? 'common.forked' : 'common.notForked')">
-              <MsIcon
-                v-permission="['PROJECT_API_DEFINITION_CASE:READ+UPDATE']"
-                :loading="followLoading"
-                :type="caseDetail.follow ? 'icon-icon_collect_filled' : 'icon-icon_collection_outlined'"
-                :class="`${caseDetail.follow ? 'text-[rgb(var(--warning-6))]' : 'text-[var(--color-text-4)]'}`"
-                class="cursor-pointer"
-                :size="16"
-                @click="follow"
-              />
-            </a-tooltip>
-            <a-tooltip :content="t('report.detail.api.copyLink')">
-              <MsIcon
-                type="icon-icon_share1"
-                class="cursor-pointer text-[var(--color-text-4)]"
-                :size="16"
-                @click="share"
-              />
-            </a-tooltip>
-          </template>
-          <template #type="{ value }">
-            <apiMethodName :method="value as RequestMethods" tag-size="small" is-tag />
-          </template>
-          <template #priority="{ value }">
-            <caseLevel :case-level="value as CaseLevel" />
-          </template>
-        </MsDetailCard>
         <detailTab
           :detail="caseDetail"
           :protocols="protocols as ProtocolItem[]"
           :is-priority-local-exec="isPriorityLocalExec"
           is-case
           @execute="handleExecute"
+          @show-diff="showDiffDrawer"
+        />
+        <DifferentDrawer
+          v-model:visible="showDifferentDrawer"
+          :active-api-case-id="activeApiCaseId"
+          :active-defined-id="activeDefinedId"
+          @close="closeDifferent"
+          @clear-this-change="(isEvery:boolean)=>brashChangeHandler(isEvery)"
+          @sync="syncParamsHandler"
+          @load-list="emit('loadCase', props.detail.id as string)"
         />
       </a-tab-pane>
       <a-tab-pane key="reference" :title="t('apiTestManagement.reference')" class="px-[18px] py-[16px]">
@@ -86,7 +115,7 @@
       </a-tab-pane>
     </a-tabs>
   </div>
-  <createAndEditCaseDrawer ref="createAndEditCaseDrawerRef" v-bind="$attrs" />
+  <createAndEditCaseDrawer ref="createAndEditCaseDrawerRef" v-bind="$attrs" @load-case="loadCaseDetail" />
 </template>
 
 <script setup lang="ts">
@@ -104,14 +133,22 @@
   import apiMethodName from '@/views/api-test/components/apiMethodName.vue';
   import executeButton from '@/views/api-test/components/executeButton.vue';
   import { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
+  import DifferentDrawer from '@/views/api-test/management/components/management/case/differentDrawer.vue';
   import TabCaseChangeHistory from '@/views/api-test/management/components/management/case/tabContent/tabCaseChangeHistory.vue';
   import TabCaseDependency from '@/views/api-test/management/components/management/case/tabContent/tabCaseDependency.vue';
   import TabCaseExecuteHistory from '@/views/api-test/management/components/management/case/tabContent/tabCaseExecuteHistory.vue';
 
-  import { localExecuteApiDebug, stopExecute, stopLocalExecute } from '@/api/modules/api-test/common';
-  import { debugCase, deleteCase, runCase, toggleFollowCase } from '@/api/modules/api-test/management';
-  import { getSocket } from '@/api/modules/project-management/commonScript';
+  import { localExecuteApiDebug, stopLocalExecute } from '@/api/modules/api-test/common';
+  import {
+    debugCase,
+    deleteCase,
+    runCase,
+    toggleFollowCase,
+    toggleUnFollowCase,
+  } from '@/api/modules/api-test/management';
+  import { projectStopTask } from '@/api/modules/taskCenter/project';
   import useModal from '@/hooks/useModal';
+  import useWebsocket from '@/hooks/useWebsocket';
   import useAppStore from '@/store/modules/app';
   import { getGenerateId } from '@/utils';
 
@@ -124,9 +161,11 @@
     isDrawer?: boolean; // 抽屉
     detail: RequestParam;
   }>();
+
   const emit = defineEmits<{
     (e: 'updateFollow'): void;
     (e: 'deleteCase', id: string): void;
+    (e: 'loadCase', id: string): void;
   }>();
 
   const appStore = useAppStore();
@@ -147,9 +186,9 @@
       value: caseDetail.value.method,
     },
     {
-      key: 'priority',
-      locale: 'case.caseLevel',
-      value: caseDetail.value.priority,
+      key: 'name',
+      locale: 'case.belongingApi',
+      value: `[${caseDetail.value.apiDefinitionNum}] ${caseDetail.value.apiDefinitionName}`,
     },
     {
       key: 'path',
@@ -167,7 +206,11 @@
   async function follow() {
     try {
       followLoading.value = true;
-      await toggleFollowCase(caseDetail.value.id);
+      if (caseDetail.value.follow) {
+        await toggleUnFollowCase(caseDetail.value.id);
+      } else {
+        await toggleFollowCase(caseDetail.value.id);
+      }
       Message.success(caseDetail.value.follow ? t('common.unFollowSuccess') : t('common.followSuccess'));
       caseDetail.value.follow = !caseDetail.value.follow;
       emit('updateFollow');
@@ -228,6 +271,14 @@
       executeHistoryRef.value?.loadExecuteList();
     }
   }
+  watch(
+    () => caseDetail.value.id,
+    () => {
+      if (activeKey.value === 'executeHistory') {
+        executeHistoryRef.value?.loadExecuteList(caseDetail.value.id as string);
+      }
+    }
+  );
 
   const executeRef = ref<InstanceType<typeof executeButton>>();
   const isPriorityLocalExec = computed(() => executeRef.value?.isPriorityLocalExec ?? false);
@@ -236,32 +287,35 @@
   const websocket = ref<WebSocket>();
   const temporaryResponseMap: Record<string, any> = {}; // 缓存websocket返回的报告内容，避免执行接口后切换tab导致报告丢失
   // 开启websocket监听，接收执行结果
-  function debugSocket(executeType?: 'localExec' | 'serverExec') {
-    websocket.value = getSocket(
-      reportId.value,
-      executeType === 'localExec' ? '/ws/debug' : '',
-      executeType === 'localExec' ? executeRef.value?.localExecuteUrl : ''
-    );
-    websocket.value.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      if (data.msgType === 'EXEC_RESULT') {
-        if (caseDetail.value.reportId === data.reportId) {
-          // 判断当前查看的tab是否是当前返回的报告的tab，是的话直接赋值
-          caseDetail.value.response = data.taskResult; // 渲染出用例详情和创建用例抽屉的响应数据
+  async function debugSocket(executeType?: 'localExec' | 'serverExec') {
+    const { createSocket, websocket: _websocket } = useWebsocket({
+      reportId: reportId.value,
+      socketUrl: executeType === 'localExec' ? '/ws/debug' : '',
+      host: executeType === 'localExec' ? executeRef.value?.localExecuteUrl : '',
+      onMessage: (event) => {
+        const data = JSON.parse(event.data);
+        if (data.msgType === 'EXEC_RESULT') {
+          if (caseDetail.value.reportId === data.reportId) {
+            // 判断当前查看的tab是否是当前返回的报告的tab，是的话直接赋值
+            caseDetail.value.response = data.taskResult; // 渲染出用例详情和创建用例抽屉的响应数据
+            caseDetail.value.executeLoading = false;
+            executeCase.value = false;
+          } else {
+            // 不是则需要把报告缓存起来，等切换到对应的tab再赋值
+            temporaryResponseMap[data.reportId] = data.taskResult;
+          }
+        } else if (data.msgType === 'EXEC_END') {
+          // 执行结束，关闭websocket
+          websocket.value?.close();
           caseDetail.value.executeLoading = false;
           executeCase.value = false;
-        } else {
-          // 不是则需要把报告缓存起来，等切换到对应的tab再赋值
-          temporaryResponseMap[data.reportId] = data.taskResult;
         }
-      } else if (data.msgType === 'EXEC_END') {
-        // 执行结束，关闭websocket
-        websocket.value?.close();
-        caseDetail.value.executeLoading = false;
-        executeCase.value = false;
-      }
+      },
     });
+    await createSocket();
+    websocket.value = _websocket.value;
   }
+  const executeTaskId = ref('');
   async function handleExecute(executeType?: 'localExec' | 'serverExec') {
     try {
       caseDetail.value.executeLoading = true;
@@ -280,7 +334,7 @@
         linkFileIds: caseDetail.value.linkFileIds,
         uploadFileIds: caseDetail.value.uploadFileIds,
       };
-      debugSocket(executeType); // 开启websocket
+      await debugSocket(executeType); // 开启websocket
       if (executeType === 'serverExec') {
         // 已创建的服务端
         res = await runCase(params);
@@ -290,6 +344,7 @@
       if (executeType === 'localExec') {
         await localExecuteApiDebug(executeRef.value?.localExecuteUrl as string, res);
       }
+      executeTaskId.value = res.taskInfo?.taskId;
       // 执行完更新执行历史
       executeHistoryRef.value?.loadExecuteList();
     } catch (error) {
@@ -304,7 +359,7 @@
       if (caseDetail.value.frontendDebug) {
         await stopLocalExecute(executeRef.value?.localExecuteUrl || '', reportId.value, ScenarioStepType.API_CASE);
       } else {
-        await stopExecute(reportId.value, ScenarioStepType.API_CASE);
+        await projectStopTask(executeTaskId.value);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -313,6 +368,43 @@
     websocket.value?.close();
     caseDetail.value.executeLoading = false;
     executeCase.value = false;
+  }
+
+  // 定义id
+  const activeDefinedId = ref<string>('');
+  // 用例id
+  const activeApiCaseId = ref<string>('');
+
+  const showDifferentDrawer = ref<boolean>(false);
+  // 查看diff对比
+  function showDiffDrawer() {
+    activeApiCaseId.value = caseDetail.value.id as string;
+    activeDefinedId.value = caseDetail.value.apiDefinitionId;
+    showDifferentDrawer.value = true;
+  }
+
+  function closeDifferent() {
+    showDifferentDrawer.value = false;
+    activeApiCaseId.value = '';
+    activeDefinedId.value = '';
+  }
+
+  // 忽略本次变更
+  async function brashChangeHandler(isClose = false) {
+    emit('loadCase', props.detail.id as string);
+    if (isClose) {
+      showDifferentDrawer.value = false;
+    }
+  }
+
+  function loadCaseDetail() {
+    emit('loadCase', props.detail.id as string);
+  }
+
+  // 同步参数
+  function syncParamsHandler(mergedRequestParam: RequestParam) {
+    caseDetail.value = { ...caseDetail.value, ...mergedRequestParam };
+    createAndEditCaseDrawerRef.value?.open(caseDetail.value.apiDefinitionId, caseDetail.value, false);
   }
 
   watch(
@@ -360,6 +452,11 @@
       .arco-collapse {
         height: calc(100% - 85px);
       }
+    }
+  }
+  :deep(.no-left-tab) {
+    .arco-tabs-tab {
+      margin: 0 32px 0 0;
     }
   }
   :deep(.ms-detail-card-desc) {

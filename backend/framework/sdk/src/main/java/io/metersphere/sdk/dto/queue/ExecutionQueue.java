@@ -14,6 +14,11 @@ public class ExecutionQueue implements Serializable {
     private String queueId;
 
     /**
+     * taskId
+     */
+    private String taskId;
+
+    /**
      * 执行人
      */
     private String userId;
@@ -24,20 +29,25 @@ public class ExecutionQueue implements Serializable {
     private Long createTime;
 
     /**
-     * 开启重试
+     * 父队列 ID，即测试集队列 ID
      */
-    private Boolean retryEnable;
+    private String parentQueueId;
 
     /**
-     * 重试次数
+     * 父集合 ID，用于测试计划用例批量执行
+     * 其中测试集并行执行时，需要记录所有所有的任务项，以判断执行完成
      */
-    private Long retryNumber;
+    private String parentSetId;
 
     /**
      * 资源类型 / API，CASE，PLAN_CASE,PLAN_SCENARIO，API_SCENARIO
      * {@link io.metersphere.sdk.constants.ApiExecuteResourceType}
      */
     private String resourceType;
+    /**
+     * 是否是重跑
+     */
+    private Boolean rerun = false;
 
     /**
      * 运行模式配置

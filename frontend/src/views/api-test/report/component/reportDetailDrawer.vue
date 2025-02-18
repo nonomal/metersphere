@@ -16,18 +16,28 @@
     @loaded="loadedReport"
   >
     <template #titleRight="{ loading }">
-      <div class="rightButtons flex items-center">
+      <div class="ms-drawer-right-operation-button flex items-center">
         <MsButton
           v-permission="['PROJECT_API_REPORT:READ+SHARE']"
           type="icon"
           status="secondary"
-          class="mr-4 !rounded-[var(--border-radius-small)]"
+          class="!rounded-[var(--border-radius-small)]"
           :disabled="loading"
           :loading="shareLoading"
           @click="shareHandler"
         >
-          <MsIcon type="icon-icon_share1" class="mr-2 font-[16px]" />
+          <MsIcon type="icon-icon_link-copy_outlined" class="mr-2 font-[16px]" />
           {{ t('common.share') }}
+        </MsButton>
+        <MsButton
+          v-permission="['PROJECT_API_REPORT:READ+EXPORT']"
+          type="icon"
+          status="secondary"
+          class="mr-4 !rounded-[var(--border-radius-small)]"
+          @click="exportHandler"
+        >
+          <MsIcon type="icon-icon_into-item_outlined" class="mr-2 font-[16px]" />
+          {{ t('common.export') }}
         </MsButton>
       </div>
     </template>
@@ -41,6 +51,7 @@
 
 <script setup lang="ts">
   import { ref } from 'vue';
+  import { useClipboard } from '@vueuse/core';
   import { Message } from '@arco-design/web-vue';
   import { cloneDeep } from 'lodash-es';
 
@@ -51,14 +62,18 @@
 
   import { getShareInfo, reportScenarioDetail } from '@/api/modules/api-test/report';
   import { useI18n } from '@/hooks/useI18n';
+  import useOpenNewPage from '@/hooks/useOpenNewPage';
   import { useAppStore } from '@/store';
 
   import type { ReportDetail } from '@/models/apiTest/report';
-  import { RouteEnum } from '@/enums/routeEnum';
+  import { FullPageEnum, RouteEnum } from '@/enums/routeEnum';
+  import { ExecuteStatusEnum } from '@/enums/taskCenter';
 
   const appStore = useAppStore();
-
   const { t } = useI18n();
+  const { copy, isSupported } = useClipboard({ legacy: true });
+  const { openNewPage } = useOpenNewPage();
+
   const props = defineProps<{
     visible: boolean;
     reportId: string;
@@ -98,7 +113,7 @@
     startTime: 0, // 开始时间/同创建时间一致
     endTime: 0, //  结束时间/报告执行完成
     requestDuration: 0, // 请求总耗时
-    status: '', // 报告状态/SUCCESS/ERROR
+    status: ExecuteStatusEnum.PENDING, // 报告状态/SUCCESS/ERROR
     triggerMode: '', // 触发方式
     runMode: '', // 执行模式
     poolId: '', // 资源池
@@ -153,33 +168,23 @@
       shareId.value = res.shareUrl;
       const { origin } = window.location;
       shareLink.value = `${origin}/#/${RouteEnum.SHARE}/${RouteEnum.SHARE_REPORT_SCENARIO}${shareId.value}`;
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(shareLink.value).then(
-          () => {
-            Message.info(t('bugManagement.detail.shareTip'));
-          },
-          (e) => {
-            Message.error(e);
-          }
-        );
-      } else {
-        const input = document.createElement('input');
-        input.value = shareLink.value;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
+      if (isSupported) {
+        copy(shareLink.value);
         Message.info(t('bugManagement.detail.shareTip'));
+      } else {
+        Message.error(t('common.copyNotSupport'));
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     }
   }
-  /**
-   * 导出
-   */
-  const exportLoading = ref<boolean>(false);
-  function exportHandler() {}
+
+  function exportHandler() {
+    openNewPage(FullPageEnum.FULL_PAGE_SCENARIO_EXPORT_PDF, {
+      id: props.reportId,
+    });
+  }
 
   const detailDrawerRef = ref<InstanceType<typeof MsDetailDrawer>>();
 
@@ -196,14 +201,15 @@
 <style scoped lang="less">
   .report-container {
     padding: 16px;
-    height: calc(100vh - 56px);
     background: var(--color-text-n9);
     .report-header {
       padding: 0 16px;
       height: 54px;
       border-radius: 4px;
-      background: white;
-      @apply mb-4 bg-white;
+      background: var(--color-text-fff);
+      @apply mb-4;
+
+      background-color: var(--color-text-fff);
     }
     .analyze {
       height: 196px;
@@ -214,7 +220,9 @@
         width: 60%;
         height: 196px;
         border-radius: 4px;
-        @apply h-full bg-white;
+        @apply h-full;
+
+        background-color: var(--color-text-fff);
         .countItem {
           @apply mr-6 flex items-center;
         }
@@ -232,7 +240,9 @@
         width: 40%;
         height: 100%;
         border-radius: 4px;
-        @apply ml-4 h-full flex-grow bg-white;
+        @apply ml-4 h-full flex-grow;
+
+        background-color: var(--color-text-fff);
         .chart-legend {
           .chart-legend-item {
             @apply grid grid-cols-3;
@@ -249,7 +259,7 @@
     .report-info {
       padding: 16px;
       border-radius: 4px;
-      @apply bg-white;
+      background-color: var(--color-text-fff);
     }
   }
   .block-title {

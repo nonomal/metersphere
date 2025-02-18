@@ -5,6 +5,7 @@ import CommentInput from './input.vue';
 
 import { useI18n } from '@/hooks/useI18n';
 
+import './style.less';
 import { CommentEvent, CommentItem, CommentParams, CommentType } from './types';
 import message from '@arco-design/web-vue/es/message';
 
@@ -21,12 +22,15 @@ export default defineComponent({
     },
     uploadImage: {
       type: Function,
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
       default: (file: File) => Promise<any>,
     },
     previewUrl: {
       type: String as PropType<string>,
       default: '',
+    },
+    permissions: {
+      type: Array as PropType<string[]>,
+      default: () => [],
     },
   },
   emits: {
@@ -43,9 +47,9 @@ export default defineComponent({
       commentStatus: 'normal',
       replyId: '', // 回复人
     });
-    const expendedIds = ref<string[]>([]); // 展开的评论id
     // 被@的用户id
     const noticeUserIds = ref<string[]>([]);
+    const uploadFileIds = ref<string[]>([]);
     const { t } = useI18n();
 
     const resetCurrentItem = () => {
@@ -78,6 +82,7 @@ export default defineComponent({
         notifier: noticeUserIds.value.join(';'),
         replyUser: currentItem.replyId || item.createUser,
         parentId,
+        uploadFileIds: uploadFileIds.value,
       };
       if (currentItem.commentType === 'EDIT') {
         params.id = item.id;
@@ -96,13 +101,12 @@ export default defineComponent({
       emit('delete', item.id);
     };
 
+    const expendedIds = ref<Set<string | number>>(new Set<string>([]));
     const handleExpend = (val: boolean, id: string) => {
-      if (val) {
-        // 展开
-        expendedIds.value = [...expendedIds.value, id];
+      if (expendedIds.value.has(id)) {
+        expendedIds.value.delete(id);
       } else {
-        // 收起
-        expendedIds.value = expendedIds.value.filter((item) => item !== id);
+        expendedIds.value.add(id);
       }
     };
 
@@ -135,6 +139,10 @@ export default defineComponent({
           onUpdate:noticeUserIds={(ids: string[]) => {
             noticeUserIds.value = ids;
           }}
+          filedIds={uploadFileIds.value}
+          onUpdate:filedIds={(ids: string[]) => {
+            uploadFileIds.value = ids;
+          }}
           uploadImage={uploadImage.value}
           previewUrl={previewUrl.value}
           onCancel={() => resetCurrentItem()}
@@ -159,6 +167,7 @@ export default defineComponent({
             onUpdate:status={(v: string) => {
               currentItem.commentStatus = v;
             }}
+            expandKeys={expendedIds.value}
             element={item}
           />
           {item.id === currentItem.id && renderInput(item)}
@@ -172,6 +181,7 @@ export default defineComponent({
           {/* {expendedIds.value}--expendedIds */}
           <Item
             mode={'parent'}
+            permissions={props.permissions}
             onReply={() => handleReply(item)}
             onEdit={() => handelEdit(item)}
             onDelete={() => handleDelete(item)}
@@ -181,8 +191,9 @@ export default defineComponent({
               currentItem.commentStatus = v;
             }}
             element={item}
+            expandKeys={expendedIds.value}
           />
-          {expendedIds.value.includes(item.id) && (
+          {expendedIds.value.has(item.id) && (
             <div class="ms-comment-child-container">{renderChildrenList(item.childComments)}</div>
           )}
           {item.id === currentItem.id && renderInput(item)}
@@ -190,6 +201,6 @@ export default defineComponent({
       ));
     };
 
-    return () => <div class="ms-comment gap[24px] flex flex-col">{renderParentList(commentList.value)}</div>;
+    return () => <div class="ms-comment flex flex-col gap-[16px]">{renderParentList(commentList.value)}</div>;
   },
 });

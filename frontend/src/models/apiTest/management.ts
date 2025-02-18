@@ -8,6 +8,7 @@ import {
 
 import { BatchApiParams, ModuleTreeNode, TableQueryParams } from '../common';
 import { ExecuteRequestParams, ResponseDefinition } from './common';
+import type { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
 
 // 定义-自定义字段
 export interface ApiDefinitionCustomField {
@@ -100,10 +101,12 @@ export interface ApiDefinitionGetModuleParams {
   filter?: Record<string, any>;
   combine?: Record<string, any>;
   moduleIds: string[];
-  protocol: string;
+  protocols: string[];
   projectId: string;
   versionId?: string;
   refId?: string;
+  shareId?: string;
+  orgId?: string; // 组织id
 }
 
 // 环境-选中的模块
@@ -111,7 +114,7 @@ export interface SelectedModule {
   // 选中的模块
   moduleId: string;
   containChildModule: boolean; // 是否包含新增子模块
-  disabled: boolean;
+  disabled?: boolean;
 }
 
 // 定义-获取环境的模块树参数
@@ -137,7 +140,7 @@ export interface Environment {
 export interface ApiDefinitionPageParams extends TableQueryParams {
   id: string;
   name: string;
-  protocol: string;
+  protocols: string[];
   projectId: string;
   versionId: string;
   refId: string;
@@ -180,7 +183,14 @@ export interface mockParams {
 }
 // 批量操作参数
 export interface ApiDefinitionBatchParams extends BatchApiParams {
-  protocol: string;
+  protocols: string[];
+}
+// 批量导出定义参数
+export interface ApiDefinitionBatchExportParams extends ApiDefinitionBatchParams {
+  exportApiCase: boolean;
+  exportApiMock: boolean;
+  fileId: string;
+  sort: Record<string, any>;
 }
 // 批量更新定义参数
 export interface ApiDefinitionBatchUpdateParams extends ApiDefinitionBatchParams {
@@ -191,6 +201,7 @@ export interface ApiDefinitionBatchUpdateParams extends ApiDefinitionBatchParams
   versionId?: string;
   tags?: string[];
   customField?: Record<string, any>;
+  clear?: boolean; // 是否清空标签
 }
 // 批量移动定义参数
 export interface ApiDefinitionBatchMoveParams extends ApiDefinitionBatchParams {
@@ -221,6 +232,7 @@ export interface ImportApiDefinitionRequest {
   coverModule: boolean; // 是否覆盖子目录
   coverData: boolean; // 是否覆盖数据
   syncCase: boolean; // 是否同步导入用例
+  syncMock: boolean; // 是否同步导入mock
   protocol: string;
   authSwitch?: boolean;
   authUsername?: string;
@@ -228,6 +240,7 @@ export interface ImportApiDefinitionRequest {
   uniquelyIdentifies?: string;
   resourceId?: string;
   swaggerUrl?: string;
+  swaggerToken?: string;
   moduleId: string;
   projectId: string;
   name?: string;
@@ -275,11 +288,16 @@ export interface DefinitionReferencePageParams extends TableQueryParams {
   resourceId: string;
 }
 
+// 定义-复制文件参数
+export interface DefinitionFileCopyParams {
+  resourceId: string;
+  fileIds: string[];
+}
+
 // 回收站-恢复接口定义参数
 export interface ApiDefinitionDeleteParams {
   id: string;
   projectId: string;
-  protocol: string;
   deleteAll?: boolean;
 }
 
@@ -292,7 +310,7 @@ export interface BatchRecoverApiParams extends ApiDefinitionBatchParams {
 // --------------------用例
 // 用例列表查询参数
 export interface ApiCasePageParams extends TableQueryParams {
-  protocol: string;
+  protocols: string[];
   projectId: string;
   versionId?: string;
   refId?: string;
@@ -329,10 +347,12 @@ export interface ApiCaseDetail extends ExecuteRequestParams {
   deleteTime: number;
   deleteUser: string;
   deleteName: string;
+  apiChange: boolean; // 接口定义参数变更标识
+  inconsistentWithApi: boolean; // 与接口定义不一致
 }
 // 批量操作参数
 export interface ApiCaseBatchParams extends BatchApiParams {
-  protocol: string;
+  protocols: string[];
   apiDefinitionId?: string;
   versionId?: string;
 }
@@ -344,6 +364,7 @@ export interface ApiCaseBatchEditParams extends ApiCaseBatchParams {
   environmentId?: string;
   type: string;
   append?: boolean;
+  clear?: boolean;
 }
 // 添加用例参数
 export interface AddApiCaseParams extends ExecuteRequestParams {
@@ -368,7 +389,7 @@ export interface ApiRunModeRequest {
 // 接口用例批量执行参数
 export interface ApiCaseBatchExecuteParams extends BatchApiParams {
   apiDefinitionId?: string | number;
-  protocol: string;
+  protocols: string[];
   versionId?: string;
   refId?: string;
   runModeConfig: ApiRunModeRequest;
@@ -389,16 +410,66 @@ export interface ApiCaseChangeHistoryParams extends TableQueryParams {
 export interface ApiCaseDependencyParams extends TableQueryParams {
   resourceId: string;
 }
-
-// 用例-执行历史-请求参数
-export interface ApiCaseExecuteHistoryItem {
+export interface syncItem {
+  header: boolean;
+  body: boolean;
+  query: boolean;
+  rest: boolean;
+}
+// 批量同步
+export interface batchSyncForm {
+  notificationConfig: {
+    apiCaseCreator: boolean;
+    scenarioCreator: boolean;
+  };
+  // 同步项目
+  syncItems: syncItem;
+  deleteRedundantParam: boolean;
+}
+// 对比同步参数
+export interface diffSyncParams {
+  syncItems: syncItem; // 同步项
   id: string;
-  num: string;
+  deleteRedundantParam: boolean; // 是否删除多余参数
+  apiCaseRequest: RequestParam; // 用例详情请求request
+}
+
+export type ApiRangeType = 'ALL' | 'MODULE' | 'PATH' | 'TAG';
+
+// 接口定义-接口文档-分享
+export interface ShareDetail {
+  id?: string;
   name: string;
-  operationUser: string;
+  apiRange: ApiRangeType; // 接口范围;全部接口(ALL)、模块(MODULE)、路径(PATH)、标签(TAG)
+  rangeMatchSymbol: string; // 范围匹配符
+  rangeMatchVal: string; // 范围匹配值;eg: 选中路径范围时, 该值作为路径匹配
+  isPrivate: boolean; // 是否公开
+  password: string; // 访问密码
+  allowExport: boolean; // 允许导出
+  projectId: string;
+  invalidTime?: number; // 失效时间值
+}
+// 分享列表
+export interface shareItem extends ShareDetail {
+  createTime: number;
   createUser: string;
-  startTime: number;
-  status: RequestCaseStatus;
-  triggerMode: string;
-  deleted: boolean;
+  invalid: boolean;
+  apiShareNum: number;
+  deadline: number;
+}
+export interface CheckSharePsdType {
+  docShareId: string;
+  password: string;
+}
+// 分享详情
+export interface ShareDetailType {
+  invalid: boolean;
+  allowExport: boolean;
+  isPrivate: boolean;
+  projectName?: string;
+}
+// 接口用例统计项
+export interface ApiCaseStatisticsItem {
+  id: string;
+  passRate: string;
 }

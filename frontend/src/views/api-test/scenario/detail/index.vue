@@ -2,6 +2,10 @@
   <div class="h-full w-full overflow-hidden">
     <div class="px-[24px] pt-[16px]">
       <MsDetailCard :title="`【${scenario.num}】${scenario.name}`" :description="description" class="!py-[8px]">
+        <template #titlePrefix>
+          <apiStatus :status="scenario.status" size="small" />
+          <caseLevel :case-level="scenario.priority as CaseLevel" />
+        </template>
         <template #titleAppend>
           <a-tooltip :content="t(scenario.follow ? 'common.forked' : 'common.notForked')">
             <MsIcon
@@ -15,16 +19,12 @@
           </a-tooltip>
           <a-tooltip :content="t('report.detail.api.copyLink')">
             <MsIcon
-              type="icon-icon_share1"
+              type="icon-icon_link-copy_outlined"
               class="cursor-pointer text-[var(--color-text-4)]"
               :size="16"
               @click="share"
             />
           </a-tooltip>
-          <apiStatus :status="scenario.status" size="small" />
-        </template>
-        <template #priority="{ value }">
-          <caseLevel :case-level="value as CaseLevel" />
         </template>
       </MsDetailCard>
     </div>
@@ -191,11 +191,6 @@
 
   const description = computed(() => [
     {
-      key: 'priority',
-      locale: 'apiScenario.scenarioLevel',
-      value: scenario.value.priority,
-    },
-    {
       key: 'tag',
       locale: 'common.tag',
       value: scenario.value.tags,
@@ -213,7 +208,7 @@
       followLoading.value = true;
       await followScenario(scenario.value.id || '');
       scenario.value.follow = !scenario.value.follow;
-      Message.success(scenario.value.follow ? t('common.unFollowSuccess') : t('common.followSuccess'));
+      Message.success(scenario.value.follow ? t('common.followSuccess') : t('common.unFollowSuccess'));
       emit('updateFollow');
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -372,12 +367,6 @@
     .base-info-pane {
       @apply h-full  overflow-auto;
       .ms-scroll-bar();
-    }
-  }
-  :deep(.active-badge) {
-    .arco-badge-text,
-    .arco-badge-number {
-      background-color: rgb(var(--primary-5));
     }
   }
 </style>

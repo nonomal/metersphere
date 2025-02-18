@@ -1,6 +1,6 @@
 <template>
   <div class="flex flex-col px-[16px] pb-[16px]">
-    <div class="sticky top-0 z-[999] bg-white pb-[8px] pt-[16px]">
+    <div class="sticky top-0 z-[999] bg-[var(--color-text-fff)] pb-[8px] pt-[16px]">
       <a-input-search
         :placeholder="t('system.userGroup.searchHolder')"
         allow-clear
@@ -69,8 +69,9 @@
                   <div
                     class="list-item-name one-line-text text-[var(--color-text-1)]"
                     :class="{ '!text-[rgb(var(--primary-5))]': element.id === currentId }"
-                    >{{ element.name }}</div
                   >
+                    {{ element.name }}
+                  </div>
                 </a-tooltip>
                 <div
                   v-if="
@@ -83,9 +84,8 @@
                   class="list-item-action flex flex-row items-center gap-[8px] opacity-0"
                   :class="{ '!opacity-100': element.id === currentId }"
                 >
-                  <div class="icon-button">
+                  <div v-if="element.type === systemType" class="icon-button">
                     <MsIcon
-                      v-if="element.type === systemType"
                       v-permission="props.updatePermission"
                       type="icon-icon_add_outlined"
                       size="16"
@@ -168,11 +168,35 @@
               @cancel="handleRenameCancel(element)"
               @submit="handleRenameCancel(element, element.id)"
             >
-              <div class="flex max-w-[100%] grow flex-row items-center justify-between">
-                <a-tooltip
-                  :content="
-                    systemType === AuthScopeEnum.ORGANIZATION
-                      ? element.name +
+              <div class="flex w-full grow flex-row items-center justify-between">
+                <div class="flex w-[calc(100%-56px)] items-center gap-[4px]">
+                  <a-tooltip
+                    :content="
+                      systemType === AuthScopeEnum.ORGANIZATION
+                        ? element.name +
+                          `(${
+                            element.internal
+                              ? t('common.internal')
+                              : element.scopeId === 'global'
+                              ? t('common.system.custom')
+                              : t('common.custom')
+                          })`
+                        : element.name
+                    "
+                  >
+                    <div
+                      :class="`list-item-name one-line-text  text-[var(--color-text-1)] ${
+                        systemType === AuthScopeEnum.ORGANIZATION ? 'max-w-[calc(100%-86px)]' : 'w-full'
+                      } ${element.id === currentId ? 'text-[rgb(var(--primary-5))]' : ''}`"
+                    >
+                      {{ element.name }}
+                    </div>
+                    <!-- 系统内置 -->
+                    <div
+                      v-if="systemType === AuthScopeEnum.ORGANIZATION"
+                      class="one-line-text ml-1 text-[var(--color-text-4)]"
+                    >
+                      {{
                         `(${
                           element.internal
                             ? t('common.internal')
@@ -180,28 +204,11 @@
                             ? t('common.system.custom')
                             : t('common.custom')
                         })`
-                      : element.name
-                  "
-                >
-                  <div
-                    class="list-item-name one-line-text text-[var(--color-text-1)]"
-                    :class="{ '!text-[rgb(var(--primary-5))]': element.id === currentId }"
-                    >{{ element.name }}</div
-                  >
-                  <div
-                    v-if="systemType === AuthScopeEnum.ORGANIZATION"
-                    class="one-line-text ml-1 text-[var(--color-text-4)]"
-                    >{{
-                      `(${
-                        element.internal
-                          ? t('common.internal')
-                          : element.scopeId === 'global'
-                          ? t('common.system.custom')
-                          : t('common.custom')
-                      })`
-                    }}</div
-                  >
-                </a-tooltip>
+                      }}
+                    </div>
+                  </a-tooltip>
+                </div>
+                <!-- 操作 -->
                 <div
                   v-if="
                     element.type === systemType ||
@@ -213,9 +220,8 @@
                   class="list-item-action flex flex-row items-center gap-[8px] opacity-0"
                   :class="{ '!opacity-100': element.id === currentId }"
                 >
-                  <div class="icon-button">
+                  <div v-if="element.type === systemType" class="icon-button">
                     <MsIcon
-                      v-if="element.type === systemType"
                       v-permission="props.updatePermission"
                       type="icon-icon_add_outlined"
                       size="16"
@@ -317,9 +323,8 @@
                   class="list-item-action flex flex-row items-center gap-[8px] opacity-0"
                   :class="{ '!opacity-100': element.id === currentId }"
                 >
-                  <div class="icon-button">
+                  <div v-if="element.type === systemType" class="icon-button">
                     <MsIcon
-                      v-if="element.type === systemType"
                       v-permission="props.updatePermission"
                       type="icon-icon_add_outlined"
                       size="16"

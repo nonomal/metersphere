@@ -36,6 +36,7 @@
     </div>
     <conditionContent
       v-model:data="activeItem"
+      :condition-type="props.conditionType"
       :disabled="props.disabled"
       :total-list="list"
       :response="props.response"
@@ -43,6 +44,7 @@
       :show-pre-post-request="props.showPrePostRequest"
       :request-radio-text-props="props.requestRadioTextProps"
       :sql-code-editor-height="props.sqlCodeEditorHeight"
+      :show-quick-copy="props.showQuickCopy"
       @copy="copyListItem"
       @delete="deleteListItem"
       @change="changeHandler"
@@ -59,12 +61,14 @@
 
   import { conditionTypeNameMap } from '@/config/apiTest';
   import { useI18n } from '@/hooks/useI18n';
+  import { getGenerateId } from '@/utils';
 
   import { ConditionType, ExecuteConditionProcessor, RegexExtract } from '@/models/apiTest/common';
   import { RequestConditionProcessor, RequestExtractScope } from '@/enums/apiEnum';
 
   const props = withDefaults(
     defineProps<{
+      conditionType: 'preOperation' | 'postOperation' | 'assertion' | 'scenario'; // 前置、后置、断言、场景
       disabled?: boolean;
       conditionTypes: Array<ConditionType>;
       addText: string;
@@ -73,6 +77,7 @@
       showAssociatedScene?: boolean;
       showPrePostRequest?: boolean; // 是否展示前后置请求忽略选项
       sqlCodeEditorHeight?: string;
+      showQuickCopy?: boolean; // 显示快捷复制icon
     }>(),
     {
       showAssociatedScene: false,
@@ -100,7 +105,7 @@
   function copyListItem() {
     const copyItem = {
       ...cloneDeep(activeItem.value),
-      id: new Date().getTime(),
+      id: getGenerateId(),
     };
     list.value.push(copyItem as ExecuteConditionProcessor);
     activeItem.value = list.value[list.value.length - 1];
@@ -122,7 +127,7 @@
    * 添加条件
    */
   function addCondition(value: ConditionType) {
-    const id = new Date().getTime();
+    const id = getGenerateId();
     switch (value) {
       // 脚本执行类型
       case RequestConditionProcessor.SCRIPT:
@@ -234,9 +239,9 @@
           extractors: item.extractors?.map((e, j) => ({
             ...e,
             extractScope: (e as RegexExtract).extractScope || RequestExtractScope.BODY,
-            id: new Date().getTime() + j,
+            id: getGenerateId() + j,
           })),
-          id: new Date().getTime() + i,
+          id: getGenerateId() + i,
         };
       }
       return item;

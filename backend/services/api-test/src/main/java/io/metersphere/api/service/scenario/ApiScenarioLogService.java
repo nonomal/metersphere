@@ -18,6 +18,7 @@ import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.log.dto.LogDTO;
 import io.metersphere.system.log.service.OperationLogService;
 import jakarta.annotation.Resource;
+import jakarta.validation.constraints.NotNull;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -232,5 +233,41 @@ public class ApiScenarioLogService {
                 }
         );
         operationLogService.batchAdd(logs);
+    }
+
+    public void batchScheduleConfigLog(String projectId, List<ApiScenario> scenarioList, String operator) {
+        Project project = projectMapper.selectByPrimaryKey(projectId);
+        List<LogDTO> logs = new ArrayList<>();
+        scenarioList.forEach(apiScenario -> {
+                    LogDTO dto = LogDTOBuilder.builder()
+                            .projectId(project.getId())
+                            .organizationId(project.getOrganizationId())
+                            .type(OperationLogType.UPDATE.name())
+                            .module(OperationLogModule.API_SCENARIO_MANAGEMENT_SCENARIO)
+                            .sourceId(apiScenario.getId())
+                            .method("POST")
+                            .path("/api/scenario/batch-operation/schedule-config")
+                            .createUser(operator)
+                            .content(Translator.get("api_automation_schedule") + ":" + apiScenario.getName())
+                            .build().getLogDTO();
+                    logs.add(dto);
+                }
+        );
+        operationLogService.batchAdd(logs);
+    }
+
+    public LogDTO exportExcelLog(String sourceId, String exportType, String userId, @NotNull Project project) {
+        LogDTO dto = new LogDTO(
+                project.getId(),
+                project.getOrganizationId(),
+                sourceId,
+                userId,
+                OperationLogType.EXPORT.name(),
+                OperationLogModule.API_SCENARIO_MANAGEMENT_SCENARIO,
+                "");
+        dto.setHistory(true);
+        dto.setPath("/api/scenario/export/" + exportType);
+        dto.setMethod(HttpMethodConstants.POST.name());
+        return dto;
     }
 }

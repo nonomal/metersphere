@@ -19,7 +19,7 @@ export const ExecuteScenarioUrl = '/api/scenario/run'; // 接口场景执行（�
 export const GetSystemRequestUrl = '/api/scenario/get/system-request'; // 获取导入的系统请求数据
 export const FollowScenarioUrl = '/api/scenario/follow'; // 关注/取消关注接口场景
 export const ScenarioScheduleConfigUrl = '/api/scenario/schedule-config'; // 场景定时任务
-export const ScenarioScheduleConfigDeleteUrl = '/api/scenario/schedule-config-delete'; // 场景定时任务
+export const ScenarioScheduleConfigDeleteUrl = '/api/scenario/schedule-config-delete'; // 删除场景定时任务
 export const GetStepProjectInfoUrl = '/api/scenario/step/resource-info'; // 获取跨项目信息
 export const BatchRecycleScenarioUrl = '/api/scenario/batch-operation/delete-gc'; // 批量删除接口场景
 export const BatchMoveScenarioUrl = '/api/scenario/batch-operation/move'; // 批量移动接口场景
@@ -28,6 +28,14 @@ export const BatchEditScenarioUrl = '/api/scenario/batch-operation/edit'; // 批
 export const BatchRunScenarioUrl = '/api/scenario/batch-operation/run'; // 批量执行接口场景
 export const UpdateScenarioPriorityUrl = '/api/scenario/update-priority'; // 场景更新等级
 export const UpdateScenarioStatusUrl = '/api/scenario/update-status'; // 场景更新状态
+export const ScenarioStatisticsUrl = '/api/scenario/statistics'; // 场景执行率统计
+export const ScenarioCopyStepFilesUrl = '/api/scenario/step/file/copy'; // 复制步骤时复制文件
+
+// 场景导入导出相关
+export const ImportScenarioUrl = '/api/scenario/import'; // 导入场景
+export const ExportScenarioUrl = '/api/scenario/export'; // 导出场景
+export const StopExportScenarioUrl = '/api/scenario/stop';
+export const GetExportScenarioFileUrl = '/api/scenario/download/file';
 // 场景拖拽排序
 export const dragSortUrl = '/api/scenario/edit/pos';
 //  回收站相关
@@ -41,3 +49,8 @@ export const BatchDeleteScenarioUrl = '/api/scenario/batch-operation/delete';
 
 export const ExecuteHistoryUrl = '/api/scenario/execute/page'; // 场景执行历史
 export const ScenarioHistoryUrl = '/api/scenario/operation-history/page'; // 场景变更历史
+export const ScenarioExportLogUrl = '/api/report/scenario/export'; // 场景导出报告日志记录
+export const ScenarioBatchExportLogUrl = '/api/report/scenario/batch-export'; // 场景批量导出报告日志记录
+export const GetScenarioBatchExportParamsUrl = '/api/report/scenario/batch-param'; // 场景批量导出报告id 集合
+export const ScenarioAssociateExportUrl = '/api/scenario/associate/all'; // 接口场景管理-场景导入系统参数
+export const ScenarioBatchEditScheduleUrl = '/api/scenario/batch-operation/schedule-config'; // 批量编辑场景定时任务

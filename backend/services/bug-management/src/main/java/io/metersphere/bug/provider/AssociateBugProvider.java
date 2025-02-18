@@ -15,6 +15,7 @@ import io.metersphere.request.AssociateBugPageRequest;
 import io.metersphere.request.AssociateBugRequest;
 import io.metersphere.request.BugPageProviderRequest;
 import io.metersphere.sdk.util.Translator;
+import io.metersphere.system.service.UserLoginService;
 import io.metersphere.system.uid.IDGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
@@ -40,6 +41,8 @@ public class AssociateBugProvider implements BaseAssociateBugProvider {
     private BugRelateCaseCommonService bugRelateCaseCommonService;
     @Resource
     private ExtBugRelateCaseMapper extBugRelateCaseMapper;
+    @Resource
+    private UserLoginService userLoginService;
 
 
     @Override

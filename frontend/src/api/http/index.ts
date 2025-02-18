@@ -7,6 +7,7 @@ import { deepMerge, setObjToUrlParams } from '@/utils';
 import { getToken } from '@/utils/auth';
 import { isString } from '@/utils/is';
 
+import type CommonResponse from '@/models/common';
 import { ContentTypeEnum, RequestEnum } from '@/enums/httpEnum';
 
 import { MSAxios } from './Axios';
@@ -43,7 +44,11 @@ const transform: AxiosTransform = {
       config.url += params;
       config.params = undefined;
     } else {
-      if (Reflect.has(config, 'data') && config.data && Object.keys(config.data).length > 0) {
+      if (
+        Reflect.has(config, 'data') &&
+        config.data &&
+        (Object.keys(config.data).length > 0 || Array.isArray(config.data))
+      ) {
         config.data = data;
         config.params = params;
       } else {
@@ -135,7 +140,7 @@ const transform: AxiosTransform = {
   /**
    * @description: 响应拦截器处理
    */
-  responseInterceptors: (res: AxiosResponse<any>) => {
+  responseInterceptors: (res: AxiosResponse<CommonResponse<any>>) => {
     return res;
   },
 
@@ -169,8 +174,10 @@ const transform: AxiosTransform = {
     } catch (e) {
       throw new Error(e as unknown as string);
     }
-    checkStatus(error?.response?.status, msg, errorMessageMode);
-    return Promise.reject(error?.response?.data?.message || error);
+    checkStatus(response?.status, msg, response?.data?.code, errorMessageMode);
+    return Promise.reject(
+      response?.config?.requestOptions?.isReturnNativeResponse ? response?.data : response?.data?.message || error
+    );
   },
 };
 

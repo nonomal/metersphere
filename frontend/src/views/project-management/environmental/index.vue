@@ -37,7 +37,7 @@
               :class="{ 'bg-[rgb(var(--primary-1))] !text-[rgb(var(--primary-5))]': activeKey === ALL_PARAM }"
               @click="handleListItemClick({ id: 'allParam', name: 'allParam', description: '' })"
             >
-              {{ t('project.environmental.allParam') }}
+              {{ t('project.environmental.requestHeader') }}
               <div class="node-extra">
                 <MsMoreAction
                   v-permission="['PROJECT_ENVIRONMENT:READ+IMPORT', 'PROJECT_ENVIRONMENT:READ+EXPORT']"
@@ -62,6 +62,7 @@
                 <MsButton
                   v-permission="['PROJECT_ENVIRONMENT:READ+ADD']"
                   type="icon"
+                  :disabled="!!hasUnSaveData"
                   class="!mr-0 p-[2px]"
                   @click="handleCreateEnv"
                 >
@@ -107,13 +108,16 @@
                         >
                           <div class="flex flex-row items-center gap-[8px]">
                             <icon-drag-dot-vertical
-                              v-permission="['PROJECT_ENVIRONMENT:READ+UPDATE']"
+                              v-if="
+                                hasAnyPermission(['PROJECT_ENVIRONMENT:READ+UPDATE']) &&
+                                !excludeActionType.includes(element.id)
+                              "
                               class="drag-handle env-item-drag-icon"
                             />
                             <MsMoreAction
                               v-permission="['PROJECT_ENVIRONMENT:READ+DELETE', 'PROJECT_ENVIRONMENT:READ+EXPORT']"
                               trigger="click"
-                              :list="envMoreAction(element.mock || false)"
+                              :list="envMoreAction(element)"
                               @select="
                                 (value) => handleMoreAction(value, element.id, EnvAuthTypeEnum.ENVIRONMENT_PARAM)
                               "
@@ -219,6 +223,7 @@
         <!-- 环境变量 -->
         <EnvParamBox
           v-else-if="showType === 'PROJECT' && activeKey !== ALL_PARAM"
+          ref="envParamBoxRef"
           @reset-env="resetHandler"
           @ok="successHandler"
         />
@@ -243,6 +248,7 @@
       systemTitle: t('project.environmental.env.systemTitle'),
       selectedTitle: t('project.environmental.env.selectedTitle'),
     }"
+    :export-loading="exportLoading"
     @confirm="(v) => handleEnvExport(v.map((item) => item.key))"
   />
 </template>
@@ -276,15 +282,15 @@
     listEnv,
   } from '@/api/modules/project-management/envManagement';
   import { useI18n } from '@/hooks/useI18n';
-  import useLeaveUnSaveTip from '@/hooks/useLeaveUnSaveTip';
   import useModal from '@/hooks/useModal';
   import { useAppStore } from '@/store';
   import useProjectEnvStore, {
     ALL_PARAM,
     NEW_ENV_GROUP,
     NEW_ENV_PARAM,
+    NEW_ENV_PARAM_COPY,
   } from '@/store/modules/setting/useProjectEnvStore';
-  import { downloadByteFile } from '@/utils';
+  import { characterLimit, downloadByteFile } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { EnvListItem, PopVisible } from '@/models/projectManagement/environmental';
@@ -330,29 +336,40 @@
   const exportOptionData = ref<MsExportDrawerMap>({
     systemColumns: {},
   });
+  const excludeActionType = [NEW_ENV_PARAM_COPY, NEW_ENV_PARAM];
 
   // 默认环境MoreAction
-  const envMoreAction = (isMock: boolean | undefined) => {
+  const envMoreAction = (item: EnvListItem) => {
+    const allowAction = excludeActionType.includes(item.id)
+      ? []
+      : [
+          {
+            label: t('common.rename'),
+            eventTag: 'rename',
+            disabled: item.mock || false,
+            permission: ['PROJECT_ENVIRONMENT:READ+UPDATE'],
+          },
+          {
+            label: t('common.copy'),
+            eventTag: 'copy',
+            permission: ['PROJECT_ENVIRONMENT:READ+ADD'],
+          },
+          {
+            label: t('common.export'),
+            eventTag: 'export',
+            permission: ['PROJECT_ENVIRONMENT:READ+EXPORT'],
+          },
+          {
+            isDivider: true,
+          },
+        ];
     return [
-      {
-        label: t('common.rename'),
-        eventTag: 'rename',
-        disabled: isMock,
-        permission: ['PROJECT_ENVIRONMENT:READ+UPDATE'],
-      },
-      {
-        label: t('common.export'),
-        eventTag: 'export',
-        permission: ['PROJECT_ENVIRONMENT:READ+EXPORT'],
-      },
-      {
-        isDivider: true,
-      },
+      ...allowAction,
       {
         label: t('common.delete'),
         danger: true,
         eventTag: 'delete',
-        disabled: isMock,
+        disabled: item.mock || false,
         permission: ['PROJECT_ENVIRONMENT:READ+DELETE'],
       },
     ];
@@ -403,14 +420,18 @@
       console.log(error);
     }
   };
+  const exportLoading = ref<boolean>(false);
   // 处理环境变量导出
   const handleEnvExport = async (id: string | string[]) => {
+    exportLoading.value = true;
     try {
       const blob = await exportEnv(Array.isArray(id) ? id : [id]);
       downloadByteFile(blob, 'EnvParam.json');
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
+    } finally {
+      exportLoading.value = false;
     }
   };
   const globalEnvRef = ref();
@@ -428,21 +449,6 @@
   const handleEnvImport = () => {
     importVisible.value = true;
     importAuthType.value = EnvAuthTypeEnum.ENVIRONMENT;
-  };
-
-  // 创建环境变量
-  const handleCreateEnv = () => {
-    const tmpArr = envList.value;
-    const unSaveEnv = envList.value.filter((item) => item.id === NEW_ENV_PARAM).length < 1;
-    if (unSaveEnv) {
-      tmpArr.unshift({
-        id: NEW_ENV_PARAM,
-        name: t('project.environmental.newEnv'),
-        description: '',
-      });
-      store.setCurrentId(NEW_ENV_PARAM);
-      envList.value = tmpArr;
-    }
   };
   // 创建环境组
   const handleCreateGroup = () => {
@@ -541,21 +547,25 @@
 
   // 处理删除环境
   const handleDeleteEnv = async (id: string) => {
-    if (store.currentId === NEW_ENV_PARAM) {
-      // 删除id为newEnvParam的环境
+    const isNewEnvParam = id === NEW_ENV_PARAM || id === NEW_ENV_PARAM_COPY;
+    const isCurrentIdNewEnvParam = store.currentId === NEW_ENV_PARAM || store.currentId === NEW_ENV_PARAM_COPY;
+
+    if (isCurrentIdNewEnvParam) {
       envList.value = envList.value.filter((item) => item.id !== id);
       store.setCurrentId(envList.value[0].id);
     }
-    if (id === NEW_ENV_PARAM) {
+
+    if (isNewEnvParam) {
       envList.value = envList.value.filter((item) => item.id !== id);
       store.setCurrentId(envList.value[0].id);
       return;
     }
+
     const matchingItem = envList.value.find((item) => item.id === id);
-    const itemName = matchingItem ? matchingItem.name : null;
+    const itemName = matchingItem?.name ?? '';
     openModal({
       type: 'error',
-      title: t('project.environmental.env.delete', { name: itemName }),
+      title: t('project.environmental.env.delete', { name: characterLimit(itemName) }),
       content: t('project.environmental.env.deleteTip'),
       okText: t('project.fileManagement.deleteConfirm'),
       okButtonProps: {
@@ -588,10 +598,10 @@
       return;
     }
     const matchingItem = evnGroupList.value.find((item) => item.id === id);
-    const itemName = matchingItem ? matchingItem.name : null;
+    const itemName = matchingItem?.name ?? '';
     openModal({
       type: 'error',
-      title: t('project.environmental.env.deleteGroup', { name: itemName }),
+      title: t('project.environmental.env.deleteGroup', { name: characterLimit(itemName) }),
       content: t('project.environmental.env.deleteGroupTip'),
       okText: t('project.fileManagement.deleteConfirm'),
       okButtonProps: {
@@ -627,7 +637,7 @@
     store.initEnvDetail();
   }
 
-  const envGroupBoxRef = ref();
+  const envGroupBoxRef = ref<InstanceType<typeof EnvGroupBox>>();
 
   const handleRenameCancelGroup = async (element: EnvListItem) => {
     groupPopVisible.value[element.id].visible = false;
@@ -635,10 +645,54 @@
 
   const envSuccessCroupHandler = async (element: EnvListItem) => {
     await initGroupList();
-    envGroupBoxRef.value.initDetail(element.id);
+    envGroupBoxRef.value?.initDetail(element.id);
   };
 
+  const envParamBoxRef = ref<InstanceType<typeof EnvParamBox>>();
+  function openModalTip(id: string, isNew = false) {
+    const tipContent = isNew ? t('project.environmental.env.existNewEnvTip') : t('apiTestDebug.unsavedLeave');
+    const confirmText = isNew ? t('common.save') : t('common.leave');
+    openModal({
+      type: 'warning',
+      title: t('common.tip'),
+      content: tipContent,
+      hideCancel: isNew,
+      okText: confirmText,
+      onBeforeOk: async () => {
+        if (isNew) {
+          try {
+            const isNewEnv = envList.value.some((item) => item.id === NEW_ENV_PARAM);
+            await envParamBoxRef.value?.saveCallBack(isNewEnv);
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.log(error);
+          }
+        } else {
+          store.setCurrentId(id);
+        }
+      },
+    });
+  }
+
+  const hasUnSaveData = computed(() => envList.value.find((item) => excludeActionType.includes(item.id)));
+
+  const handleListItemClickGroup = (element: EnvListItem) => {
+    const { id } = element;
+    store.setCurrentGroupId(id);
+  };
+
+  function checkHasNewEnv() {
+    if (hasUnSaveData.value) {
+      openModalTip(hasUnSaveData.value.id, true);
+      return true;
+    }
+    return false;
+  }
+
   const handleListItemClick = (element: EnvListItem) => {
+    if (checkHasNewEnv()) {
+      return;
+    }
     const { id } = element;
     // 校验是否切换
     if (store.currentId !== id) {
@@ -652,27 +706,50 @@
           : isEqual(store.currentEnvDetailInfo, store.backupEnvDetailInfo);
       if (isChangeEnvValue) {
         store.setCurrentId(id);
+      } else if (hasUnSaveData.value) {
+        openModalTip(id, true);
       } else {
-        // 如果有未保存的tab则提示用户
-        openModal({
-          type: 'warning',
-          title: t('common.tip'),
-          content: t('apiTestDebug.unsavedLeave'),
-          hideCancel: false,
-          cancelText: t('common.stay'),
-          okText: t('common.leave'),
-          onBeforeOk: async () => {
-            store.setCurrentId(id);
-          },
-        });
+        openModalTip(id);
       }
     }
   };
 
-  const handleListItemClickGroup = (element: EnvListItem) => {
-    const { id } = element;
-    store.setCurrentGroupId(id);
+  // 创建环境变量
+  const handleCreateEnv = () => {
+    const tmpArr = envList.value;
+    const unSaveEnv = envList.value.filter((item) => item.id === NEW_ENV_PARAM).length < 1;
+    if (unSaveEnv) {
+      tmpArr.unshift({
+        id: NEW_ENV_PARAM,
+        name: t('project.environmental.newEnv'),
+        description: '',
+      });
+      store.setCurrentId(NEW_ENV_PARAM);
+      envList.value = tmpArr;
+    }
   };
+
+  // 复制
+  function copyEnvHandler(id: string) {
+    if (checkHasNewEnv()) {
+      return;
+    }
+    const currentItem = envList.value.find((item) => item.id === id);
+    const tmpArr = envList.value;
+    if (currentItem) {
+      let copyName = `copy_${currentItem.name}`;
+      if (copyName.length > 255) {
+        copyName = copyName.slice(0, 255);
+      }
+      tmpArr.unshift({
+        ...currentItem,
+        name: copyName,
+        id: NEW_ENV_PARAM_COPY,
+      });
+      store.setCurrentId(NEW_ENV_PARAM_COPY);
+      store.initEnvDetail(id);
+    }
+  }
 
   // 处理MoreAction
   const handleMoreAction = (item: ActionsItem, id: string, scopeType: EnvAuthTypeEnum) => {
@@ -714,6 +791,9 @@
           popVisible.value[id] = visibleItem;
         }
         break;
+      case 'copy':
+        copyEnvHandler(id);
+        break;
       default:
         break;
     }
@@ -742,6 +822,7 @@
     if (!envId) {
       initData(keyword.value, true);
     } else {
+      initData(keyword.value, false);
       store.initEnvDetail();
     }
   }
@@ -753,9 +834,10 @@
 
 <style lang="less" scoped>
   .page {
-    @apply h-full bg-white;
+    @apply h-full;
 
     border-radius: var(--border-radius-large);
+    background-color: var(--color-text-fff);
   }
   .env-item {
     display: flex;

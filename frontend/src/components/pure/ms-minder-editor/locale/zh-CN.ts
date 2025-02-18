@@ -61,7 +61,7 @@ export default {
     main: {
       header: {
         minder: '思维导图',
-        style: '外观样式',
+        style: '样式',
       },
       main: {
         save: '保存',
@@ -70,7 +70,7 @@ export default {
         amplification: '放大',
         narrow: '缩小',
         drag: '拖拽',
-        locating_root: '定位根节点',
+        locating_root: '回到中心节点',
         navigator: '导航器',
       },
       history: {
@@ -95,13 +95,19 @@ export default {
     hotboxMenu: {
       expand: '展开/收起',
       insetParent: '插入上一级',
-      insetSon: '插入下一级',
-      insetBrother: '插入同级',
+      insetSon: '添加子级',
+      insetBrother: '添加同级',
       copy: '复制',
       cut: '剪切',
       paste: '粘贴',
       delete: '删除',
       enterNode: '进入当前节点',
     },
+    loading: '脑图加载中...',
+    shortcut: '快捷键',
+    shortcutTitle: '快捷键说明',
+    expand: '展开/收起',
+    notSupportClipboard: '因浏览器安全策略限制，非 HTTPS 协议的网站无法访问剪贴板，请使用快捷键复制/粘贴',
+    editNodeText: '编辑节点文本',
   },
 };

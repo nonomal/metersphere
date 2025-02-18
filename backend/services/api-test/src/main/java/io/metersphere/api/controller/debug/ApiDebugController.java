@@ -1,9 +1,11 @@
 package io.metersphere.api.controller.debug;
 
-import io.metersphere.api.constants.ApiResourceType;
+import io.metersphere.api.curl.domain.CurlEntity;
+import io.metersphere.api.curl.util.CurlParserUtil;
 import io.metersphere.api.domain.ApiDebug;
 import io.metersphere.api.dto.debug.*;
 import io.metersphere.api.dto.request.ApiEditPosRequest;
+import io.metersphere.api.dto.request.ApiImportCurlRequest;
 import io.metersphere.api.dto.request.ApiTransferRequest;
 import io.metersphere.api.service.ApiFileResourceService;
 import io.metersphere.api.service.debug.ApiDebugLogService;
@@ -12,7 +14,9 @@ import io.metersphere.project.service.FileModuleService;
 import io.metersphere.sdk.constants.DefaultRepositoryDir;
 import io.metersphere.sdk.constants.PermissionConstants;
 import io.metersphere.sdk.dto.api.task.TaskRequestDTO;
+import io.metersphere.sdk.util.JSON;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
+import io.metersphere.system.file.annotation.FileLimit;
 import io.metersphere.system.log.annotation.Log;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.security.CheckOwner;
@@ -27,6 +31,8 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * @author : jianxing
@@ -66,6 +72,7 @@ public class ApiDebugController {
         return apiDebugService.add(request, SessionUtils.getUserId());
     }
 
+    @FileLimit
     @PostMapping("/upload/temp/file")
     @Operation(summary = "上传接口调试所需的文件资源，并返回文件ID")
     @RequiresPermissions(logical = Logical.OR, value = {PermissionConstants.PROJECT_API_DEBUG_ADD, PermissionConstants.PROJECT_API_DEBUG_UPDATE})
@@ -121,4 +128,20 @@ public class ApiDebugController {
     public List<BaseTreeNode> options(@PathVariable String projectId) {
         return fileModuleService.getTree(projectId);
     }
+
+
+    @PostMapping("/import-curl")
+    @Operation(summary = "接口测试-接口调试-导入curl")
+    @RequiresPermissions(value = {PermissionConstants.PROJECT_API_DEBUG_READ, PermissionConstants.PROJECT_API_SCENARIO_ADD}, logical = Logical.OR)
+    public CurlEntity importCurl(@RequestBody ApiImportCurlRequest request) {
+        CurlEntity parse = CurlParserUtil.parse(request.getCurl());
+        Optional.ofNullable(parse.getBody()).ifPresent(body -> {
+            if (parse.getMethod() == CurlEntity.Method.GET) {
+                Map map = JSON.parseMap(JSON.toFormatJSONString(body));
+                parse.getQueryParams().putAll(map);
+            }
+        });
+        return parse;
+    }
+
 }

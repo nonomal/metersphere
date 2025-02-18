@@ -4,10 +4,10 @@
       v-model:focus-node-key="focusNodeKey"
       :selected-keys="props.selectedKeys"
       :data="testPlanTree"
-      :keyword="groupKeyword"
+      :keyword="moduleKeyword"
       :node-more-actions="caseMoreActions"
       :expand-all="props.isExpandAll"
-      :empty-text="t('testPlan.testPlanIndex.planEmptyContent')"
+      :empty-text="t('common.noMatchData')"
       :draggable="hasAnyPermission(['PROJECT_TEST_PLAN:READ+UPDATE'])"
       :virtual-list-props="virtualListProps"
       block-node
@@ -34,29 +34,35 @@
       <template #extra="nodeData">
         <MsPopConfirm
           v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+ADD'])"
-          :visible="addSubVisible"
           :is-delete="false"
-          :all-names="[]"
+          :all-names="(nodeData.children || []).map((e: ModuleTreeNode) => e.name || '')"
           :title="t('testPlan.testPlanIndex.addSubModule')"
           :ok-text="t('common.confirm')"
           :field-config="{
             placeholder: t('testPlan.testPlanIndex.addGroupTip'),
+            nameExistTipText: t('project.fileManagement.nameExist'),
           }"
           :loading="confirmLoading"
           @confirm="addSubModule"
           @cancel="resetFocusNodeKey"
         >
-          <MsButton type="icon" size="mini" class="ms-tree-node-extra__btn !mr-0" @click="setFocusKey(nodeData)">
+          <MsButton
+            v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+ADD'])"
+            type="icon"
+            size="mini"
+            class="ms-tree-node-extra__btn !mr-0"
+            @click="setFocusKey(nodeData)"
+          >
             <MsIcon type="icon-icon_add_outlined" size="14" class="text-[var(--color-text-4)]" />
           </MsButton>
         </MsPopConfirm>
         <MsPopConfirm
           v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+UPDATE'])"
           :title="t('testPlan.testPlanIndex.rename')"
-          :all-names="[]"
+          :all-names="(nodeData.parent? nodeData.parent.children || [] : testPlanTree).filter((e: ModuleTreeNode) => e.id !== nodeData.id).map((e: ModuleTreeNode) => e.name || '')"
           :is-delete="false"
           :ok-text="t('common.confirm')"
-          :field-config="{ field: renameCaseName }"
+          :field-config="{ field: renameCaseName, nameExistTipText: t('project.fileManagement.nameExist') }"
           :loading="confirmLoading"
           @confirm="updateNameModule"
           @cancel="resetFocusNodeKey"
@@ -70,10 +76,11 @@
 
 <script setup lang="ts">
   import { computed, onBeforeMount, ref, watch } from 'vue';
+  import { useVModel } from '@vueuse/core';
   import { Message } from '@arco-design/web-vue';
 
   import MsButton from '@/components/pure/ms-button/index.vue';
-  import MsPopConfirm from '@/components/pure/ms-popconfirm/index.vue';
+  import MsPopConfirm, { ConfirmValue } from '@/components/pure/ms-popconfirm/index.vue';
   import type { ActionsItem } from '@/components/pure/ms-table-more-action/types';
   import MsTree from '@/components/business/ms-tree/index.vue';
   import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
@@ -88,7 +95,7 @@
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import useAppStore from '@/store/modules/app';
-  import { mapTree } from '@/utils';
+  import { characterLimit, mapTree } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import type { CreateOrUpdateModule, UpdateModule } from '@/models/caseManagement/featureCase';
@@ -106,13 +113,22 @@
     isExpandAll: boolean; // 是否展开用例节点
     allNames?: string[]; // 所有的模块name列表
     modulesCount?: Record<string, number>; // 模块数量统计对象
+    groupKeyword: string;
   }>();
 
-  const emits = defineEmits(['update:selectedKeys', 'planTreeNodeSelect', 'init', 'dragUpdate', 'getNodeName']);
+  const emits = defineEmits([
+    'update:selectedKeys',
+    'planTreeNodeSelect',
+    'init',
+    'dragUpdate',
+    'getNodeName',
+    'update:groupKeyword',
+    'deleteNode',
+  ]);
 
   const currentProjectId = computed(() => appStore.currentProjectId);
 
-  const groupKeyword = ref<string>('');
+  const moduleKeyword = useVModel(props, 'groupKeyword', emits);
 
   const testPlanTree = ref<ModuleTreeNode[]>([]);
 
@@ -124,11 +140,13 @@
     {
       label: 'caseManagement.featureCase.rename',
       eventTag: 'rename',
+      permission: ['PROJECT_TEST_PLAN:READ+UPDATE'],
     },
     {
       label: 'caseManagement.featureCase.delete',
       eventTag: 'delete',
       danger: true,
+      permission: ['PROJECT_TEST_PLAN:READ+DELETE'],
     },
   ];
 
@@ -166,7 +184,7 @@
       if (isSetDefaultKey) {
         selectedNodeKeys.value = [testPlanTree.value[0].id];
       }
-      emits('init', testPlanTree.value);
+      emits('init', testPlanTree.value, isSetDefaultKey);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -179,7 +197,7 @@
   const deleteHandler = (node: MsTreeNodeData) => {
     openModal({
       type: 'error',
-      title: t('caseManagement.featureCase.deleteTipTitle', { name: node.name }),
+      title: t('common.deleteConfirmTitle', { name: characterLimit(node.name) }),
       content: t('caseManagement.featureCase.deleteCaseTipContent'),
       okText: t('caseManagement.featureCase.deleteConfirm'),
       okButtonProps: {
@@ -189,8 +207,9 @@
       onBeforeOk: async () => {
         try {
           await deletePlanModuleTree(node.id);
+          initModules();
+          emits('deleteNode');
           Message.success(t('common.deleteSuccess'));
-          initModules(selectedNodeKeys.value[0] === node.id);
         } catch (error) {
           console.log(error);
         }
@@ -279,16 +298,15 @@
     }
   };
 
-  const addSubVisible = ref(false);
   const confirmLoading = ref(false);
 
   // 添加子模块
-  async function addSubModule(formValue?: { field: string }, cancel?: () => void) {
+  async function addSubModule(formValue: ConfirmValue, cancel?: () => void) {
     try {
       confirmLoading.value = true;
       const params: CreateOrUpdateModule = {
         projectId: currentProjectId.value,
-        name: formValue?.field as string,
+        name: formValue.field,
         parentId: focusNodeKey.value,
       };
       await createPlanModuleTree(params);
@@ -296,8 +314,9 @@
       if (cancel) {
         cancel();
       }
-      initModules();
+      initModules(true);
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       confirmLoading.value = false;
@@ -305,12 +324,12 @@
   }
 
   // 更新子模块
-  async function updateNameModule(formValue?: { field: string }, cancel?: () => void) {
+  async function updateNameModule(formValue: ConfirmValue, cancel?: () => void) {
     try {
       confirmLoading.value = true;
       const params: UpdateModule = {
         id: focusNodeKey.value,
-        name: formValue?.field as string,
+        name: formValue.field,
       };
       await updatePlanModuleTree(params);
       Message.success(t('common.updateSuccess'));
@@ -319,6 +338,7 @@
       }
       initModules();
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       confirmLoading.value = false;
@@ -327,21 +347,12 @@
 
   const virtualListProps = computed(() => {
     return {
-      height: 'calc(100vh - 240px)',
+      height: 'calc(100vh - 200px)',
       threshold: 200,
       fixedSize: true,
       buffer: 15,
     };
   });
-
-  watch(
-    () => props.activeFolder,
-    (val) => {
-      if (val === 'all') {
-        initModules();
-      }
-    }
-  );
 
   /**
    * 初始化模块文件数量

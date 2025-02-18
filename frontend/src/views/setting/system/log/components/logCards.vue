@@ -104,7 +104,7 @@
     </MsCard>
     <MsCard class="log-card" simple auto-height>
       <div class="log-card-header">
-        <div class="font-medium text-[var(--color-text-000)]">{{ t('system.log.log') }}</div>
+        <div class="font-medium text-[var(--color-text-1)]">{{ t('system.log.log') }}</div>
       </div>
       <ms-base-table v-bind="propsRes" no-disable sticky-header v-on="propsEvent">
         <template #range="{ record }">
@@ -135,7 +135,16 @@
           {{ t(typeOptions.find((e) => e.value === record.type)?.label || '') }}
         </template>
         <template #content="{ record }">
-          <div v-if="record.module === 'SYSTEM' || record.type === 'DELETE'" class="one-line-text">
+          <div
+            v-if="
+              record.module === 'SYSTEM' ||
+              record.type === 'DELETE' ||
+              record.module.includes('MODULE') ||
+              record.module.includes('TASK_CENTER') ||
+              record.module.includes('API_TEST_MANAGEMENT_DEFINITION_SHARE')
+            "
+            class="one-line-text"
+          >
             {{ record.content }}
           </div>
           <MsButton v-else @click="handleNameClick(record)">
@@ -455,6 +464,14 @@
       label: 'system.log.operateType.archived',
       value: 'ARCHIVED',
     },
+    {
+      label: 'system.log.operateType.stop',
+      value: 'STOP',
+    },
+    {
+      label: 'system.log.operateType.rerun',
+      value: 'RERUN',
+    },
   ];
 
   function resetFilter() {
@@ -557,6 +574,7 @@
 
   function handleNameClick(record: LogItem) {
     if (record.type === 'DELETE') {
+      // 删除操作或任务中心相关操作只展示内容，不跳转
       return;
     }
     const routeQuery: Record<string, any> = {

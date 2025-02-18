@@ -22,7 +22,6 @@ public class TestPlanCaseRequest extends BasePageRequest implements Serializable
     private String testPlanId;
 
     @Schema(description = "项目ID", requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotBlank(message = "{functional_case.project_id.not_blank}")
     private String projectId;
 
     @Schema(description = "版本id")
@@ -33,4 +32,10 @@ public class TestPlanCaseRequest extends BasePageRequest implements Serializable
 
     @Schema(description = "模块id")
     private List<String> moduleIds;
+
+    @Schema(description = "计划集id")
+    private String collectionId;
+
+    @Schema(description = "是否包含空执行人")
+    private boolean nullExecutorKey;
 }

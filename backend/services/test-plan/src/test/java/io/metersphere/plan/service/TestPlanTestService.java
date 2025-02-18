@@ -10,19 +10,26 @@ import io.metersphere.functional.domain.FunctionalCase;
 import io.metersphere.functional.mapper.FunctionalCaseMapper;
 import io.metersphere.plan.domain.*;
 import io.metersphere.plan.dto.request.TestPlanUpdateRequest;
+import io.metersphere.plan.dto.response.TestPlanResponse;
+import io.metersphere.plan.job.TestPlanScheduleJob;
 import io.metersphere.plan.mapper.*;
 import io.metersphere.project.domain.Project;
 import io.metersphere.project.mapper.ProjectMapper;
 import io.metersphere.sdk.constants.*;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.SubListUtils;
+import io.metersphere.system.controller.handler.ResultHolder;
 import io.metersphere.system.domain.TestPlanModuleExample;
+import io.metersphere.system.mapper.ExtScheduleMapper;
 import io.metersphere.system.uid.IDGenerator;
 import io.metersphere.system.uid.NumGenerator;
+import io.metersphere.system.utils.Pager;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
+import org.quartz.Scheduler;
+import org.quartz.SchedulerException;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -41,8 +48,6 @@ public class TestPlanTestService {
     @Resource
     private TestPlanFollowerMapper testPlanFollowerMapper;
     @Resource
-    private TestPlanAllocationMapper testPlanAllocationMapper;
-    @Resource
     private TestPlanReportMapper testPlanReportMapper;
     @Resource
     private TestPlanFunctionalCaseMapper testPlanFunctionalCaseMapper;
@@ -60,8 +65,12 @@ public class TestPlanTestService {
     public TestPlan selectTestPlanByName(String name) {
         TestPlanExample testPlanExample = new TestPlanExample();
         testPlanExample.createCriteria().andNameEqualTo(name);
-        TestPlan testPlan = testPlanMapper.selectByExample(testPlanExample).get(0);
-        return testPlan;
+        List<TestPlan> testPlanList = testPlanMapper.selectByExample(testPlanExample);
+        if (CollectionUtils.isEmpty(testPlanList)) {
+            return null;
+        } else {
+            return testPlanList.getFirst();
+        }
     }
     public void checkTestPlanByAddTest() {
         /*
@@ -146,7 +155,7 @@ public class TestPlanTestService {
             functionalCase.setReviewStatus("UN_REVIEWED");
             functionalCase.setPos((long) (i * 64));
             functionalCase.setRefId(functionalCase.getId());
-            functionalCase.setLastExecuteResult(FunctionalCaseExecuteResult.PENDING.name());
+            functionalCase.setLastExecuteResult(ExecStatus.PENDING.name());
             functionalCase.setLatest(true);
             functionalCase.setCreateUser("admin");
             functionalCase.setCreateTime(System.currentTimeMillis());
@@ -291,8 +300,8 @@ public class TestPlanTestService {
             }
         }
 
-        if (updateRequest.getTestPlanGroupId() != null) {
-            Assertions.assertEquals(newTestPlan.getGroupId(), updateRequest.getTestPlanGroupId());
+        if (updateRequest.getGroupId() != null) {
+            Assertions.assertEquals(newTestPlan.getGroupId(), updateRequest.getGroupId());
         } else {
             Assertions.assertEquals(newTestPlan.getGroupId(), testPlan.getGroupId());
         }
@@ -418,15 +427,57 @@ public class TestPlanTestService {
             testPlanFollowerExample.createCriteria().andTestPlanIdIn(subList);
             Assertions.assertEquals(testPlanFollowerMapper.countByExample(testPlanFollowerExample), 0);
 
-            TestPlanAllocationExample testPlanAllocationExample = new TestPlanAllocationExample();
-            testPlanAllocationExample.createCriteria().andTestPlanIdIn(subList);
-            Assertions.assertEquals(testPlanAllocationMapper.countByExample(testPlanAllocationExample), 0);
-
             TestPlanReportExample testPlanReportExample = new TestPlanReportExample();
             testPlanReportExample.createCriteria().andTestPlanIdIn(subList);
             Assertions.assertEquals(testPlanReportMapper.countByExample(testPlanReportExample), 0);
 
 
         });
+    }
+
+    public List<TestPlanResponse> getTestPlanResponse(String returnData) {
+        ResultHolder resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        Pager<Object> result = JSON.parseObject(JSON.toJSONString(resultHolder.getData()), Pager.class);
+        List<TestPlanResponse> returnList = JSON.parseArray(JSON.toJSONString(result.getList()), TestPlanResponse.class);
+        return returnList;
+    }
+
+    public void checkTestPlanPage(String returnData, long current, long pageSize, long allData) {
+        ResultHolder resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        Pager<Object> result = JSON.parseObject(JSON.toJSONString(resultHolder.getData()), Pager.class);
+        //返回值的页码和当前页码相同
+        Assertions.assertEquals(result.getCurrent(), current);
+        //返回的数据量不超过规定要返回的数据量相同
+        Assertions.assertTrue(JSON.parseArray(JSON.toJSONString(result.getList())).size() <= pageSize);
+        if (allData > 0) {
+            Assertions.assertEquals(result.getTotal(), allData);
+        }
+    }
+
+    @Resource
+    private ExtScheduleMapper extScheduleMapper;
+
+    @Resource
+    private Scheduler scheduler;
+
+    /*
+    校验定时任务是否成功开启：
+        1.schedule表中存在数据，且开启状态符合isEnable
+        2.开启状态下：    qrtz_triggers 和 qrtz_cron_triggers 表存在对应的数据
+        3.关闭状态下：    qrtz_triggers 和 qrtz_cron_triggers 表不存在对应的数据
+     */
+    public void checkSchedule(String scheduleId, String resourceId, boolean isEnable) throws Exception {
+        Assertions.assertEquals(extScheduleMapper.countByIdAndEnable(scheduleId, isEnable), 1L);
+        Assertions.assertEquals(scheduler.checkExists(TestPlanScheduleJob.getJobKey(resourceId)), isEnable);
+    }
+
+    public void checkSchedule(String resourceId, boolean isEnable) throws Exception {
+        Assertions.assertEquals(extScheduleMapper.countByResourceId(resourceId), 1L);
+        Assertions.assertEquals(scheduler.checkExists(TestPlanScheduleJob.getJobKey(resourceId)), isEnable);
+    }
+    
+    public void checkScheduleIsRemove(String resourceId) throws SchedulerException {
+        Assertions.assertEquals(extScheduleMapper.countByResourceId(resourceId), 0L);
+        Assertions.assertEquals(scheduler.checkExists(TestPlanScheduleJob.getJobKey(resourceId)), false);
     }
 }

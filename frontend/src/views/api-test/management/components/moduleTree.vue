@@ -1,89 +1,60 @@
 <template>
   <div>
     <template v-if="!props.isModal">
-      <a-select
-        v-if="!props.readOnly"
-        v-model:model-value="moduleProtocol"
-        :options="moduleProtocolOptions"
-        class="mb-[8px]"
-        @change="() => handleProtocolChange()"
-      />
-      <div class="mb-[8px] flex items-center gap-[8px]">
-        <a-input
-          v-model:model-value="moduleKeyword"
-          :placeholder="props.isModal ? t('apiTestManagement.moveSearchTip') : t('apiTestManagement.searchTip')"
-          allow-clear
-        />
-        <template v-if="!props.readOnly && !props.trash">
-          <a-dropdown-button
-            v-if="
-              moduleProtocol === 'HTTP' &&
-              hasAllPermission(['PROJECT_API_DEFINITION:READ+ADD', 'PROJECT_API_DEFINITION:READ+IMPORT'])
-            "
-            type="primary"
-            @click="handleSelect('newApi')"
-          >
-            {{ t('common.newCreate') }}
-            <template #icon>
-              <icon-down />
-            </template>
-            <template #content>
-              <a-doption value="import" @click="handleSelect('import')">
-                {{ t('apiTestManagement.importApi') }}
-              </a-doption>
-            </template>
-          </a-dropdown-button>
-          <a-button
-            v-else-if="
-              moduleProtocol === 'HTTP' &&
-              !hasAnyPermission(['PROJECT_API_DEFINITION:READ+ADD']) &&
-              hasAnyPermission(['PROJECT_API_DEFINITION:READ+IMPORT'])
-            "
-            type="primary"
-            @click="handleSelect('import')"
-          >
-            {{ t('apiTestManagement.importApi') }}
-          </a-button>
-          <a-button
-            v-else
-            v-permission="['PROJECT_API_DEFINITION:READ+ADD']"
-            type="primary"
-            @click="handleSelect('newApi')"
-          >
-            {{ t('apiTestManagement.newApi') }}
-          </a-button>
-        </template>
+      <div v-if="!props.readOnly && !props.trash && !props.docShareId" class="mb-[8px] flex items-center gap-[8px]">
+        <a-button
+          v-permission="['PROJECT_API_DEFINITION:READ+ADD']"
+          type="primary"
+          long
+          @click="handleSelect('newApi')"
+        >
+          {{ t('apiTestManagement.newApi') }}
+        </a-button>
+        <a-button
+          v-permission="['PROJECT_API_DEFINITION:READ+IMPORT']"
+          type="outline"
+          long
+          @click="handleSelect('import')"
+        >
+          {{ t('apiTestManagement.importApi') }}
+        </a-button>
       </div>
-      <div class="folder" @click="setActiveFolder('all')">
-        <div :class="allFolderClass">
-          <MsIcon type="icon-icon_folder_filled1" class="folder-icon" />
-          <div class="folder-name">{{ t('apiTestManagement.allApi') }}</div>
-          <div class="folder-count">({{ allFileCount }})</div>
-        </div>
-        <div class="ml-auto flex items-center">
-          <a-tooltip
-            v-if="!props.readOnly && !props.trash"
-            :content="isExpandApi ? t('apiTestManagement.collapseApi') : t('apiTestManagement.expandApi')"
-          >
-            <MsButton type="icon" status="secondary" class="!mr-0 p-[4px]" @click="changeApiExpand">
-              <icon-eye-invisible v-if="isExpandApi" />
-              <icon-eye v-else />
-            </MsButton>
-          </a-tooltip>
-          <a-tooltip :content="isExpandAll ? t('common.collapseAll') : t('common.expandAll')">
-            <MsButton type="icon" status="secondary" class="!mr-0 p-[4px]" @click="changeExpand">
-              <MsIcon :type="isExpandAll ? 'icon-icon_folder_collapse1' : 'icon-icon_folder_expansion1'" />
-            </MsButton>
-          </a-tooltip>
+      <a-input
+        v-model:model-value="moduleKeyword"
+        :placeholder="props.isModal ? t('apiTestManagement.moveSearchTip') : t('apiTestManagement.searchTip')"
+        class="mb-[8px]"
+        allow-clear
+      />
+      <TreeFolderAll
+        v-if="!props.readOnly"
+        ref="treeFolderAllRef"
+        v-model:isExpandApi="isExpandApi"
+        v-model:isExpandAll="isExpandAll"
+        :protocol-key="ProtocolKeyEnum.API_MODULE_TREE_PROTOCOL"
+        :folder-name="t('apiTestManagement.allApi')"
+        :all-count="allFileCount"
+        :active-folder="selectedKeys[0] as string"
+        :show-expand-api="!props.readOnly && !props.trash && !props.docShareId"
+        :not-show-operation="!!props.docShareId"
+        @set-active-folder="setActiveFolder"
+        @change-api-expand="changeApiExpand"
+        @selected-protocols-change="selectedProtocolsChange"
+      >
+        <template #expandRight>
           <popConfirm
-            v-if="hasAnyPermission(['PROJECT_API_DEFINITION:READ+ADD']) && !props.readOnly && !props.trash"
+            v-if="
+              hasAnyPermission(['PROJECT_API_DEFINITION:READ+ADD']) &&
+              !props.readOnly &&
+              !props.trash &&
+              !props.docShareId
+            "
             mode="add"
             :all-names="rootModulesName"
             parent-id="NONE"
             :add-module-api="addModule"
             @add-finish="handleAddFinish"
           >
-            <MsButton type="icon" class="!mr-0 p-[2px]">
+            <MsButton v-if="!props.docShareId" type="icon" class="!mr-0 p-[2px]">
               <MsIcon
                 type="icon-icon_create_planarity"
                 size="18"
@@ -91,9 +62,13 @@
               />
             </MsButton>
           </popConfirm>
-        </div>
-      </div>
-      <a-divider class="my-[8px]" />
+          <a-tooltip v-if="props.docShareId && shareDetailInfo.allowExport" :content="t('common.export')">
+            <MsButton type="icon" status="secondary" class="!mr-[4px] p-[4px]" @click="changeApiExpand">
+              <MsIcon type="icon-icon_top-align_outlined" :size="16" @click="exportShare" />
+            </MsButton>
+          </a-tooltip>
+        </template>
+      </TreeFolderAll>
     </template>
     <a-input
       v-else
@@ -102,7 +77,7 @@
       class="mb-[16px]"
       allow-clear
     />
-    <a-spin class="w-full" :style="{ height: `calc(100vh - 298px)` }" :loading="loading">
+    <a-spin class="w-full" :loading="loading">
       <MsTree
         v-model:focus-node-key="focusNodeKey"
         v-model:selected-keys="selectedKeys"
@@ -188,6 +163,7 @@
   import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
   import apiMethodName from '@/views/api-test/components/apiMethodName.vue';
   import popConfirm from '@/views/api-test/components/popConfirm.vue';
+  import TreeFolderAll from '@/views/api-test/components/treeFolderAll.vue';
 
   import { getProtocolList } from '@/api/modules/api-test/common';
   import {
@@ -197,6 +173,8 @@
     getModuleCount,
     getModuleTree,
     getModuleTreeOnlyModules,
+    getShareModuleCount,
+    getShareModuleTree,
     getTrashModuleCount,
     getTrashModuleTree,
     moveModule,
@@ -208,11 +186,13 @@
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import useAppStore from '@/store/modules/app';
-  import { characterLimit, mapTree } from '@/utils';
-  import { hasAllPermission, hasAnyPermission } from '@/utils/permission';
+  import { characterLimit, mapTree, TreeNode } from '@/utils';
+  import { getLocalStorage } from '@/utils/local-storage';
+  import { hasAnyPermission } from '@/utils/permission';
 
-  import { ApiDefinitionGetModuleParams } from '@/models/apiTest/management';
+  import { ApiDefinitionGetModuleParams, ShareDetailType } from '@/models/apiTest/management';
   import { ModuleTreeNode } from '@/models/common';
+  import { ProtocolKeyEnum } from '@/enums/apiEnum';
 
   const props = withDefaults(
     defineProps<{
@@ -222,6 +202,7 @@
       activeNodeId?: string | number; // 当前选中节点 id
       isModal?: boolean; // 是否弹窗模式，只读且只可见模块树
       trash?: boolean; // 是否是回收站
+      docShareId?: string; // 是否分享文档
     }>(),
     {
       activeModule: 'all',
@@ -240,6 +221,8 @@
     'updateApiNode',
     'deleteNode',
     'execute',
+    'openCurrentNode',
+    'exportShare',
   ]);
 
   const appStore = useAppStore();
@@ -247,7 +230,8 @@
   const { openModal } = useModal();
   const { copy, isSupported } = useClipboard({ legacy: true });
 
-  const moduleProtocol = ref('HTTP');
+  const treeFolderAllRef = ref<InstanceType<typeof TreeFolderAll>>();
+  const selectedProtocols = computed<string[]>(() => treeFolderAllRef.value?.selectedProtocols ?? []);
   const moduleProtocolOptions = ref<SelectOptionData[]>([]);
   const protocolLoading = ref(false);
 
@@ -292,7 +276,7 @@
       };
     }
     return {
-      height: 'calc(100vh - 298px)',
+      height: props.docShareId ? 'calc(100vh - 193px)' : 'calc(100vh - 273px)',
       threshold: 200,
       fixedSize: true,
       buffer: 15, // 缓冲区默认 10 的时候，虚拟滚动的底部 padding 计算有问题
@@ -300,12 +284,9 @@
   });
 
   const moduleKeyword = ref(''); // 只用于前端过滤树节点，不传入后台查询！！！
-  const folderTree = ref<ModuleTreeNode[]>([]);
+  const folderTree = ref<TreeNode<ModuleTreeNode>[]>([]);
   const focusNodeKey = ref<string | number>('');
   const selectedKeys = ref<Array<string | number>>([props.activeModule]);
-  const allFolderClass = computed(() =>
-    selectedKeys.value[0] === 'all' ? 'folder-text folder-text--active' : 'folder-text'
-  );
   const loading = ref(false);
 
   function setActiveFolder(id: string) {
@@ -368,17 +349,47 @@
   const allFileCount = computed(() => modulesCount.value.all || 0);
   const isExpandAll = ref(props.isExpandAll);
   const rootModulesName = ref<string[]>([]); // 根模块名称列表
-  const isExpandApi = ref(false);
+  const isExpandApi = ref(getLocalStorage('isExpandApi') === 'true');
   const lastModuleCountParam = ref<ApiDefinitionGetModuleParams>({
     projectId: appStore.currentProjectId,
     keyword: '',
-    protocol: moduleProtocol.value,
+    protocols: selectedProtocols.value,
     moduleIds: [],
   });
+  // 分享详情
+  const shareDetailInfo = inject<Ref<ShareDetailType>>(
+    'shareDetailInfo',
+    ref({
+      invalid: false,
+      allowExport: false,
+      isPrivate: false,
+    })
+  );
+
+  const apiNodes = ref<TreeNode<ModuleTreeNode>[]>([]);
+  const currentNode = ref<TreeNode<ModuleTreeNode> | null>(null);
+  // 设置当前节点
+  const setCurrentNode = (id: string, isSelectedNode = false) => {
+    currentNode.value = apiNodes.value.find((node) => node.id === id) || null;
+    selectedKeys.value = [id];
+    emit('openCurrentNode', currentNode.value, apiNodes.value, isSelectedNode);
+  };
+
+  const getTreeNodeList = (nodes: TreeNode<ModuleTreeNode>[]) => {
+    nodes.forEach((node: TreeNode<ModuleTreeNode>) => {
+      if (node.type === 'API') {
+        apiNodes.value.push(node);
+      }
+      if (node.children) {
+        getTreeNodeList(node.children);
+      }
+    });
+  };
+
   async function initModuleCount(params: ApiDefinitionGetModuleParams) {
     try {
       lastModuleCountParam.value = params;
-      lastModuleCountParam.value.protocol = moduleProtocol.value;
+      lastModuleCountParam.value.protocols = selectedProtocols.value;
       let res;
       if (props.trash) {
         res = await getTrashModuleCount(params);
@@ -413,7 +424,46 @@
       emit('folderNodeSelect', _selectedKeys, offspringIds);
     } else if (node.type === 'API') {
       emit('clickApiNode', node);
+      if (props.docShareId) {
+        setCurrentNode(node.id, true);
+      }
     }
+  }
+  // 分享模块count
+  async function initShareModuleCount(params: ApiDefinitionGetModuleParams) {
+    try {
+      modulesCount.value = await getShareModuleCount({
+        ...params,
+        shareId: props.docShareId,
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  }
+  // 分享模块树
+  async function initShareModuleTree() {
+    await initShareModuleCount({ ...lastModuleCountParam.value, orgId: appStore.currentOrgId, protocols: [] });
+    let res;
+    res = await getShareModuleTree({
+      keyword: '',
+      protocols: [],
+      projectId: appStore.currentProjectId,
+      moduleIds: [],
+      orgId: appStore.currentOrgId,
+      shareId: props.docShareId,
+    });
+    res = mapTree<ModuleTreeNode>(res, (node) => {
+      const mappedNode = {
+        ...node,
+        count: modulesCount.value[node.id] || 0,
+        draggable: false,
+        disabled: false,
+        hideMoreAction: true,
+      };
+      return modulesCount.value[node.id] === 0 && node.type === 'MODULE' ? null : mappedNode;
+    });
+    return res;
   }
 
   /**
@@ -424,11 +474,18 @@
     try {
       loading.value = true;
       let res;
-      if (props.trash) {
+      if (props.docShareId) {
+        res = await initShareModuleTree();
+        folderTree.value = res;
+        getTreeNodeList(folderTree.value);
+        if (apiNodes.value.length) {
+          setCurrentNode(apiNodes.value[0].id);
+        }
+      } else if (props.trash) {
         res = await getTrashModuleTree({
           // 回收站下的模块
           keyword: '',
-          protocol: moduleProtocol.value,
+          protocols: selectedProtocols.value,
           projectId: appStore.currentProjectId,
           moduleIds: [],
         });
@@ -436,7 +493,7 @@
         // 查看模块及模块下的请求
         res = await getModuleTree({
           keyword: '',
-          protocol: moduleProtocol.value,
+          protocols: selectedProtocols.value,
           projectId: appStore.currentProjectId,
           moduleIds: [],
         });
@@ -444,7 +501,7 @@
         res = await getModuleTreeOnlyModules({
           // 只查看模块
           keyword: '',
-          protocol: moduleProtocol.value,
+          protocols: selectedProtocols.value,
           projectId: appStore.currentProjectId,
           moduleIds: [],
         });
@@ -464,16 +521,13 @@
             disabled: e.id === selectedKeys.value[0],
           };
         });
-      } else {
+      } else if (!props.docShareId) {
         folderTree.value = mapTree<ModuleTreeNode>(res, (e, fullPath) => {
           // 拼接当前节点的完整路径
           nodePathObj[e.id] = {
             path: e.path,
             fullPath,
           };
-          if (!isSetDefaultKey && e.id === selectedKeys.value[0]) {
-            folderNodeSelect([selectedKeys.value[0]], e);
-          }
           return {
             ...e,
             hideMoreAction: e.id === 'root',
@@ -484,21 +538,53 @@
       if (isSetDefaultKey) {
         selectedKeys.value = [folderTree.value[0].id];
       }
-      emit('init', folderTree.value, moduleProtocol.value, nodePathObj);
+      emit('init', folderTree.value, selectedProtocols.value, nodePathObj);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       loading.value = false;
-      initModuleCount(lastModuleCountParam.value);
+      if (!props.docShareId) {
+        initModuleCount(lastModuleCountParam.value);
+      }
     }
   }
 
-  function handleProtocolChange() {
-    emit('changeProtocol', moduleProtocol.value);
-    lastModuleCountParam.value.protocol = moduleProtocol.value;
+  function selectedProtocolsChange() {
+    emit('changeProtocol', selectedProtocols.value);
+    lastModuleCountParam.value.protocols = selectedProtocols.value;
     initModules();
   }
+
+  // 获取上一条ID
+  const getPreviousApiId = () => {
+    if (!currentNode.value) return null;
+    const index = apiNodes.value.indexOf(currentNode.value);
+    return index > 0 ? apiNodes.value[index - 1].id : null;
+  };
+
+  // 获取下一条ID
+  const getNextApiId = () => {
+    if (!currentNode.value) return null;
+    const index = apiNodes.value.indexOf(currentNode.value);
+    return index < apiNodes.value.length - 1 ? apiNodes.value[index + 1].id : null;
+  };
+
+  // 上一条
+  const previousApi = () => {
+    const previousId = getPreviousApiId();
+    if (previousId) {
+      setCurrentNode(previousId);
+    }
+  };
+
+  // 下一条
+  const nextApi = () => {
+    const nextId = getNextApiId();
+    if (nextId) {
+      setCurrentNode(nextId);
+    }
+  };
 
   watch(
     () => props.isExpandAll,
@@ -507,12 +593,7 @@
     }
   );
 
-  function changeExpand() {
-    isExpandAll.value = !isExpandAll.value;
-  }
-
   function changeApiExpand() {
-    isExpandApi.value = !isExpandApi.value;
     initModules();
   }
 
@@ -673,18 +754,40 @@
     }
   }
 
+  // 导出分享
+  function exportShare() {
+    emit('exportShare', true);
+  }
+
   onBeforeMount(() => {
-    initProtocolList();
-    initModules();
+    if (!props.docShareId) {
+      initProtocolList();
+    }
   });
 
   async function refresh() {
     await initModules();
   }
 
+  watch(
+    () => props.docShareId,
+    (val) => {
+      if (val) {
+        initModules();
+      }
+    },
+    {
+      immediate: true,
+    }
+  );
+
   defineExpose({
     refresh,
     initModuleCount,
+    setActiveFolder,
+    setCurrentNode,
+    previousApi,
+    nextApi,
   });
 </script>
 

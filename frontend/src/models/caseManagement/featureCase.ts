@@ -1,5 +1,5 @@
-import { TableQueryParams } from '@/models/common';
-import { StatusType } from '@/enums/caseEnum';
+import { type MoveMode, TableQueryParams } from '@/models/common';
+import { LastReviewResult, StatusType } from '@/enums/caseEnum';
 
 import { ReviewResult } from './caseReview';
 
@@ -32,7 +32,7 @@ export interface customFieldsItem {
   [key: string]: any;
 }
 
-export interface OptionsFieldId {
+export interface OptionsField {
   fieldId: string;
   value: string;
   text: string;
@@ -46,7 +46,7 @@ export interface CustomAttributes {
   apiFieldId: null | undefined | 'string'; // 三方API
   defaultValue: string;
   type: string;
-  options: OptionsFieldId[];
+  options: OptionsField[];
 }
 
 // 功能用例表
@@ -60,7 +60,7 @@ export interface CaseManagementTable {
   reviewStatus: StatusType[keyof StatusType]; // 评审状态：未评审/评审中/通过/不通过/重新提审
   tags: any; // 标签（JSON)
   caseEditType: string; // 编辑模式：步骤模式/文本模式
-  prerequisite: string; // 前置条件
+  prerequisite: string; // 前置操作
   pos: number; // 自定义排序，间隔5000
   versionId: string; // 版本ID
   refId: string; // 指向初始版本ID
@@ -75,12 +75,14 @@ export interface CaseManagementTable {
   updateTime: string;
   deleteTime: string;
   steps: string;
+  status: LastReviewResult;
   customFields: customFieldsItem[]; // 自定义字段集合
   [key: string]: any;
 }
 
 // 选择类型步骤和预期结果列表
 export interface StepList {
+  num?: string;
   id: string;
   step: string; // 步骤
   expected: string; // 预期
@@ -88,6 +90,7 @@ export interface StepList {
   showExpected: boolean; // 编辑预期模式
   actualResult?: string; // 实际
   executeResult?: string; // 步骤执行结果
+  status?: string;
 }
 
 export type StepExecutionResult = Pick<StepList, 'actualResult' | 'executeResult'>;
@@ -365,20 +368,32 @@ export interface ContentTabsMap {
   backupTabList: TabItemType[];
 }
 // 脑图删除的模块/用例的集合
-export interface FeatureCaseMinderDeleteResourceList {
+export interface FeatureCaseMinderDeleteResourceItem {
   id: string;
   type: string;
 }
+// 脑图用例操作类型（新增(ADD)/更新(UPDATE)）
+export type FeatureCaseMinderActionType = 'ADD' | 'UPDATE';
+// 脑图用例编辑模式
+export type FeatureCaseMinderEditType = 'STEP' | 'TEXT';
 // 脑图新增/修改的模块集合（只记录操作的节点，节点下的子节点不需要记录）
-export interface FeatureCaseMinderUpdateModuleList {
+export interface FeatureCaseMinderUpdateModuleItem {
   id: string;
   name: string;
   parentId: string;
-  type: 'ADD' | 'UPDATE'; // 操作类型（新增(ADD)/更新(UPDATE)）
-  moveMode: string;
-  targetId: string;
+  type: FeatureCaseMinderActionType;
+  moveMode?: MoveMode;
+  targetId?: string;
 }
-
+// 脑图新增/修改的文本节点集合
+export interface FeatureCaseMinderUpdateTextNodeItem {
+  id: string;
+  name: string;
+  parentId: string;
+  type: FeatureCaseMinderActionType;
+  moveMode?: MoveMode;
+  targetId?: string;
+}
 export interface CustomField {
   fieldId: string;
   value: string;
@@ -389,32 +404,31 @@ export interface FeatureCaseMinderStepItem {
   num: number;
   desc: string;
   result?: string;
-  actualResult?: string;
-  executeResult?: string;
 }
 // 脑图新增/修改的用例对象集合
-export interface FeatureCaseMinderUpdateCaseList {
-  id: string;
+export interface FeatureCaseMinderUpdateCaseItem {
+  id: string; // 用例id(新增的时候前端传UUid，更新的时候必填)
   templateId: string; // 模板id
-  type: string;
+  type: FeatureCaseMinderActionType;
   name: string;
   moduleId: string;
-  moveMode?: string;
+  moveMode?: MoveMode; // 移动方式（节点移动或新增时需要）
   targetId?: string;
-  prerequisite: string;
-  caseEditType: 'STEP' | 'TEXT'; // 编辑模式
+  prerequisite: string; // 前置操作
+  caseEditType: FeatureCaseMinderEditType;
   steps: string;
-  textDescription: string;
-  expectedResult: string;
+  textDescription: string; // 文本描述
+  expectedResult: string; // 期望结果
   description: string;
   tags: string[];
   customFields: CustomField[];
 }
 // 脑图
-export interface FeatureCaseMinder {
+export interface FeatureCaseMinderUpdateParams {
   projectId: string;
   versionId?: string;
-  updateCaseList: FeatureCaseMinderUpdateCaseList[];
-  updateModuleList: FeatureCaseMinderUpdateModuleList[];
-  deleteResourceList: FeatureCaseMinderDeleteResourceList[];
+  updateCaseList: FeatureCaseMinderUpdateCaseItem[];
+  updateModuleList: FeatureCaseMinderUpdateModuleItem[];
+  deleteResourceList: FeatureCaseMinderDeleteResourceItem[];
+  additionalNodeList: FeatureCaseMinderUpdateTextNodeItem[];
 }

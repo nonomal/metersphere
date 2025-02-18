@@ -2,6 +2,8 @@ import MSR from '@/api/http/index';
 import {
   AddAuthUrl,
   DeleteAuthUrl,
+  EditUploadConfigUrl,
+  GetAuthDetailByTypeUrl,
   GetAuthDetailUrl,
   GetAuthListUrl,
   GetBaseInfoUrl,
@@ -53,7 +55,7 @@ export function saveBaseUrl(baseUrl: string) {
 
 // 获取基础信息
 export function getBaseInfo() {
-  return MSR.get<BaseConfig>({ url: GetBaseInfoUrl });
+  return MSR.get<BaseConfig>({ url: GetBaseInfoUrl }, { ignoreCancelToken: true });
 }
 
 // 保存邮箱信息
@@ -84,6 +86,11 @@ export function getAuthList(data: TableQueryParams) {
 // 获取认证源详情
 export function getAuthDetail(id: string) {
   return MSR.get<AuthItem>({ url: GetAuthDetailUrl, params: id });
+}
+
+// 获取认证源详情
+export function getAuthDetailByType(type: string) {
+  return MSR.get<AuthItem>({ url: GetAuthDetailByTypeUrl, params: type });
 }
 
 // 添加认证源
@@ -124,4 +131,9 @@ export function saveCleanupConfig(data: SaveInfoParams) {
 // 保存内存清理配置
 export function getCleanupConfig() {
   return MSR.get<CleanupConfig>({ url: GetCleanConfigUrl });
+}
+
+// 保存内存清理配置
+export function saveUploadConfig(data: SaveInfoParams) {
+  return MSR.post({ url: EditUploadConfigUrl, data });
 }

@@ -19,11 +19,13 @@ import io.metersphere.system.domain.UserRoleRelationExample;
 import io.metersphere.system.dto.permission.PermissionDefinitionItem;
 import io.metersphere.system.dto.sdk.request.PermissionSettingUpdateRequest;
 import io.metersphere.system.mapper.UserRoleMapper;
+import io.metersphere.system.mapper.UserRolePermissionMapper;
 import io.metersphere.system.mapper.UserRoleRelationMapper;
 import io.metersphere.system.service.BaseUserRoleService;
 import io.metersphere.system.uid.IDGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,6 +53,8 @@ public class ProjectUserRoleService extends BaseUserRoleService {
     private UserRoleRelationMapper userRoleRelationMapper;
     @Resource
     private ExtProjectUserRoleMapper extProjectUserRoleMapper;
+	@Autowired
+	private UserRolePermissionMapper userRolePermissionMapper;
 
     public List<ProjectUserRoleDTO> list(ProjectUserRoleRequest request) {
         List<ProjectUserRoleDTO> roles = extProjectUserRoleMapper.list(request);
@@ -124,10 +128,10 @@ public class ProjectUserRoleService extends BaseUserRoleService {
     }
 
     public void removeMember(ProjectUserRoleMemberEditRequest request) {
-        String removeUserId = request.getUserIds().get(0);
+        String removeUserId = request.getUserIds().getFirst();
         checkMemberParam(removeUserId, request.getUserRoleId());
-        //检查移除的是不是管理员
-        if (StringUtils.equals(request.getUserRoleId(),InternalUserRole.PROJECT_ADMIN.getValue())) {
+        // 检查移除的是不是管理员
+        if (StringUtils.equals(request.getUserRoleId(), InternalUserRole.PROJECT_ADMIN.getValue())) {
             UserRoleRelationExample userRoleRelationExample = new UserRoleRelationExample();
             userRoleRelationExample.createCriteria().andUserIdNotEqualTo(removeUserId)
                     .andSourceIdEqualTo(request.getProjectId())

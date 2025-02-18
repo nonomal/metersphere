@@ -44,7 +44,7 @@ public class BugTrashController {
 
     @GetMapping("/recover/{id}")
     @Operation(summary = "缺陷管理-回收站-恢复")
-    @RequiresPermissions(PermissionConstants.PROJECT_BUG_UPDATE)
+    @RequiresPermissions(PermissionConstants.PROJECT_BUG_DELETE)
     @Log(type = OperationLogType.RECOVER, expression = "#msClass.recoverLog(#id)", msClass = BugLogService.class)
     public void recover(@PathVariable String id) {
         bugService.recover(id);
@@ -53,13 +53,14 @@ public class BugTrashController {
     @GetMapping("/delete/{id}")
     @Operation(summary = "缺陷管理-回收站-彻底删除")
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_DELETE)
+    @Log(type = OperationLogType.DELETE, expression = "#msClass.deleteTrashLog(#id)", msClass = BugLogService.class)
     public void deleteTrash(@PathVariable String id) {
         bugService.deleteTrash(id);
     }
 
     @PostMapping("/batch-recover")
     @Operation(summary = "缺陷管理-回收站-批量恢复")
-    @RequiresPermissions(PermissionConstants.PROJECT_BUG_UPDATE)
+    @RequiresPermissions(PermissionConstants.PROJECT_BUG_DELETE)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public void batchRecover(@Validated @RequestBody BugBatchRequest request) {
         request.setUseTrash(true);
@@ -70,6 +71,7 @@ public class BugTrashController {
     @Operation(summary = "缺陷管理-回收站-批量彻底删除")
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_DELETE)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
+    @Log(type = OperationLogType.DELETE, expression = "#msClass.batchDeleteTrashLog(#request)", msClass = BugLogService.class)
     public void batchDelete(@Validated @RequestBody BugBatchRequest request) {
         request.setUseTrash(true);
         bugService.batchDeleteTrash(request);

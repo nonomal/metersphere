@@ -1,4 +1,7 @@
+import { OptionItem } from '@/api/modules/message/index';
+
 import { BatchApiParams, TableQueryParams } from '@/models/common';
+import { StartReviewStatus } from '@/enums/caseEnum';
 
 // 评审状态, PREPARED: 待开始, UNDERWAY: 进行中, COMPLETED: 已完成, ARCHIVED: 已归档(暂时没有)
 export type ReviewStatus = 'PREPARED' | 'UNDERWAY' | 'COMPLETED';
@@ -114,9 +117,8 @@ export interface ReviewListQueryParams extends TableQueryParams {
 }
 // 评审详情-用例列表查询参数
 export interface ReviewDetailCaseListQueryParams extends TableQueryParams {
-  viewFlag: boolean; // 是否只看我的
   reviewId: string;
-  viewStatusFlag: boolean; // 我的评审状态
+  viewStatusFlag?: boolean; // 我的评审状态
 }
 // 评审详情-用例拖拽排序入参
 export interface SortReviewCaseParams {
@@ -129,23 +131,21 @@ export interface SortReviewCaseParams {
 // 评审详情-批量评审用例
 export interface BatchReviewCaseParams extends BatchApiParams {
   reviewId: string; // 评审id
-  userId: string; // 用户id, 用来判断是否只看我的
   reviewPassRule: ReviewPassRule; // 评审规则
-  status: ReviewResult; // 评审结果
+  status: StartReviewStatus; // 评审结果
   content: string; // 评论内容
   notifier: string; // 评论@的人的Id, 多个以';'隔开
+  reviewCommentFileIds?: string[]; // 富文本ids
 }
 // 评审详情-批量修改评审人
 export interface BatchChangeReviewerParams extends BatchApiParams {
   reviewId: string; // 评审id
-  userId: string; // 用户id, 用来判断是否只看我的
   reviewerId: string[]; // 评审人员id
   append: boolean; // 是否追加
 }
 // 评审详情-批量取消关联用例
 export interface BatchCancelReviewCaseParams extends BatchApiParams {
   reviewId: string; // 评审id
-  userId: string; // 用户id, 用来判断是否只看我的
 }
 export interface ReviewDetailReviewersItem {
   avatar: string;
@@ -178,6 +178,7 @@ export interface ReviewItem {
   unPassCount: number;
   reReviewedCount: number;
   underReviewedCount: number;
+  unReviewCount: number;
   reviewedCount: number;
   followFlag: boolean; // 关注标识
 }
@@ -217,15 +218,23 @@ export interface ReviewCaseItem {
   moduleName: string;
 }
 // 评审详情-提交评审入参
-export interface CommitReviewResultParams {
+export interface ReviewFormParams {
+  status: StartReviewStatus;
+  content: string;
+  notifiers?: string[];
+  reviewCommentFileIds?: string[];
+}
+export interface CommitReviewResultParams extends ReviewFormParams {
   projectId: string;
   reviewId: string;
   caseId: string;
   reviewPassRule: ReviewPassRule;
-  status: ReviewResult;
-  content: string;
   notifier: string;
-  reviewCommentFileIds?: string[];
+}
+export interface MinderReviewCaseParams extends ReviewFormParams {
+  reviewId: string;
+  caseId: string;
+  userId?: string;
 }
 // 评审详情-获取用例评审历史
 export interface ReviewHistoryItem {
@@ -243,9 +252,35 @@ export interface ReviewHistoryItem {
   contentText: string;
 }
 
+export interface ReviewerAndStatus {
+  reviewerStatus: OptionItem[]; // 每个评审人最终的评审结果
+  status: ReviewResult; // 用例评审最终结果
+  caseId: string;
+}
+
 // 评审详情-用例列表项
 export interface CaseReviewFunctionalCaseUserItem {
   caseId: string;
   reviewId: string;
   userId: string;
+}
+
+// 获取脑图请求参数
+export interface CaseReviewMinderParams {
+  projectId: string;
+  moduleId: string;
+  current?: number;
+  reviewId: string;
+  viewStatusFlag: boolean; // 我的评审结果
+  sort?: Record<string, any>;
+}
+
+// 测试计划用例脑图
+export interface CasePlanMinderParams {
+  projectId: string;
+  moduleId?: string;
+  collectionId?: string;
+  current?: number;
+  planId: string;
+  sort?: Record<string, any>;
 }

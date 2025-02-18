@@ -2,7 +2,6 @@ package io.metersphere.system.utils;
 
 import com.bastiaanjansen.otp.TOTPGenerator;
 import io.metersphere.sdk.constants.MsHttpHeaders;
-import io.metersphere.sdk.dto.api.task.TaskRequestDTO;
 import io.metersphere.sdk.util.LogUtils;
 import io.metersphere.system.controller.handler.ResultHolder;
 import io.metersphere.system.controller.handler.result.MsHttpResultCode;
@@ -15,20 +14,17 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
 import java.io.IOException;
 import java.net.SocketException;
-import java.util.List;
 
 @Component
 public class TaskRunnerClient {
     private static TOTPGenerator totpGenerator;
 
-    private static final String API_DEBUG = "/api/debug";
-    private static final String API_RUN = "/api/run";
     private static final String HTTP_BATH = "http://%s:%s";
-    private static final String API_STOP = "/api/stop";
 
     private static final RestTemplate restTemplateWithTimeOut = new RestTemplate();
     private final static int RETRY_COUNT = 3;
@@ -41,18 +37,6 @@ public class TaskRunnerClient {
         restTemplateWithTimeOut.setRequestFactory(httpRequestFactory);
     }
 
-    public static void debugApi(String endpoint, TaskRequestDTO taskRequest) throws Exception {
-        post(endpoint + API_DEBUG, taskRequest);
-    }
-
-    public static void runApi(String endpoint, TaskRequestDTO taskRequest) throws Exception {
-        post(endpoint + API_RUN, taskRequest);
-    }
-
-    public static void stopApi(String endpoint, List<String> reportIds) throws Exception {
-        post(endpoint + API_STOP, reportIds);
-    }
-
     public static String getEndpoint(String ip, String port) {
         return String.format(HTTP_BATH, ip, port);
     }
@@ -63,6 +47,8 @@ public class TaskRunnerClient {
             String token = totpGenerator.now();
             HttpHeaders headers = new HttpHeaders();
             headers.add(MsHttpHeaders.OTP_TOKEN, token);
+            headers.add(HttpHeaders.CONTENT_TYPE, "application/json");
+            headers.add(HttpHeaders.ACCEPT, "application/json");
             HttpEntity<String> httpEntity = new HttpEntity<>(headers);
             ResponseEntity<ResultHolder> entity = restTemplateWithTimeOut.exchange(u, HttpMethod.GET, httpEntity, ResultHolder.class, uriVariables);
             return entity.getBody();
@@ -71,21 +57,23 @@ public class TaskRunnerClient {
         return retry(url, null, action);
     }
 
-    public static ResultHolder post(String url, Object requestBody, Object... uriVariables) throws Exception {
+    public static ResultHolder post(String url, Object param, Object... uriVariables) throws Exception {
         // 定义action
-        Action action = (u, b) -> {
+        Action action = (u, body) -> {
             String token = totpGenerator.now();
             HttpHeaders headers = new HttpHeaders();
             headers.add(MsHttpHeaders.OTP_TOKEN, token);
-            HttpEntity<Object> httpEntity = new HttpEntity<>(b, headers);
+            headers.add(HttpHeaders.CONTENT_TYPE, "application/json");
+            headers.add(HttpHeaders.ACCEPT, "application/json");
+            HttpEntity<Object> httpEntity = new HttpEntity<>(param, headers);
             ResponseEntity<ResultHolder> entity = restTemplateWithTimeOut.exchange(u, HttpMethod.POST, httpEntity, ResultHolder.class, uriVariables);
             return entity.getBody();
         };
 
-        return retry(url, requestBody, action);
+        return retry(url, null, action);
     }
 
-    private static ResultHolder retry(String url, Object requestBody, Action action) throws IOException {
+    private static ResultHolder retry(String url, Object requestBody, Action action) throws Exception {
         ResultHolder body;
         try {
             // 首次调用
@@ -93,13 +81,13 @@ public class TaskRunnerClient {
             if (body != null && body.getCode() == MsHttpResultCode.SUCCESS.getCode()) {
                 return body;
             }
-        } catch (NoHttpResponseException | ConnectTimeoutException | SocketException e) {
+        } catch (NoHttpResponseException | ConnectTimeoutException | SocketException | ResourceAccessException e) {
             return doRetry(url, requestBody, action, e);
         }
         return body;
     }
 
-    private static ResultHolder doRetry(String url, Object requestBody, Action action, IOException e) throws IOException {
+    private static ResultHolder doRetry(String url, Object requestBody, Action action, Exception e) throws Exception {
         ResultHolder body;
         // 增加token失败重试
         for (int i = 1; i <= RETRY_COUNT; i++) {

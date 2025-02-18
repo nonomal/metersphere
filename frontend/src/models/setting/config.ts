@@ -6,6 +6,7 @@ import { Recordable } from '#/global';
 export interface BaseConfig {
   url: string;
   prometheusHost: string;
+  fileMaxSize: string;
 }
 
 // 邮箱信息配置
@@ -91,7 +92,7 @@ export interface PageConfig extends ThemeConfig, LoginConfig, PlatformConfig {}
 export type PageConfigKeys = keyof PageConfig;
 
 // 认证源类型
-export type AuthType = 'CAS' | 'LDAP' | 'OAuth2' | 'OIDC';
+export type AuthType = 'CAS' | 'LDAP' | 'OAUTH2' | 'OIDC';
 
 // 认证源配置列表项对象
 export interface AuthItem {

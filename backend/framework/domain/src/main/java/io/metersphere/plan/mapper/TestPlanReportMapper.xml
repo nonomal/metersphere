@@ -7,7 +7,6 @@
     <result column="name" jdbcType="VARCHAR" property="name" />
     <result column="create_user" jdbcType="VARCHAR" property="createUser" />
     <result column="create_time" jdbcType="BIGINT" property="createTime" />
-    <result column="execute_time" jdbcType="BIGINT" property="executeTime" />
     <result column="start_time" jdbcType="BIGINT" property="startTime" />
     <result column="end_time" jdbcType="BIGINT" property="endTime" />
     <result column="exec_status" jdbcType="VARCHAR" property="execStatus" />
@@ -18,6 +17,10 @@
     <result column="project_id" jdbcType="VARCHAR" property="projectId" />
     <result column="integrated" jdbcType="BIT" property="integrated" />
     <result column="deleted" jdbcType="BIT" property="deleted" />
+    <result column="execute_rate" jdbcType="DECIMAL" property="executeRate" />
+    <result column="parent_id" jdbcType="VARCHAR" property="parentId" />
+    <result column="test_plan_name" jdbcType="VARCHAR" property="testPlanName" />
+    <result column="default_layout" jdbcType="BIT" property="defaultLayout" />
   </resultMap>
   <sql id="Example_Where_Clause">
     <where>
@@ -78,9 +81,9 @@
     </where>
   </sql>
   <sql id="Base_Column_List">
-    id, test_plan_id, `name`, create_user, create_time, execute_time, start_time, end_time, 
-    exec_status, result_status, pass_rate, trigger_mode, pass_threshold, project_id, 
-    integrated, deleted
+    id, test_plan_id, `name`, create_user, create_time, start_time, end_time, exec_status, 
+    result_status, pass_rate, trigger_mode, pass_threshold, project_id, integrated, deleted, 
+    execute_rate, parent_id, test_plan_name, default_layout
   </sql>
   <select id="selectByExample" parameterType="io.metersphere.plan.domain.TestPlanReportExample" resultMap="BaseResultMap">
     select
@@ -114,17 +117,19 @@
   </delete>
   <insert id="insert" parameterType="io.metersphere.plan.domain.TestPlanReport">
     insert into test_plan_report (id, test_plan_id, `name`, 
-      create_user, create_time, execute_time, 
-      start_time, end_time, exec_status, 
-      result_status, pass_rate, trigger_mode, 
-      pass_threshold, project_id, integrated, 
-      deleted)
+      create_user, create_time, start_time, 
+      end_time, exec_status, result_status, 
+      pass_rate, trigger_mode, pass_threshold, 
+      project_id, integrated, deleted, 
+      execute_rate, parent_id, test_plan_name, 
+      default_layout)
     values (#{id,jdbcType=VARCHAR}, #{testPlanId,jdbcType=VARCHAR}, #{name,jdbcType=VARCHAR}, 
-      #{createUser,jdbcType=VARCHAR}, #{createTime,jdbcType=BIGINT}, #{executeTime,jdbcType=BIGINT}, 
-      #{startTime,jdbcType=BIGINT}, #{endTime,jdbcType=BIGINT}, #{execStatus,jdbcType=VARCHAR}, 
-      #{resultStatus,jdbcType=VARCHAR}, #{passRate,jdbcType=DECIMAL}, #{triggerMode,jdbcType=VARCHAR}, 
-      #{passThreshold,jdbcType=DECIMAL}, #{projectId,jdbcType=VARCHAR}, #{integrated,jdbcType=BIT}, 
-      #{deleted,jdbcType=BIT})
+      #{createUser,jdbcType=VARCHAR}, #{createTime,jdbcType=BIGINT}, #{startTime,jdbcType=BIGINT}, 
+      #{endTime,jdbcType=BIGINT}, #{execStatus,jdbcType=VARCHAR}, #{resultStatus,jdbcType=VARCHAR}, 
+      #{passRate,jdbcType=DECIMAL}, #{triggerMode,jdbcType=VARCHAR}, #{passThreshold,jdbcType=DECIMAL}, 
+      #{projectId,jdbcType=VARCHAR}, #{integrated,jdbcType=BIT}, #{deleted,jdbcType=BIT}, 
+      #{executeRate,jdbcType=DECIMAL}, #{parentId,jdbcType=VARCHAR}, #{testPlanName,jdbcType=VARCHAR}, 
+      #{defaultLayout,jdbcType=BIT})
   </insert>
   <insert id="insertSelective" parameterType="io.metersphere.plan.domain.TestPlanReport">
     insert into test_plan_report
@@ -143,9 +148,6 @@
       </if>
       <if test="createTime != null">
         create_time,
-      </if>
-      <if test="executeTime != null">
-        execute_time,
       </if>
       <if test="startTime != null">
         start_time,
@@ -177,6 +179,18 @@
       <if test="deleted != null">
         deleted,
       </if>
+      <if test="executeRate != null">
+        execute_rate,
+      </if>
+      <if test="parentId != null">
+        parent_id,
+      </if>
+      <if test="testPlanName != null">
+        test_plan_name,
+      </if>
+      <if test="defaultLayout != null">
+        default_layout,
+      </if>
     </trim>
     <trim prefix="values (" suffix=")" suffixOverrides=",">
       <if test="id != null">
@@ -193,9 +207,6 @@
       </if>
       <if test="createTime != null">
         #{createTime,jdbcType=BIGINT},
-      </if>
-      <if test="executeTime != null">
-        #{executeTime,jdbcType=BIGINT},
       </if>
       <if test="startTime != null">
         #{startTime,jdbcType=BIGINT},
@@ -227,6 +238,18 @@
       <if test="deleted != null">
         #{deleted,jdbcType=BIT},
       </if>
+      <if test="executeRate != null">
+        #{executeRate,jdbcType=DECIMAL},
+      </if>
+      <if test="parentId != null">
+        #{parentId,jdbcType=VARCHAR},
+      </if>
+      <if test="testPlanName != null">
+        #{testPlanName,jdbcType=VARCHAR},
+      </if>
+      <if test="defaultLayout != null">
+        #{defaultLayout,jdbcType=BIT},
+      </if>
     </trim>
   </insert>
   <select id="countByExample" parameterType="io.metersphere.plan.domain.TestPlanReportExample" resultType="java.lang.Long">
@@ -252,9 +275,6 @@
       </if>
       <if test="record.createTime != null">
         create_time = #{record.createTime,jdbcType=BIGINT},
-      </if>
-      <if test="record.executeTime != null">
-        execute_time = #{record.executeTime,jdbcType=BIGINT},
       </if>
       <if test="record.startTime != null">
         start_time = #{record.startTime,jdbcType=BIGINT},
@@ -286,6 +306,18 @@
       <if test="record.deleted != null">
         deleted = #{record.deleted,jdbcType=BIT},
       </if>
+      <if test="record.executeRate != null">
+        execute_rate = #{record.executeRate,jdbcType=DECIMAL},
+      </if>
+      <if test="record.parentId != null">
+        parent_id = #{record.parentId,jdbcType=VARCHAR},
+      </if>
+      <if test="record.testPlanName != null">
+        test_plan_name = #{record.testPlanName,jdbcType=VARCHAR},
+      </if>
+      <if test="record.defaultLayout != null">
+        default_layout = #{record.defaultLayout,jdbcType=BIT},
+      </if>
     </set>
     <if test="_parameter != null">
       <include refid="Update_By_Example_Where_Clause" />
@@ -298,7 +330,6 @@
       `name` = #{record.name,jdbcType=VARCHAR},
       create_user = #{record.createUser,jdbcType=VARCHAR},
       create_time = #{record.createTime,jdbcType=BIGINT},
-      execute_time = #{record.executeTime,jdbcType=BIGINT},
       start_time = #{record.startTime,jdbcType=BIGINT},
       end_time = #{record.endTime,jdbcType=BIGINT},
       exec_status = #{record.execStatus,jdbcType=VARCHAR},
@@ -308,7 +339,11 @@
       pass_threshold = #{record.passThreshold,jdbcType=DECIMAL},
       project_id = #{record.projectId,jdbcType=VARCHAR},
       integrated = #{record.integrated,jdbcType=BIT},
-      deleted = #{record.deleted,jdbcType=BIT}
+      deleted = #{record.deleted,jdbcType=BIT},
+      execute_rate = #{record.executeRate,jdbcType=DECIMAL},
+      parent_id = #{record.parentId,jdbcType=VARCHAR},
+      test_plan_name = #{record.testPlanName,jdbcType=VARCHAR},
+      default_layout = #{record.defaultLayout,jdbcType=BIT}
     <if test="_parameter != null">
       <include refid="Update_By_Example_Where_Clause" />
     </if>
@@ -327,9 +362,6 @@
       </if>
       <if test="createTime != null">
         create_time = #{createTime,jdbcType=BIGINT},
-      </if>
-      <if test="executeTime != null">
-        execute_time = #{executeTime,jdbcType=BIGINT},
       </if>
       <if test="startTime != null">
         start_time = #{startTime,jdbcType=BIGINT},
@@ -361,6 +393,18 @@
       <if test="deleted != null">
         deleted = #{deleted,jdbcType=BIT},
       </if>
+      <if test="executeRate != null">
+        execute_rate = #{executeRate,jdbcType=DECIMAL},
+      </if>
+      <if test="parentId != null">
+        parent_id = #{parentId,jdbcType=VARCHAR},
+      </if>
+      <if test="testPlanName != null">
+        test_plan_name = #{testPlanName,jdbcType=VARCHAR},
+      </if>
+      <if test="defaultLayout != null">
+        default_layout = #{defaultLayout,jdbcType=BIT},
+      </if>
     </set>
     where id = #{id,jdbcType=VARCHAR}
   </update>
@@ -370,7 +414,6 @@
       `name` = #{name,jdbcType=VARCHAR},
       create_user = #{createUser,jdbcType=VARCHAR},
       create_time = #{createTime,jdbcType=BIGINT},
-      execute_time = #{executeTime,jdbcType=BIGINT},
       start_time = #{startTime,jdbcType=BIGINT},
       end_time = #{endTime,jdbcType=BIGINT},
       exec_status = #{execStatus,jdbcType=VARCHAR},
@@ -380,22 +423,27 @@
       pass_threshold = #{passThreshold,jdbcType=DECIMAL},
       project_id = #{projectId,jdbcType=VARCHAR},
       integrated = #{integrated,jdbcType=BIT},
-      deleted = #{deleted,jdbcType=BIT}
+      deleted = #{deleted,jdbcType=BIT},
+      execute_rate = #{executeRate,jdbcType=DECIMAL},
+      parent_id = #{parentId,jdbcType=VARCHAR},
+      test_plan_name = #{testPlanName,jdbcType=VARCHAR},
+      default_layout = #{defaultLayout,jdbcType=BIT}
     where id = #{id,jdbcType=VARCHAR}
   </update>
   <insert id="batchInsert" parameterType="map">
     insert into test_plan_report
-    (id, test_plan_id, `name`, create_user, create_time, execute_time, start_time, end_time, 
-      exec_status, result_status, pass_rate, trigger_mode, pass_threshold, project_id, 
-      integrated, deleted)
+    (id, test_plan_id, `name`, create_user, create_time, start_time, end_time, exec_status, 
+      result_status, pass_rate, trigger_mode, pass_threshold, project_id, integrated, 
+      deleted, execute_rate, parent_id, test_plan_name, default_layout)
     values
     <foreach collection="list" item="item" separator=",">
       (#{item.id,jdbcType=VARCHAR}, #{item.testPlanId,jdbcType=VARCHAR}, #{item.name,jdbcType=VARCHAR}, 
-        #{item.createUser,jdbcType=VARCHAR}, #{item.createTime,jdbcType=BIGINT}, #{item.executeTime,jdbcType=BIGINT}, 
-        #{item.startTime,jdbcType=BIGINT}, #{item.endTime,jdbcType=BIGINT}, #{item.execStatus,jdbcType=VARCHAR}, 
-        #{item.resultStatus,jdbcType=VARCHAR}, #{item.passRate,jdbcType=DECIMAL}, #{item.triggerMode,jdbcType=VARCHAR}, 
-        #{item.passThreshold,jdbcType=DECIMAL}, #{item.projectId,jdbcType=VARCHAR}, #{item.integrated,jdbcType=BIT}, 
-        #{item.deleted,jdbcType=BIT})
+        #{item.createUser,jdbcType=VARCHAR}, #{item.createTime,jdbcType=BIGINT}, #{item.startTime,jdbcType=BIGINT}, 
+        #{item.endTime,jdbcType=BIGINT}, #{item.execStatus,jdbcType=VARCHAR}, #{item.resultStatus,jdbcType=VARCHAR}, 
+        #{item.passRate,jdbcType=DECIMAL}, #{item.triggerMode,jdbcType=VARCHAR}, #{item.passThreshold,jdbcType=DECIMAL}, 
+        #{item.projectId,jdbcType=VARCHAR}, #{item.integrated,jdbcType=BIT}, #{item.deleted,jdbcType=BIT}, 
+        #{item.executeRate,jdbcType=DECIMAL}, #{item.parentId,jdbcType=VARCHAR}, #{item.testPlanName,jdbcType=VARCHAR}, 
+        #{item.defaultLayout,jdbcType=BIT})
     </foreach>
   </insert>
   <insert id="batchInsertSelective" parameterType="map">
@@ -422,9 +470,6 @@
         </if>
         <if test="'create_time'.toString() == column.value">
           #{item.createTime,jdbcType=BIGINT}
-        </if>
-        <if test="'execute_time'.toString() == column.value">
-          #{item.executeTime,jdbcType=BIGINT}
         </if>
         <if test="'start_time'.toString() == column.value">
           #{item.startTime,jdbcType=BIGINT}
@@ -455,6 +500,18 @@
         </if>
         <if test="'deleted'.toString() == column.value">
           #{item.deleted,jdbcType=BIT}
+        </if>
+        <if test="'execute_rate'.toString() == column.value">
+          #{item.executeRate,jdbcType=DECIMAL}
+        </if>
+        <if test="'parent_id'.toString() == column.value">
+          #{item.parentId,jdbcType=VARCHAR}
+        </if>
+        <if test="'test_plan_name'.toString() == column.value">
+          #{item.testPlanName,jdbcType=VARCHAR}
+        </if>
+        <if test="'default_layout'.toString() == column.value">
+          #{item.defaultLayout,jdbcType=BIT}
         </if>
       </foreach>
       )

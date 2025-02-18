@@ -1,48 +1,14 @@
 <template>
   <div>
-    <div class="flex items-center justify-between">
-      <div v-if="showType === 'link'" class="flex">
-        <a-tooltip v-if="!total">
-          <template #content>
-            {{ t('caseManagement.featureCase.noAssociatedDefect') }}
-            <span v-permission="['PROJECT_BUG:READ+ADD']" class="text-[rgb(var(--primary-4))]" @click="createDefect">{{
-              t('caseManagement.featureCase.createDefect')
-            }}</span>
-          </template>
-          <a-button
-            v-permission="['FUNCTIONAL_CASE:READ+UPDATE']"
-            :disabled="total ? false : true"
-            class="mr-3"
-            type="primary"
-            @click="linkDefect"
-          >
-            {{ t('caseManagement.featureCase.linkDefect') }}
-          </a-button>
-        </a-tooltip>
-        <a-button
-          v-if="hasAnyPermission(['FUNCTIONAL_CASE:READ+UPDATE']) && total"
-          :disabled="total ? false : true"
-          class="mr-3"
-          type="primary"
-          @click="linkDefect"
-        >
-          {{ t('caseManagement.featureCase.linkDefect') }}
-        </a-button>
-        <a-button v-permission="['PROJECT_BUG:READ+ADD']" type="outline" @click="createDefect"
-          >{{ t('caseManagement.featureCase.createDefect') }}
-        </a-button>
-      </div>
-      <div v-else v-permission="['FUNCTIONAL_CASE:READ+UPDATE']" class="font-medium">{{
-        t('caseManagement.featureCase.testPlanLinkList')
-      }}</div>
-      <div class="mb-4">
-        <a-radio-group v-model:model-value="showType" type="button" class="file-show-type ml-[4px]">
-          <a-radio value="link" class="show-type-icon p-[2px]">{{
-            t('caseManagement.featureCase.directLink')
-          }}</a-radio>
-          <a-radio value="testPlan" class="show-type-icon p-[2px]">{{
-            t('caseManagement.featureCase.testPlan')
-          }}</a-radio>
+    <div class="mb-[16px] flex items-center justify-between">
+      <div>
+        <a-radio-group v-model:model-value="showType" type="button" size="medium">
+          <a-radio value="link" class="show-type-icon p-[2px]">
+            {{ t('caseManagement.featureCase.directLink') }}
+          </a-radio>
+          <a-radio value="testPlan" class="show-type-icon p-[2px]">
+            {{ t('caseManagement.featureCase.testPlan') }}
+          </a-radio>
         </a-radio-group>
         <a-input-search
           v-model:model-value="keyword"
@@ -54,6 +20,28 @@
           @clear="resetFetch"
           @input="changeHandler"
         ></a-input-search>
+      </div>
+      <div v-if="showType === 'link'" class="flex items-center">
+        <a-tooltip :disabled="!!total">
+          <template #content>
+            {{ t('caseManagement.featureCase.noAssociatedDefect') }}
+            <span v-permission="['PROJECT_BUG:READ+ADD']" class="text-[rgb(var(--primary-4))]" @click="createDefect">{{
+              t('testPlan.featureCase.noBugDataNewBug')
+            }}</span>
+          </template>
+          <a-button
+            v-permission="['FUNCTIONAL_CASE:READ+UPDATE']"
+            :disabled="!total"
+            class="mr-3"
+            type="primary"
+            @click="linkDefect"
+          >
+            {{ t('caseManagement.featureCase.linkDefect') }}
+          </a-button>
+        </a-tooltip>
+        <a-button v-permission="['PROJECT_BUG:READ+ADD']" type="outline" @click="createDefect"
+          >{{ t('testPlan.featureCase.noBugDataNewBug') }}
+        </a-button>
       </div>
     </div>
     <BugList
@@ -67,25 +55,23 @@
       :load-params="{
         caseId: props.caseId,
       }"
+      :can-edit="true"
       @link="linkDefect"
       @new="createDefect"
       @cancel-link="cancelLink"
     />
     <ms-base-table v-else v-bind="testPlanPropsRes" ref="planTableRef" v-on="testPlanTableEvent">
       <template #name="{ record }">
-        <div class="flex flex-nowrap items-center">
-          <div class="one-line-text">{{ characterLimit(record.name) }}</div>
-          <a-popover title="" position="right" style="width: 480px">
-            <div class="ml-1 text-[rgb(var(--primary-5))]">{{ t('caseManagement.featureCase.preview') }}</div>
-            <template #content>
-              <div v-dompurify-html="record.content" class="markdown-body" style="margin-left: 48px"> </div>
-            </template>
-          </a-popover>
-        </div>
+        <BugNamePopover :name="record.name" :content="record.content" />
       </template>
       <template #handleUserName="{ record }">
         <a-tooltip :content="record.handleUserName">
-          <div class="one-line-text max-w-[200px]">{{ characterLimit(record.handleUserName) || '-' }}</div>
+          <div class="one-line-text">{{ record.handleUserName || '-' }}</div>
+        </a-tooltip>
+      </template>
+      <template #createUserName="{ record }">
+        <a-tooltip :content="record.handleUserName">
+          <div class="one-line-text">{{ record.createUserName || '-' }}</div>
         </a-tooltip>
       </template>
       <template #testPlanName="{ record }">
@@ -115,16 +101,13 @@
         </div>
       </template>
     </ms-base-table>
-    <AddDefectDrawer
-      v-model:visible="showDrawer"
-      :case-id="props.caseId"
-      :extra-params="{ caseId: props.caseId }"
-      @success="getFetch()"
-    />
+    <AddDefectDrawer v-model:visible="showDrawer" :extra-params="{ caseId: props.caseId }" @success="getFetch()" />
     <LinkDefectDrawer
       v-model:visible="showLinkDrawer"
       :case-id="props.caseId"
+      :load-api="AssociatedBugApiTypeEnum.FUNCTIONAL_BUG_LIST"
       :drawer-loading="drawerLoading"
+      :show-selector-all="false"
       @save="saveHandler"
     />
   </div>
@@ -142,10 +125,11 @@
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import type { MsTableColumn } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
-  import AddDefectDrawer from './addDefectDrawer.vue';
   import BugList from './bugList.vue';
-  import LinkDefectDrawer from './linkDefectDrawer.vue';
+  import BugNamePopover from '@/views/case-management/caseManagementFeature/components/tabContent/tabBug/bugNamePopover.vue';
   import TableFilter from '@/views/case-management/caseManagementFeature/components/tableFilter.vue';
+  import AddDefectDrawer from '@/views/case-management/components/addDefectDrawer/index.vue';
+  import LinkDefectDrawer from '@/views/case-management/components/linkDefectDrawer.vue';
 
   import { getBugList, getCustomOptionHeader } from '@/api/modules/bug-management';
   import {
@@ -156,11 +140,11 @@
   import { useI18n } from '@/hooks/useI18n';
   import { useAppStore } from '@/store';
   import useFeatureCaseStore from '@/store/modules/case/featureCase';
-  import { characterLimit } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { BugListItem, BugOptionItem } from '@/models/bug-management';
   import type { TableQueryParams } from '@/models/common';
+  import { AssociatedBugApiTypeEnum } from '@/enums/associateBugEnum';
   import { TestPlanRouteEnum } from '@/enums/routeEnum';
 
   import { makeColumns } from '@/views/case-management/caseManagementFeature/components/utils';
@@ -194,20 +178,14 @@
       title: 'caseManagement.featureCase.tableColumnID',
       dataIndex: 'num',
       width: 100,
-      showInTable: true,
       showTooltip: true,
-      showDrag: false,
       fixed: 'left',
     },
     {
       title: 'caseManagement.featureCase.defectName',
       slotName: 'name',
       dataIndex: 'name',
-      showInTable: true,
-      showTooltip: false,
-      width: 250,
-      ellipsis: true,
-      showDrag: false,
+      width: 300,
     },
     {
       title: 'caseManagement.featureCase.defectState',
@@ -217,10 +195,13 @@
         options: [],
         labelKey: 'text',
       },
-      showInTable: true,
       width: 150,
-      ellipsis: true,
-      showDrag: false,
+    },
+    {
+      title: 'common.creator',
+      slotName: 'createUserName',
+      dataIndex: 'createUserName',
+      width: 200,
     },
     {
       title: 'caseManagement.featureCase.updateUser',
@@ -230,19 +211,14 @@
         options: [],
         labelKey: 'text',
       },
-      showInTable: true,
       width: 200,
-      ellipsis: true,
     },
     {
       title: 'caseManagement.featureCase.defectSource',
       slotName: 'source',
       dataIndex: 'source',
-      showInTable: true,
       showTooltip: true,
       width: 100,
-      ellipsis: true,
-      showDrag: false,
     },
     {
       title: 'caseManagement.featureCase.tableColumnActions',
@@ -250,8 +226,6 @@
       dataIndex: 'operation',
       fixed: 'right',
       width: 100,
-      showInTable: true,
-      showDrag: false,
     },
   ]);
 
@@ -262,38 +236,27 @@
       width: 100,
       showInTable: true,
       showTooltip: true,
-      ellipsis: true,
       showDrag: false,
     },
     {
       title: 'caseManagement.featureCase.defectName',
       slotName: 'name',
       dataIndex: 'name',
-      showInTable: true,
-      showTooltip: true,
       width: 250,
-      ellipsis: true,
-      showDrag: false,
     },
     {
       title: 'caseManagement.featureCase.planName',
       slotName: 'testPlanName',
       dataIndex: 'testPlanName',
-      showInTable: true,
       showTooltip: true,
       width: 200,
-      ellipsis: true,
-      showDrag: false,
     },
     {
       title: 'caseManagement.featureCase.defectState',
-      slotName: 'defectState',
-      dataIndex: 'defectState',
-      showInTable: true,
+      slotName: 'statusName',
+      dataIndex: 'statusName',
       showTooltip: true,
       width: 150,
-      ellipsis: true,
-      showDrag: false,
     },
     {
       title: 'caseManagement.featureCase.updateUser',
@@ -303,10 +266,8 @@
         options: [],
         labelKey: 'text',
       },
-      showInTable: true,
       showTooltip: true,
       width: 200,
-      ellipsis: true,
     },
   ];
 
@@ -318,7 +279,6 @@
   } = useTable(getLinkedCaseBugList, {
     columns: testPlanColumns,
     heightUsed: 354,
-    enableDrag: true,
   });
 
   function initTableParams() {
@@ -391,6 +351,7 @@
         getFetch();
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       cancelLoading.value = false;
@@ -417,6 +378,7 @@
       getFetch();
       showLinkDrawer.value = false;
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       drawerLoading.value = false;

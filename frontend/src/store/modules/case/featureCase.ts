@@ -50,7 +50,7 @@ const useFeatureCaseStore = defineStore('featureCase', {
     // 设置选择moduleId
     setModuleId(currentModuleId: string[]) {
       if (['all', 'recycle'].includes(currentModuleId[0])) {
-        this.moduleId = ['root'];
+        this.moduleId = [];
       } else {
         this.moduleId = currentModuleId;
       }
@@ -99,7 +99,10 @@ const useFeatureCaseStore = defineStore('featureCase', {
     },
     // 获取系统字段用例等级
     getSystemCaseLevelFields() {
-      return this.defaultFields.find((item: any) => item.internal && item.fieldName === '用例等级')?.options || [];
+      return (
+        this.defaultFields.find((item: any) => item.internal && item.internalFieldKey === 'functional_priority')
+          ?.options || []
+      );
     },
     // 获取详情
     async getCaseCounts(caseId: string) {

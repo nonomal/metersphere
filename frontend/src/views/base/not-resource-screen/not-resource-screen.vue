@@ -3,9 +3,9 @@
     <div class="page">
       <div class="content-wrapper">
         <div class="content">
-          <div class="no-resource-svg"></div>
+          <div class="no-permission-svg-bright"></div>
           <div class="title">
-            <span>{{ t('common.resourceDeleted') }}</span>
+            <span>{{ resourceType === 'DELETE' ? t('common.resourceDeleted') : t('common.resourceExpired') }}</span>
           </div>
         </div>
       </div>
@@ -14,11 +14,15 @@
 </template>
 
 <script lang="ts" setup>
-  import { useRouter } from 'vue-router';
+  import { useRoute } from 'vue-router';
 
   import { useI18n } from '@/hooks/useI18n';
 
   const { t } = useI18n();
+
+  const route = useRoute();
+
+  const resourceType = ref<string>(route.query.type as string);
 </script>
 
 <style lang="less">
@@ -33,13 +37,6 @@
       height: 100%;
       background-color: var(--color-text-fff);
       .content {
-        .no-resource-svg {
-          margin: 0 auto 24px;
-          width: 160px;
-          height: 98px;
-          background: url('@/assets/svg/no_resource.svg');
-          background-size: cover;
-        }
         .title {
           display: flex;
           justify-content: center;

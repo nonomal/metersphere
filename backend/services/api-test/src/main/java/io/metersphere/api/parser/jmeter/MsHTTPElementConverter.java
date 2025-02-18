@@ -23,13 +23,11 @@ import io.metersphere.project.dto.environment.host.Host;
 import io.metersphere.project.dto.environment.http.HttpConfig;
 import io.metersphere.project.dto.environment.http.HttpConfigPathMatchRule;
 import io.metersphere.project.dto.environment.http.SelectModule;
-import io.metersphere.project.dto.environment.variables.CommonVariables;
 import io.metersphere.sdk.util.EnumValidator;
 import io.metersphere.sdk.util.LogUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.jmeter.modifiers.UserParameters;
 import org.apache.jmeter.protocol.http.control.AuthManager;
 import org.apache.jmeter.protocol.http.control.Authorization;
 import org.apache.jmeter.protocol.http.control.DNSCacheManager;
@@ -82,7 +80,7 @@ public class MsHTTPElementConverter extends AbstractJmeterElementConverter<MsHTT
 
         sampler.setMethod(msHTTPElement.getMethod());
         // path 设置完整的url
-        sampler.setPath(getPath(msHTTPElement, httpConfig));
+        sampler.setPath(getPath(msHTTPElement, httpConfig, envConfig));
 
         setHttpOtherConfig(msHTTPElement.getOtherConfig(), sampler);
 
@@ -90,10 +88,6 @@ public class MsHTTPElementConverter extends AbstractJmeterElementConverter<MsHTT
         handleBody(sampler, msHTTPElement, config);
 
         HashTree httpTree = tree.add(sampler);
-
-        // 处理环境变量
-        UserParameters userParameters = getEnvUserParameters(msHTTPElement, envConfig);
-        Optional.ofNullable(userParameters).ifPresent(httpTree::add);
 
         // 处理请求头
         HeaderManager httpHeader = getHttpHeader(msHTTPElement, apiParamConfig, httpConfig);
@@ -188,31 +182,23 @@ public class MsHTTPElementConverter extends AbstractJmeterElementConverter<MsHTT
         return authManager;
     }
 
-    /**
-     * 添加场景和环境变量
-     *
-     * @param msHTTPElement
-     * @param envInfo
-     */
-    private UserParameters getEnvUserParameters(MsHTTPElement msHTTPElement, EnvironmentInfoDTO envInfo) {
-        if (envInfo == null) {
-            return null;
-        }
-
-        List<CommonVariables> envVariables = envInfo.getConfig().getCommonVariables();
-        if (CollectionUtils.isEmpty(envVariables)) {
-            return null;
-        }
-
-        return JmeterTestElementParserHelper.getUserParameters(msHTTPElement.getName(), envVariables);
-    }
-
-    private String getPath(MsHTTPElement msHTTPElement, HttpConfig httpConfig) {
+    private String getPath(MsHTTPElement msHTTPElement, HttpConfig httpConfig, EnvironmentInfoDTO envConfig) {
         String url = msHTTPElement.getPath();
         if (httpConfig != null) {
             // 接口调试没有环境，不取环境的配置
             String protocol = httpConfig.getProtocol().toLowerCase();
-            url = protocol + "://" + (httpConfig.getHostname() + "/" + url).replace("//", "/");
+            String hostName = httpConfig.getHostname();
+            if (StringUtils.endsWith(hostName, "/")) {
+                hostName = hostName.substring(0, hostName.length() - 1);
+            }
+            // 如果是 mock 返回的url格式是 /mock-server/projectNum/apiNum
+            if (BooleanUtils.isTrue(envConfig.getMock()) && msHTTPElement.getNum() != null) {
+                hostName = StringUtils.join(hostName, "/", msHTTPElement.getNum());
+            }
+            if (StringUtils.startsWith(url, "/")) {
+                url = url.substring(1);
+            }
+            url = protocol + "://" + (hostName + "/" + url);
         }
         url = getPathWithQueryRest(msHTTPElement, url);
         return getPathWithQuery(url, msHTTPElement.getQuery());
@@ -378,10 +364,6 @@ public class MsHTTPElementConverter extends AbstractJmeterElementConverter<MsHTT
                 match = true;
             }
             if (match) {
-                // 如果是mock 返回的url格式是 /mock-server/projectNum/apiNum
-                if (BooleanUtils.isTrue(envConfig.getMock())) {
-                    httpConfig.setHostname(StringUtils.join(httpConfig.getHostname(), "/", msHTTPElement.getNum()));
-                }
                 return httpConfig;
             }
         }

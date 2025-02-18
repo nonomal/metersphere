@@ -2,6 +2,7 @@ export enum TableOpenDetailModeEnum {
   DRAWER = 'drawer',
   NEW_WINDOW = 'new_window',
 }
+
 export enum TableModuleEnum {
   USERGROUPINDEX = 'userGroupIndex',
 }
@@ -9,6 +10,7 @@ export enum TableModuleEnum {
 export enum TableKeyEnum {
   API_TEST = 'apiTest',
   API_TEST_MANAGEMENT_CASE = 'apiTestManagementCase',
+  API_TEST_MANAGEMENT_MOCK = 'apiTestManagementMock',
   API_TEST_DEBUG_FORM_DATA = 'apiTestDebugFormData',
   API_TEST_DEBUG_REST = 'apiTestDebugRest',
   API_TEST_DEBUG_QUERY = 'apiTestDebugQuery',
@@ -17,9 +19,11 @@ export enum TableKeyEnum {
   API_SCENARIO = 'apiScenario',
   SYSTEM_USER = 'systemUser',
   SYSTEM_RESOURCEPOOL = 'systemResourcePool',
+  SYSTEM_RESOURCE_POOL_CAPACITY = 'systemResourcePoolCapacity',
   SYSTEM_AUTH = 'systemAuth',
   SYSTEM_ORGANIZATION = 'systemOrganization',
   SYSTEM_PROJECT = 'systemProject',
+  SYSTEM_PLUGIN = 'systemPlugin',
   SYSTEM_LOG = 'systemLog',
   PROJECT_MEMBER = 'projectMember',
   PROJECT_USER_GROUP = 'projectUserGroup',
@@ -66,16 +70,42 @@ export enum TableKeyEnum {
   TEST_PLAN_DETAIL_BUG_TABLE = 'testPlanDetailBug',
   TEST_PLAN_DETAIL_FEATURE_CASE_TABLE = 'testPlanDetailFeatureCaseTable',
   TEST_PLAN_DETAIL_BUG_TABLE_CASE_COUNT = 'testPlanDetailBugCaseCount',
+  TEST_PLAN_DETAIL_CASE_TABLE_BUG_COUNT = 'testPlanDetailCaseBugCount',
+  TEST_PLAN_DETAIL_API_CASE = 'testPlanDetailApiCase',
+  TEST_PLAN_DETAIL_API_SCENARIO = 'testPlanDetailApiScenario',
   TEST_PLAN_REPORT_TABLE = 'testPlanReportTable',
-  TASK_API_CASE_SYSTEM = 'taskCenterApiCaseSystem',
-  TASK_API_CASE_ORGANIZATION = 'taskCenterApiCaseOrganization',
-  TASK_API_CASE_PROJECT = 'taskCenterApiCaseProject',
+  TASK_CENTER_CASE_TASK = 'taskCenterCaseTask',
+  TASK_CENTER_CASE_TASK_DETAIL = 'taskCenterCaseTaskDetail',
+  TASK_CENTER_SYSTEM_TASK = 'taskCenterSystemTask',
+  TASK_CENTER_BATCH_TASK = 'taskCenterBatchTask',
   TASK_SCHEDULE_TASK_API_IMPORT_SYSTEM = 'taskCenterScheduleApiImportSystem',
   TASK_SCHEDULE_TASK_API_SCENARIO_SYSTEM = 'taskCenterScheduleApiScenarioSystem',
   TASK_SCHEDULE_TASK_API_IMPORT_ORGANIZATION = 'taskCenterScheduleApiImportOrganization',
   TASK_SCHEDULE_TASK_API_SCENARIO_ORGANIZATION = 'taskCenterScheduleApiScenarioOrganization',
   TASK_SCHEDULE_TASK_API_IMPORT_PROJECT = 'taskCenterScheduleApiImportProject',
   TASK_SCHEDULE_TASK_API_SCENARIO_PROJECT = 'taskCenterScheduleApiScenarioProject',
+  TASK_SCHEDULE_TASK_TEST_PLAN_SYSTEM = 'taskCenterScheduleTestPlanSystem',
+  TASK_SCHEDULE_TASK_TEST_PLAN_ORGANIZATION = 'taskCenterScheduleTestPlanOrganization',
+  TASK_SCHEDULE_TASK_TEST_PLAN_PROJECT = 'taskCenterScheduleTestPlanProject',
+  TASK_PLAN_SYSTEM = 'taskCenterPlanSystem',
+  TASK_PLAN_ORGANIZATION = 'taskCenterPlanOrganization',
+  TASK_PLAN_PROJECT = 'taskCenterPlanProject',
+  ASSOCIATE_CASE_API = 'associateCaseApi',
+  ASSOCIATE_CASE_API_CASE = 'associateCaseApiCase',
+  ASSOCIATE_CASE_API_SCENARIO = 'associateCaseApiScenario',
+  ASSOCIATE_CASE = 'associateCase',
+  JSON_SCHEMA = 'jsonSchema',
+  TEST_PLAN_REPORT_FUNCTIONAL_TABLE = 'testPlanReportFunctionTable',
+  TEST_PLAN_REPORT_FUNCTIONAL_TABLE_GROUP = 'testPlanReportFunctionTableGroup',
+  TEST_PLAN_REPORT_FUNCTIONAL_TABLE_NOT_PREVIEW = 'testPlanReportFunctionTableNotPreview',
+  TEST_PLAN_REPORT_API_TABLE = 'testPlanReportApiTable',
+  TEST_PLAN_REPORT_API_TABLE_NOT_PREVIEW = 'testPlanReportApiTableNotPreview',
+  TEST_PLAN_REPORT_API_TABLE_GROUP = 'testPlanReportApiTableGroup',
+  TEST_PLAN_REPORT_SCENARIO_TABLE = 'testPlanReportScenarioTable',
+  TEST_PLAN_REPORT_SCENARIO_TABLE_GROUP = 'testPlanReportScenarioTableGroup',
+  TEST_PLAN_REPORT_BUG_TABLE_DETAIL = 'testPlanReportBugDetailTable',
+  TEST_PLAN_REPORT_BUG_TABLE_DETAIL_NOT_PREVIEW = 'testPlanReportBugDetailTableNotPreview',
+  TEST_PLAN_REPORT_BUG_TABLE_DETAIL_GROUP = 'testPlanReportBugDetailTableGroup',
 }
 
 // 具有特殊功能的列
@@ -94,6 +124,7 @@ export enum SpecialColumnEnum {
 
 export enum SelectAllEnum {
   ALL = 'all',
+  CANCEL_ALL = 'cancelAll',
   CURRENT = 'current',
   NONE = 'none',
 }

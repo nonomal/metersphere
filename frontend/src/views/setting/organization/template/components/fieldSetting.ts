@@ -29,13 +29,15 @@ import {
   updateWorkFlowStatus,
 } from '@/api/modules/setting/template';
 import { useI18n } from '@/hooks/useI18n';
+import { useAppStore } from '@/store';
 import useTemplateStore from '@/store/modules/setting/template';
 
 import type { CustomField, DefinedFieldItem, fieldIconAndNameModal } from '@/models/setting/template';
-import { TemplateCardEnum, TemplateIconEnum } from '@/enums/templateEnum';
+import { TemplateCardEnum, TemplateDarkCardEnum, TemplateIconEnum } from '@/enums/templateEnum';
 
 const { t } = useI18n();
 const templateStore = useTemplateStore();
+const appStore = useAppStore();
 
 // 字段类型-日期
 export const dateOptions: { label: string; value: FormItemType }[] = [
@@ -78,29 +80,31 @@ const projectState = computed(() => templateStore.projectStatus);
 
 // 模板列表Icon
 export function getCardList(type: string): Record<string, any>[] {
+  const currentThemeEnum = appStore.isDarkTheme ? TemplateDarkCardEnum : TemplateCardEnum;
   const dataList = ref([
     {
       id: 1001,
       key: 'FUNCTIONAL',
-      value: TemplateCardEnum.FUNCTIONAL,
+      value: currentThemeEnum.FUNCTIONAL,
       name: t('system.orgTemplate.caseTemplates'),
     },
-    /* {
-      id: 1002,
-      key: 'API',
-      value: TemplateCardEnum.API,
-      name: t('system.orgTemplate.APITemplates'),
-    }, */
+    // TODO 暂时不上
+    // {
+    //   id: 1002,
+    //   key: 'API',
+    //   value: currentThemeEnum.API,
+    //   name: t('system.orgTemplate.APITemplates'),
+    // },
     // {
     //   id: 1003,
     //   key: 'UI',
-    //   value: TemplateCardEnum.UI,
+    //   value: currentThemeEnum.UI,
     //   name: t('system.orgTemplate.UITemplates'),
     // },
     // {
     //   id: 1004,
     //   key: 'TEST_PLAN',
-    //   value: TemplateCardEnum.TEST_PLAN,
+    //   value: currentThemeEnum.TEST_PLAN,
     //   name: t('system.orgTemplate.testPlanTemplates'),
     // },
     {
@@ -294,7 +298,7 @@ export const getTotalFieldOptionList = (totalData: DefinedFieldItem[]) => {
         },
       ],
       fApi: null,
-      required: false,
+      required: item.internal && item.internalFieldKey === 'functional_priority',
     };
   });
 };
@@ -306,27 +310,30 @@ export const getTotalFieldOptionList = (totalData: DefinedFieldItem[]) => {
  */
 export const getCustomDetailFields = (totalData: DefinedFieldItem[], customFields: CustomField[]) => {
   const customFieldsIds = customFields.map((index: any) => index.fieldId);
-  return totalData.filter((item) => {
-    const currentCustomFieldIndex = customFieldsIds.findIndex((it: any) => it === item.id);
-    if (customFieldsIds.indexOf(item.id) > -1) {
-      const currentForm = item.formRules?.map((it: any) => {
-        it.props.modelValue = customFields[currentCustomFieldIndex].defaultValue;
-        return {
-          ...it,
-          value: customFields[currentCustomFieldIndex].defaultValue,
-          effect: {
-            required: item.required,
-          },
-        };
-      });
-      const formItem = item;
-      formItem.formRules = cloneDeep(currentForm);
-      formItem.apiFieldId = customFields[currentCustomFieldIndex].apiFieldId;
-      formItem.required = customFields[currentCustomFieldIndex].required;
-      return true;
-    }
-    return false;
-  });
+  return totalData
+    .filter((item) => {
+      const index = customFieldsIds.findIndex((it: any) => it === item.id);
+      if (customFieldsIds.indexOf(item.id) > -1) {
+        const currentForm = item.formRules?.map((it: any) => {
+          it.props.modelValue = customFields[index].defaultValue;
+          return {
+            ...it,
+            value: customFields[index].defaultValue,
+            effect: {
+              required: item.required,
+            },
+          };
+        });
+        const formItem = item;
+        formItem.formRules = cloneDeep(currentForm);
+        formItem.apiFieldId = customFields[index].apiFieldId;
+        formItem.required = customFields[index].required;
+        formItem.index = index;
+        return true;
+      }
+      return false;
+    })
+    .sort((f1, f2) => f1.index - f2.index);
 };
 
 export default {};

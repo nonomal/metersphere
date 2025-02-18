@@ -8,7 +8,7 @@
     >
       <slot>
         <div :class="['ms-more-action-trigger-content', visible ? 'ms-more-action-trigger-content--focus' : '']">
-          <MsButton type="text" size="mini" class="more-icon-btn" @click="visible = !visible">
+          <MsButton v-if="isHasAllPermission" type="text" size="mini" class="more-icon-btn" @click="visible = !visible">
             <MsIcon type="icon-icon_more_outlined" size="16" class="text-[var(--color-text-4)]" />
           </MsButton>
         </div>
@@ -21,6 +21,7 @@
             :class="beforeDividerHasAction && afterDividerHasAction ? '' : 'hidden'"
             margin="4px"
           />
+
           <a-doption
             v-else
             :key="item.label"
@@ -91,6 +92,15 @@
     return result;
   });
 
+  // 判断是否有任一权限
+  const isHasAllPermission = computed(() => {
+    const permissionList = props.list.map((item) => {
+      return item.permission || [];
+    });
+    const permissionResult = permissionList.flat();
+    return hasAnyPermission(permissionResult);
+  });
+
   function selectHandler(value: SelectedValue) {
     const item = props.list.find((e: ActionsItem) => e.eventTag === value);
     emit('select', item);
@@ -117,29 +127,6 @@
     color: rgb(var(--danger-6));
     &:hover {
       color: rgb(var(--danger-6));
-    }
-  }
-  .ms-more-action-trigger-content {
-    @apply flex items-center;
-    .more-icon-btn {
-      padding: 2px;
-      border-radius: var(--border-radius-mini);
-      &:hover {
-        background-color: rgb(var(--primary-9)) !important;
-        .arco-icon {
-          color: rgb(var(--primary-5)) !important;
-        }
-      }
-    }
-  }
-  .ms-more-action-trigger-content--focus {
-    .more-icon-btn {
-      @apply !visible;
-
-      background-color: rgb(var(--primary-9));
-      .arco-icon {
-        color: rgb(var(--primary-5));
-      }
     }
   }
 </style>

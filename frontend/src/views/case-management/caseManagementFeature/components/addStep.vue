@@ -4,7 +4,6 @@
       <div class="circle text-[12px] font-medium"> {{ rowIndex + 1 }}</div>
     </template>
     <template v-if="!props.isTestPlan" #caseStep="{ record }">
-      <!--         v-if="record.showStep" -->
       <a-textarea
         :ref="(el: refItem) => setStepRefMap(el, record)"
         v-model="record.step"
@@ -13,6 +12,7 @@
         :auto-size="true"
         class="w-max-[267px] param-input"
         :placeholder="t('system.orgTemplate.stepTip')"
+        :disabled="props.isDisabled"
         @blur="blurHandler(record, 'step')"
       />
     </template>
@@ -25,11 +25,17 @@
         :auto-size="true"
         class="w-max-[267px] param-input"
         :placeholder="t('system.orgTemplate.expectationTip')"
+        :disabled="props.isDisabled"
         @blur="blurHandler(record, 'expected')"
       />
     </template>
-    <template #actualResult="{ record }">
+    <template
+      v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+EXECUTE']) && !props.isDisabledTestPlan"
+      #actualResult="{ record }"
+    >
+      <div v-if="props.isPreview">{{ record.actualResult }}</div>
       <a-textarea
+        v-else
         v-model="record.actualResult"
         :max-length="1000"
         size="mini"
@@ -40,7 +46,7 @@
     </template>
     <template #lastExecResult="{ record }">
       <a-select
-        v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+EXECUTE'])"
+        v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+EXECUTE']) && !props.isDisabledTestPlan && !props.isPreview"
         v-model:model-value="record.executeResult"
         :placeholder="t('common.pleaseSelect')"
         class="param-input w-full"
@@ -76,7 +82,7 @@
   import { TableChangeExtra, TableData } from '@arco-design/web-vue';
 
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
-  import { MsTableColumn } from '@/components/pure/ms-table/type';
+  import { MsTableColumn, MsTableProps } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
   import MsTableMoreAction from '@/components/pure/ms-table-more-action/index.vue';
   import { ActionsItem } from '@/components/pure/ms-table-more-action/types';
@@ -88,7 +94,6 @@
 
   import type { StepList } from '@/models/caseManagement/featureCase';
   import { LastExecuteResults } from '@/enums/caseEnum';
-  import { TableKeyEnum } from '@/enums/tableEnum';
 
   import { executionResultMap } from '@/views/case-management/caseManagementFeature/components/utils';
 
@@ -100,7 +105,10 @@
       stepList: any;
       isDisabled?: boolean;
       isScrollY?: boolean;
+      scrollY?: number;
       isTestPlan?: boolean;
+      isDisabledTestPlan?: boolean;
+      isPreview?: boolean; // 仅预览不展示状态可操作下拉和文本框
     }>(),
     {
       isDisabled: false,
@@ -170,7 +178,7 @@
       title: 'system.orgTemplate.operation',
       slotName: 'operation',
       fixed: 'right',
-      width: 200,
+      width: 120,
       showInTable: true,
       showDrag: false,
     },
@@ -203,17 +211,28 @@
     return stepData.value.length <= 1 ? moreActions.slice(0, moreActions.length - 2) : moreActions;
   });
 
-  const { propsRes, propsEvent, setProps } = useTable(undefined, {
-    tableKey: TableKeyEnum.CASE_MANAGEMENT_DETAIL_TABLE,
+  const tableProps = ref<Partial<MsTableProps<StepList>>>({
     columns: templateFieldColumns.value,
-    scroll: { x: '100%', y: props.isScrollY ? 400 : '' },
+    scroll: { x: '100%', y: props.isScrollY ? props.scrollY ?? 400 : '' },
     selectable: false,
     noDisable: true,
-    size: 'default',
     showSetting: false,
     showPagination: false,
-    enableDrag: true,
+    draggable: { type: 'handle' },
+    draggableCondition: true,
   });
+
+  const { propsRes, propsEvent, setProps } = useTable(undefined, tableProps.value);
+
+  watch(
+    () => props.isDisabled,
+    (val) => {
+      tableProps.value.draggableCondition = !val;
+    },
+    {
+      immediate: true,
+    }
+  );
 
   // 复制步骤
   function copyStep(record: StepList) {
@@ -389,5 +408,8 @@
         color: var(--color-text-brand);
       }
     }
+  }
+  :deep(.arco-textarea-wrapper.arco-textarea-disabled) {
+    background: transparent;
   }
 </style>

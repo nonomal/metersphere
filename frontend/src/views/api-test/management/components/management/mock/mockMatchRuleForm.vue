@@ -25,18 +25,25 @@
                 :rules="[{ required: true, message: t('mockManagement.paramNameNotNull') }]"
                 :disabled="props.disabled"
               >
-                <a-select
+                <a-auto-complete
                   v-model="item.key"
                   :placeholder="t('apiTestDebug.paramName')"
-                  :options="props.keyOptions"
-                  allow-search
-                  allow-create
+                  :data="props.keyOptions"
                   @change="(val) => selectedKey(item, idx)"
-                >
-                </a-select>
+                />
+
+                <!--                <a-select-->
+                <!--                  v-model="item.key"-->
+                <!--                  :placeholder="t('apiTestDebug.paramName')"-->
+                <!--                  :options="props.keyOptions"-->
+                <!--                  allow-search-->
+                <!--                  allow-create-->
+                <!--                  @change="(val) => selectedKey(item, idx)"-->
+                <!--                >-->
+                <!--                </a-select>-->
               </a-form-item>
             </div>
-            <div class="w-[100px]">
+            <div class="w-[110px]">
               <a-form-item
                 :field="`matchRules[${idx}].condition`"
                 hide-asterisk
@@ -74,7 +81,7 @@
                   set-default-class
                   :disabled="props.disabled"
                   @change="() => addMatchRule(idx)"
-                  @dblclick="quickInputParams(item)"
+                  @set-params="quickInputParams(item)"
                   @apply="() => addMatchRule(idx)"
                 />
               </a-form-item>
@@ -134,7 +141,7 @@
   </a-modal>
   <!-- <a-modal
     v-model:visible="showQuickInputDesc"
-    :title="t('apiTestDebug.desc')"
+    :title="t('common.desc')"
     :ok-text="t('common.save')"
     :ok-button-props="{ disabled: !quickInputDescValue || quickInputDescValue.trim() === '' }"
     class="ms-modal-form"
@@ -173,6 +180,7 @@
 
   const props = defineProps<{
     id?: string;
+    formKey?: string;
     keyOptions: SelectOptionData[];
     disabled: boolean;
   }>();
@@ -202,6 +210,17 @@
     matchAll: matchAll.value,
     matchRules: matchRules.value,
   });
+
+  watch(
+    () => [props.formKey, props.disabled],
+    () => {
+      formModel.value = {
+        matchAll: matchAll.value,
+        matchRules: matchRules.value,
+      };
+      formRef.value?.clearValidate();
+    }
+  );
 
   function handleDeleteItem(index: number) {
     matchRules.value.splice(index, 1);
@@ -330,7 +349,6 @@
   //   activeQuickInputRecord.value = {};
   //   quickInputDescValue.value = '';
   // }
-
   // function applyQuickInputDesc() {
   //   activeQuickInputRecord.value.description = quickInputDescValue.value;
   //   showQuickInputDesc.value = false;
@@ -338,7 +356,6 @@
   //   clearQuickInputDesc();
   //   emitChange('applyQuickInputDesc');
   // }
-
   // function handleDescChange() {
   //   emitChange('handleDescChange');
   // }

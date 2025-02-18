@@ -46,7 +46,7 @@
           </div>
         </div>
         <div class="px-[16px]">
-          <div class="api-item-label">{{ t('ms.personal.desc') }}</div>
+          <div class="api-item-label">{{ t('common.desc') }}</div>
           <a-textarea
             v-if="item.showDescInput"
             v-model:model-value="item.description"
@@ -388,11 +388,10 @@
     background-color: var(--color-text-n9);
   }
   .api-item {
-    @apply bg-white;
-
     padding: 16px 0;
     height: 335px;
     border-radius: var(--border-radius-small);
+    background-color: var(--color-text-fff);
     .api-item-label {
       font-size: 12px;
       line-height: 16px;

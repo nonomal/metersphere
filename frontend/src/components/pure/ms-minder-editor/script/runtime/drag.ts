@@ -10,23 +10,24 @@
 interface DragRuntimeOptions {
   fsm: any;
   minder: any;
-  hotbox: any;
   receiver: any;
 }
 
 function createDragRuntime(this: DragRuntimeOptions) {
-  const { fsm, minder, hotbox } = this;
+  const { fsm, minder } = this;
 
   // listen the fsm changes, make action.
   function setupFsm() {
     // when jumped to drag mode, enter
     fsm.when('* -> drag', () => {
       // now is drag mode
+      minder.fire('dragStart');
     });
 
     fsm.when('drag -> *', (exit: any, enter: any, reason: string) => {
       if (reason === 'drag-finish') {
         // now exit drag mode
+        minder.fire('dragFinish');
       }
     });
   }
@@ -157,10 +158,6 @@ function createDragRuntime(this: DragRuntimeOptions) {
       minder.getSelectedNode() &&
       (Math.abs(downX - e.originEvent.clientX) > BOUND_CHECK || Math.abs(downY - e.originEvent.clientY) > BOUND_CHECK)
     ) {
-      if (fsm.state() === 'hotbox') {
-        hotbox.active(window.HotBox.STATE_IDLE);
-      }
-
       fsm.jump('drag', 'user-drag');
     }
   });

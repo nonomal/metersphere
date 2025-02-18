@@ -27,6 +27,8 @@
     :default-param-item="defaultNormalParamItem"
     :draggable="false"
     :selectable="false"
+    :height-used="410"
+    show-quick-copy
     @change="handleCommonVariablesChange"
     @batch-add="() => (batchAddKeyValVisible = true)"
   />
@@ -54,7 +56,7 @@
 
   import { CommonVariable, CsvVariable } from '@/models/apiTest/scenario';
 
-  import { defaultNormalParamItem } from '@/views/api-test/components/config';
+  import { defaultNormalParamItem } from './config';
   import { filterKeyValParams } from '@/views/api-test/components/utils';
 
   const props = defineProps<{
@@ -90,7 +92,7 @@
       title: 'apiScenario.params.type',
       dataIndex: 'paramType',
       slotName: 'paramType',
-      typeOptions: [
+      options: [
         {
           label: t('common.constant'),
           value: 'CONSTANT',
@@ -119,7 +121,7 @@
       width: 200,
     },
     {
-      title: 'apiScenario.params.desc',
+      title: 'common.desc',
       dataIndex: 'description',
       slotName: 'description',
     },

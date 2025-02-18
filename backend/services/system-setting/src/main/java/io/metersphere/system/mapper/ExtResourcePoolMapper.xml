@@ -36,6 +36,16 @@
                             and t.create_user in
                             <include refid="io.metersphere.system.mapper.BaseMapper.filterInWrapper"/>
                         </when>
+                        <when test="key=='type'">
+                            and t.type in
+                            <include refid="io.metersphere.system.mapper.BaseMapper.filterInWrapper"/>
+                        </when>
+                        <when test="key=='orgId'">
+                            and t.id in (
+                            select tpo.test_resource_pool_id from test_resource_pool_organization tpo where tpo.org_id in
+                            <include refid="io.metersphere.system.mapper.BaseMapper.filterInWrapper"/>
+                            )
+                        </when>
                     </choose>
                 </if>
             </foreach>
@@ -53,5 +63,33 @@
         </if>
     </sql>
 
+
+
+    <select id="selectAllResourcePool" resultType="io.metersphere.system.domain.TestResourcePool">
+        SELECT id, name
+        FROM test_resource_pool
+        where deleted = false
+        <if test="poolIds != null and poolIds.size() > 0 ">
+            and (
+                all_org = true or id in
+                <foreach collection="poolIds" item="poolId" open="(" separator="," close=")">
+                    #{poolId}
+                </foreach>
+            )
+        </if>
+        <if test="poolIds == null or poolIds.size() == 0">
+            and all_org = true
+        </if>
+    </select>
+
+
+    <select id="selectProjectAllResourcePool" resultType="io.metersphere.system.domain.TestResourcePool">
+        SELECT id, name
+        FROM test_resource_pool
+        where deleted = false and id in
+        <foreach collection="poolIds" item="poolId" open="(" separator="," close=")">
+            #{poolId}
+        </foreach>
+    </select>
 
 </mapper>

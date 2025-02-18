@@ -8,8 +8,12 @@
       <a-form-item
         field="name"
         :label="t('caseManagement.caseReview.reviewName')"
-        :rules="[{ validator: validateName }]"
+        :rules="[
+          { required: true, message: t('caseManagement.caseReview.reviewNameRequired') },
+          { validator: validateName },
+        ]"
         asterisk-position="end"
+        required
       >
         <a-input
           v-model:modelValue="reviewForm.name"
@@ -17,7 +21,7 @@
           :max-length="255"
         />
       </a-form-item>
-      <a-form-item field="desc" :label="t('caseManagement.caseReview.desc')">
+      <a-form-item field="desc" :label="t('common.desc')">
         <a-textarea
           v-model:modelValue="reviewForm.desc"
           :placeholder="t('caseManagement.caseReview.descPlaceholder')"
@@ -37,13 +41,13 @@
         >
           <template #tree-slot-title="node">
             <a-tooltip :content="`${node.name}`" position="tl">
-              <div class="one-line-text w-[300px] text-[var(--color-text-1)]">{{ node.name }}</div>
+              <div class="one-line-text w-[300px]">{{ node.name }}</div>
             </a-tooltip>
           </template>
         </a-tree-select>
       </a-form-item>
-      <a-form-item field="type" :label="t('caseManagement.caseReview.type')">
-        <a-radio-group v-model:modelValue="reviewForm.type" :disabled="isEdit">
+      <a-form-item v-if="!isEdit" field="type" :label="t('caseManagement.caseReview.type')">
+        <a-radio-group v-model:modelValue="reviewForm.type">
           <a-radio value="SINGLE">
             <div class="flex items-center">
               {{ t('caseManagement.caseReview.single') }}
@@ -206,7 +210,7 @@
    */
   import { onBeforeMount } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { Message, SelectOptionData, TreeNodeData } from '@arco-design/web-vue';
+  import { Message, SelectOptionData } from '@arco-design/web-vue';
 
   import MsAvatar from '@/components/pure/ms-avatar/index.vue';
   import MsButton from '@/components/pure/ms-button/index.vue';
@@ -225,9 +229,9 @@
   } from '@/api/modules/case-management/caseReview';
   import { useI18n } from '@/hooks/useI18n';
   import useAppStore from '@/store/modules/app';
+  import { filterTreeNode } from '@/utils';
 
   import type { BaseAssociateCaseRequest, ReviewPassRule } from '@/models/caseManagement/caseReview';
-  import { ModuleTreeNode } from '@/models/common';
   import { CaseManagementRouteEnum } from '@/enums/routeEnum';
 
   import type { FormInstance } from '@arco-design/web-vue';
@@ -309,10 +313,6 @@
 
   function writeAssociateCases(param: BaseAssociateCaseRequest) {
     selectedAssociateCasesParams.value = { ...param };
-  }
-
-  function filterTreeNode(searchValue: string, nodeValue: TreeNodeData) {
-    return (nodeValue as ModuleTreeNode).name.toLowerCase().indexOf(searchValue.toLowerCase()) > -1;
   }
 
   function clearSelectedCases() {

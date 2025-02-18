@@ -1,5 +1,4 @@
 import MSR from '@/api/http/index';
-import * as bugURL from '@/api/requrls/bug-management';
 
 import { CommonList, TableQueryParams } from '@/models/common';
 
@@ -89,7 +88,10 @@ export function queryMessageHistoryCount(data: historyQueryParams) {
 export function getMessageReadAll(resourceType?: string) {
   return MSR.get<number>({ url: '/notification/read/all', params: { resourceType } });
 }
+export function getMessageRead(id: number) {
+  return MSR.get<number>({ url: `/notification/read/${id}` });
+}
 
 export function getMessageUnReadCount(projectId: string) {
-  return MSR.get<number>({ url: '/notification/un-read', params: projectId });
+  return MSR.get<number>({ url: '/notification/un-read', params: projectId }, { ignoreCancelToken: true });
 }

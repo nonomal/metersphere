@@ -1,8 +1,10 @@
+import { ExecuteStatusEnum } from '@/enums/taskCenter';
 // Node 类型资源信息
 export interface NodesListItem {
   ip: string;
   port: string;
   concurrentNumber: number;
+  singleTaskConcurrentNumber: number; // 单个任务最大并发数
 }
 
 // 应用组织id和name映射对象
@@ -18,6 +20,7 @@ export interface TestResourceDTO {
   token: string; // k8s token
   namespace: string; // k8s 命名空间
   concurrentNumber: number; // k8s 最大并发数
+  singleTaskConcurrentNumber: number; // 单个任务最大并发数
   podThreads: number; // k8s 单pod最大线程数
   jobDefinition: string; // k8s job自定义模板
   deployName: string; // k8s api测试部署名称
@@ -61,3 +64,35 @@ export type UpdateResourcePoolParams = Omit<ResourcePoolInfo, 'testResourceDTO'>
   id: string;
   testResourceDTO?: Partial<TestResourceDTO>;
 };
+// 资源池容量列表项
+export interface CapacityTaskItem {
+  id: string;
+  taskId: string;
+  resourceId: string;
+  resourceName: string;
+  taskOrigin: string; // 任务来源（任务组下的任务id
+  status: ExecuteStatusEnum; // 执行状态
+  result: string; // 执行结果
+  resourcePoolId: string;
+  resourcePoolNode: string;
+  resourceType: string; // 资源类型
+  projectId: string;
+  organizationId: string;
+  threadId: string; // 线程id
+  startTime: number;
+  endTime: number;
+  executor: string; // 执行人
+  num: number;
+  taskName: string;
+  userName: string;
+  resourcePoolName: string;
+  triggerMode: string;
+  lineNum: string;
+}
+
+export interface CapacityDetailType {
+  concurrentNumber: number; // 最大并发数
+  occupiedConcurrentNumber: number; // 剩余并发数
+  memoryUsage: number; // 内存使用量
+  cpuusage: number; // CPU占用量
+}

@@ -1,38 +1,43 @@
 package io.metersphere.api.service.definition;
 
-import io.metersphere.sdk.constants.ApiFileResourceType;
+import io.metersphere.api.constants.ApiConstants;
 import io.metersphere.api.constants.ApiResourceType;
 import io.metersphere.api.domain.*;
 import io.metersphere.api.dto.*;
 import io.metersphere.api.dto.debug.ApiFileResourceUpdateRequest;
-import io.metersphere.api.dto.debug.ApiResourceRunRequest;
 import io.metersphere.api.dto.definition.*;
 import io.metersphere.api.dto.request.ApiTransferRequest;
+import io.metersphere.api.dto.request.http.MsHTTPElement;
+import io.metersphere.api.dto.scenario.ApiFileCopyRequest;
 import io.metersphere.api.mapper.*;
 import io.metersphere.api.service.ApiCommonService;
-import io.metersphere.api.service.ApiExecuteService;
 import io.metersphere.api.service.ApiFileResourceService;
 import io.metersphere.api.utils.ApiDataUtils;
+import io.metersphere.api.utils.HttpRequestParamDiffUtils;
+import io.metersphere.functional.domain.FunctionalCaseTestExample;
+import io.metersphere.functional.mapper.FunctionalCaseTestMapper;
 import io.metersphere.plugin.api.spi.AbstractMsTestElement;
 import io.metersphere.project.domain.FileAssociation;
 import io.metersphere.project.domain.FileMetadata;
 import io.metersphere.project.domain.Project;
 import io.metersphere.project.dto.MoveNodeSortDTO;
 import io.metersphere.project.mapper.ProjectMapper;
-import io.metersphere.project.service.EnvironmentService;
 import io.metersphere.project.service.MoveNodeService;
-import io.metersphere.sdk.constants.*;
+import io.metersphere.sdk.constants.ApiFileResourceType;
+import io.metersphere.sdk.constants.ApplicationNumScope;
+import io.metersphere.sdk.constants.DefaultRepositoryDir;
 import io.metersphere.sdk.domain.Environment;
 import io.metersphere.sdk.domain.EnvironmentExample;
-import io.metersphere.sdk.dto.api.task.TaskRequestDTO;
 import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.mapper.EnvironmentMapper;
 import io.metersphere.sdk.util.*;
+import io.metersphere.system.domain.User;
 import io.metersphere.system.dto.OperationHistoryDTO;
 import io.metersphere.system.dto.request.OperationHistoryRequest;
 import io.metersphere.system.dto.sdk.request.NodeMoveRequest;
 import io.metersphere.system.dto.sdk.request.PosRequest;
 import io.metersphere.system.log.constants.OperationLogModule;
+import io.metersphere.system.mapper.UserMapper;
 import io.metersphere.system.notice.constants.NoticeConstants;
 import io.metersphere.system.service.OperationHistoryService;
 import io.metersphere.system.service.UserLoginService;
@@ -42,10 +47,13 @@ import io.metersphere.system.utils.ServiceUtils;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
+import org.jetbrains.annotations.NotNull;
 import org.mybatis.spring.SqlSessionUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -54,7 +62,6 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Service
 @Transactional(rollbackFor = Exception.class)
@@ -70,6 +77,8 @@ public class ApiTestCaseService extends MoveNodeService {
     private ExtApiTestCaseMapper extApiTestCaseMapper;
     @Resource
     private ApiDefinitionMapper apiDefinitionMapper;
+    @Resource
+    private ApiDefinitionBlobMapper apiDefinitionBlobMapper;
     @Resource
     private ApiTestCaseBlobMapper apiTestCaseBlobMapper;
     @Resource
@@ -95,18 +104,19 @@ public class ApiTestCaseService extends MoveNodeService {
     @Resource
     private ApiCommonService apiCommonService;
     @Resource
-    private ApiExecuteService apiExecuteService;
-    @Resource
-    private ApiReportService apiReportService;
-    @Resource
-    private EnvironmentService environmentService;
-    @Resource
     private ApiTestCaseNoticeService apiTestCaseNoticeService;
     @Resource
     private ExtApiReportMapper extApiReportMapper;
+    @Resource
+    private FunctionalCaseTestMapper functionalCaseTestMapper;
+    @Resource
+    private UserMapper userMapper;
+    @Resource
+    private ExtApiScenarioMapper extApiScenarioMapper;
 
     private static final String CASE_TABLE = "api_test_case";
-    private static final int MAX_TAG_SIZE = 10;
+    @Resource
+    private ApiReportRelateTaskMapper apiReportRelateTaskMapper;
 
     private void checkProjectExist(String projectId) {
         Project project = projectMapper.selectByPrimaryKey(projectId);
@@ -175,8 +185,7 @@ public class ApiTestCaseService extends MoveNodeService {
         testCase.setCreateTime(System.currentTimeMillis());
         testCase.setUpdateTime(System.currentTimeMillis());
         if (CollectionUtils.isNotEmpty(request.getTags())) {
-            checkTagLength(request.getTags());
-            testCase.setTags(request.getTags());
+            testCase.setTags(ServiceUtils.parseTags(request.getTags()));
         }
         apiTestCaseMapper.insertSelective(testCase);
 
@@ -201,7 +210,7 @@ public class ApiTestCaseService extends MoveNodeService {
         return requestStr;
     }
 
-    private ApiTestCase checkResourceExist(String id) {
+    public ApiTestCase checkResourceExist(String id) {
         ApiTestCase testCase = apiTestCaseMapper.selectByPrimaryKey(id);
         if (testCase == null) {
             throw new MSException(Translator.get("api_test_case_not_exist"));
@@ -233,15 +242,21 @@ public class ApiTestCaseService extends MoveNodeService {
         apiTestCaseDTO.setMethod(apiDefinition.getMethod());
         apiTestCaseDTO.setPath(apiDefinition.getPath());
         apiTestCaseDTO.setProtocol(apiDefinition.getProtocol());
+        apiTestCaseDTO.setApiDefinitionNum(apiDefinition.getNum());
+        apiTestCaseDTO.setApiDefinitionName(apiDefinition.getName());
         ApiTestCaseFollowerExample example = new ApiTestCaseFollowerExample();
         example.createCriteria().andCaseIdEqualTo(id).andUserIdEqualTo(userId);
         List<ApiTestCaseFollower> followers = apiTestCaseFollowerMapper.selectByExample(example);
         apiTestCaseDTO.setFollow(CollectionUtils.isNotEmpty(followers));
-        AbstractMsTestElement msTestElement = ApiDataUtils.parseObject(new String(testCaseBlob.getRequest()), AbstractMsTestElement.class);
+        AbstractMsTestElement msTestElement = getTestElement(testCaseBlob);
         apiCommonService.setLinkFileInfo(id, msTestElement);
         apiCommonService.setEnableCommonScriptProcessorInfo(msTestElement);
         apiCommonService.setApiDefinitionExecuteInfo(msTestElement, apiDefinition);
         apiTestCaseDTO.setRequest(msTestElement);
+
+        ApiDefinitionBlob apiDefinitionBlob = apiDefinitionBlobMapper.selectByPrimaryKey(apiDefinition.getId());
+        AbstractMsTestElement apiMsTestElement = getApiMsTestElement(apiDefinitionBlob);
+        apiTestCaseDTO.setInconsistentWithApi(HttpRequestParamDiffUtils.isRequestParamDiff(apiMsTestElement, msTestElement));
         return apiTestCaseDTO;
     }
 
@@ -282,8 +297,7 @@ public class ApiTestCaseService extends MoveNodeService {
         testCase.setUpdateUser(userId);
         testCase.setUpdateTime(System.currentTimeMillis());
         if (CollectionUtils.isNotEmpty(request.getTags())) {
-            checkTagLength(request.getTags());
-            testCase.setTags(request.getTags());
+            testCase.setTags(ServiceUtils.parseTags(request.getTags()));
         } else {
             testCase.setTags(null);
         }
@@ -312,10 +326,28 @@ public class ApiTestCaseService extends MoveNodeService {
         apiTestCaseMapper.updateByPrimaryKeySelective(update);
     }
 
-    public List<ApiTestCaseDTO> page(ApiTestCasePageRequest request, boolean deleted) {
-        List<ApiTestCaseDTO> apiCaseLists = extApiTestCaseMapper.listByRequest(request, deleted);
+    public List<ApiTestCaseDTO> page(ApiTestCasePageRequest request, boolean deleted, boolean isRepeat, String testPlanId) {
+        if (CollectionUtils.isEmpty(request.getProtocols())) {
+            return new ArrayList<>();
+        }
+        List<ApiTestCaseDTO> apiCaseLists = extApiTestCaseMapper.listByRequest(request, deleted, isRepeat, testPlanId);
         buildApiTestCaseDTO(apiCaseLists);
         return apiCaseLists;
+    }
+
+    public List<ApiTestCaseDTO> calculate(List<String> ids) {
+        List<ApiTestCaseDTO> returnList = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(ids)) {
+            List<CasePassDTO> passRateList = extApiTestCaseMapper.findPassRateByIds(ids);
+            Map<String, String> passRates = passRateList.stream().collect(Collectors.toMap(CasePassDTO::getId, CasePassDTO::getValue));
+            for (String id : ids) {
+                ApiTestCaseDTO dto = new ApiTestCaseDTO();
+                dto.setId(id);
+                dto.setPassRate(passRates.getOrDefault(id, "0%"));
+                returnList.add(dto);
+            }
+        }
+        return returnList;
     }
 
     private void buildApiTestCaseDTO(List<ApiTestCaseDTO> apiCaseLists) {
@@ -376,11 +408,12 @@ public class ApiTestCaseService extends MoveNodeService {
     }
 
     public void batchDelete(ApiTestCaseBatchRequest request, String userId) {
+
         List<String> ids = doSelectIds(request, true);
         if (CollectionUtils.isEmpty(ids)) {
             return;
         }
-        SubListUtils.dealForSubList(ids, 2000, subList -> deleteResourceByIds(subList, request.getProjectId(), userId));
+        SubListUtils.dealForSubList(ids, 200, subList -> deleteResourceByIds(subList, request.getProjectId(), userId));
     }
 
     public void deleteResourceByIds(List<String> ids, String projectId, String userId) {
@@ -400,6 +433,10 @@ public class ApiTestCaseService extends MoveNodeService {
         //记录删除日志
         apiTestCaseLogService.deleteBatchLog(caseLists, userId, projectId);
         //TODO 需要删除测试计划与用例的中间表 功能用例的关联表等
+        FunctionalCaseTestExample functionalCaseTestExample = new FunctionalCaseTestExample();
+        functionalCaseTestExample.createCriteria().andSourceIdIn(ids).andSourceTypeEqualTo("API");
+        functionalCaseTestMapper.deleteByExample(functionalCaseTestExample);
+
         //TODO 删除附件关系    不需要删除报告
         //extFileAssociationService.deleteByResourceIds(ids);
     }
@@ -411,7 +448,7 @@ public class ApiTestCaseService extends MoveNodeService {
     }
 
     public List<String> doSelectIds(ApiTestCaseBatchRequest request, boolean deleted) {
-        if (request.isSelectAll()) {
+        if (request.isSelectAll() && CollectionUtils.isNotEmpty(request.getProtocols())) {
             List<String> ids = extApiTestCaseMapper.getIds(request, deleted);
             if (CollectionUtils.isNotEmpty(request.getExcludeIds())) {
                 ids.removeAll(request.getExcludeIds());
@@ -490,10 +527,6 @@ public class ApiTestCaseService extends MoveNodeService {
     private void batchUpdateTags(ApiTestCaseExample example, ApiTestCase updateCase,
                                  ApiCaseBatchEditRequest request, List<String> ids,
                                  ApiTestCaseMapper mapper) {
-        if (CollectionUtils.isEmpty(request.getTags())) {
-            throw new MSException(Translator.get("tags_is_null"));
-        }
-        checkTagLength(request.getTags());
         if (request.isAppend()) {
             Map<String, ApiTestCase> caseMap = extApiTestCaseMapper.getTagsByIds(ids, false)
                     .stream()
@@ -503,8 +536,7 @@ public class ApiTestCaseService extends MoveNodeService {
                     if (CollectionUtils.isNotEmpty(v.getTags())) {
                         List<String> orgTags = v.getTags();
                         orgTags.addAll(request.getTags());
-                        checkTagLength(orgTags.stream().distinct().toList());
-                        v.setTags(orgTags.stream().distinct().toList());
+                        v.setTags(ServiceUtils.parseTags(orgTags.stream().distinct().toList()));
                     } else {
                         v.setTags(request.getTags());
                     }
@@ -514,7 +546,7 @@ public class ApiTestCaseService extends MoveNodeService {
                 });
             }
         } else {
-            updateCase.setTags(request.getTags());
+            updateCase.setTags(request.isClear() ? new ArrayList<>() : ServiceUtils.parseTags(request.getTags()));
             mapper.updateByExampleSelective(updateCase, example);
         }
     }
@@ -545,30 +577,51 @@ public class ApiTestCaseService extends MoveNodeService {
     }
 
     public List<ExecuteReportDTO> getExecuteList(ExecutePageRequest request) {
-        List<ExecuteReportDTO> executeList = extApiTestCaseMapper.getExecuteList(request);
-        if (CollectionUtils.isEmpty(executeList)) {
-            return new ArrayList<>();
-        }
-        Set<String> userSet = executeList.stream()
-                .flatMap(apiReport -> Stream.of(apiReport.getCreateUser()))
-                .collect(Collectors.toSet());
-        Map<String, String> userMap = userLoginService.getUserNameMap(new ArrayList<>(userSet));
-        SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
-        //执行历史列表
-        List<String> reportIds = executeList.stream().map(ExecuteReportDTO::getId).toList();
-        Map<String, ExecuteReportDTO> historyDeletedMap = new HashMap<>();
-        if (CollectionUtils.isNotEmpty(reportIds)) {
-            List<ExecuteReportDTO> historyDeletedList = extApiReportMapper.getHistoryDeleted(reportIds);
-            historyDeletedMap = historyDeletedList.stream().collect(Collectors.toMap(ExecuteReportDTO::getId, Function.identity()));
-        }
-        Map<String, ExecuteReportDTO> finalHistoryDeletedMap = historyDeletedMap;
-        executeList.forEach(apiReport -> {
-            apiReport.setOperationUser(userMap.get(apiReport.getCreateUser()));
-            Date date = new Date(apiReport.getStartTime());
-            apiReport.setNum(sdf.format(date));
-            apiReport.setHistoryDeleted(MapUtils.isNotEmpty(finalHistoryDeletedMap) && !finalHistoryDeletedMap.containsKey(apiReport.getId()));
-        });
+        List<ExecHistoryDTO> historyList = extApiScenarioMapper.selectExecHistory(request);
+        List<ExecuteReportDTO> executeList = handleList(historyList);
         return executeList;
+    }
+
+    private List<ExecuteReportDTO> handleList(List<ExecHistoryDTO> historyList) {
+        List<ExecuteReportDTO> executeReportDTOList = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(historyList)) {
+            List<String> userIds = historyList.stream().map(ExecHistoryDTO::getCreateUser).toList();
+            Map<String, String> userNameMap = userLoginService.getUserNameMap(userIds);
+            SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
+            Map<String, String> reportMap = getReportMap(historyList);
+            historyList.forEach(item -> {
+                ExecuteReportDTO reportDTO = new ExecuteReportDTO();
+                BeanUtils.copyBean(reportDTO, item);
+                reportDTO.setOperationUser(userNameMap.get(item.getCreateUser()));
+                reportDTO.setId(item.getItemId());
+                reportDTO.setNum(sdf.format(item.getStartTime()));
+                if (StringUtils.isNotBlank(item.getTestPlanNum())) {
+                    reportDTO.setTestPlanNum(StringUtils.join(Translator.get("test_plan"), ": ", item.getTestPlanNum()));
+                }
+                if (BooleanUtils.isTrue(item.getIntegrated()) && reportMap.containsKey(item.getTaskId())) {
+                    reportDTO.setResultDeleted(false);
+                }
+                if (BooleanUtils.isFalse(item.getIntegrated()) && reportMap.containsKey(item.getItemId())) {
+                    reportDTO.setResultDeleted(false);
+                }
+                executeReportDTOList.add(reportDTO);
+            });
+        }
+        return executeReportDTOList;
+    }
+
+    private Map<String, String> getReportMap(List<ExecHistoryDTO> list) {
+        Map<String, String> reportMap = new HashMap<>();
+        List<String> integratedTaskIds = list.stream().filter(item -> BooleanUtils.isTrue(item.getIntegrated())).map(ExecHistoryDTO::getTaskId).toList();
+        List<String> noIntegratedTaskItemIds = list.stream().filter(item -> BooleanUtils.isFalse(item.getIntegrated())).map(ExecHistoryDTO::getItemId).toList();
+        List<String> resourceIds = ListUtils.union(integratedTaskIds, noIntegratedTaskItemIds);
+        if (CollectionUtils.isNotEmpty(resourceIds)) {
+            ApiReportRelateTaskExample example = new ApiReportRelateTaskExample();
+            example.createCriteria().andTaskResourceIdIn(resourceIds);
+            List<ApiReportRelateTask> reportRelateTasks = apiReportRelateTaskMapper.selectByExample(example);
+            reportRelateTasks.stream().forEach(item -> reportMap.put(item.getTaskResourceId(), item.getReportId()));
+        }
+        return reportMap;
     }
 
     public List<OperationHistoryDTO> operationHistoryList(OperationHistoryRequest request) {
@@ -612,7 +665,7 @@ public class ApiTestCaseService extends MoveNodeService {
                         return apiDefinitionExecuteInfo;
                     }
                 })
-                .filter(item -> item != null)
+                .filter(Objects::nonNull)
                 .toList();
     }
 
@@ -621,7 +674,7 @@ public class ApiTestCaseService extends MoveNodeService {
         if (apiTestCaseBlob == null) {
             return;
         }
-        AbstractMsTestElement msTestElement = ApiDataUtils.parseObject(new String(apiTestCaseBlob.getRequest()), AbstractMsTestElement.class);
+        AbstractMsTestElement msTestElement = getTestElement(apiTestCaseBlob);
         // 获取接口中需要更新的文件
         List<ApiFile> updateFiles = apiCommonService.getApiFilesByFileId(originFileAssociation.getFileId(), msTestElement);
         // 替换文件的Id和name
@@ -637,169 +690,6 @@ public class ApiTestCaseService extends MoveNodeService {
 
     public String transfer(ApiTransferRequest request, String userId) {
         return apiFileResourceService.transfer(request, userId, ApiResourceType.API_CASE.name());
-    }
-
-    /**
-     * 接口执行
-     * 传请求详情执行
-     *
-     * @param request
-     * @return
-     */
-    public TaskRequestDTO run(ApiCaseRunRequest request, String userId) {
-        ApiTestCase apiTestCase = checkResourceExist(request.getId());
-        ApiResourceRunRequest runRequest = apiExecuteService.getApiResourceRunRequest(request);
-        apiTestCase.setEnvironmentId(request.getEnvironmentId());
-        return executeRun(runRequest, apiTestCase, request.getReportId(), userId);
-    }
-
-    /**
-     * 接口执行
-     * 传ID执行
-     *
-     * @param id
-     * @param reportId
-     * @param userId
-     * @return
-     */
-    public TaskRequestDTO run(String id, String reportId, String userId) {
-        ApiTestCase apiTestCase = checkResourceExist(id);
-        ApiTestCaseBlob apiTestCaseBlob = apiTestCaseBlobMapper.selectByPrimaryKey(id);
-
-        ApiResourceRunRequest runRequest = new ApiResourceRunRequest();
-        runRequest.setTestElement(ApiDataUtils.parseObject(new String(apiTestCaseBlob.getRequest()), AbstractMsTestElement.class));
-
-        return executeRun(runRequest, apiTestCase, reportId, userId);
-    }
-
-    /**
-     * 接口执行
-     * 保存报告
-     *
-     * @param runRequest
-     * @param apiTestCase
-     * @param reportId
-     * @param userId
-     * @return
-     */
-    public TaskRequestDTO executeRun(ApiResourceRunRequest runRequest, ApiTestCase apiTestCase, String reportId, String userId) {
-        String poolId = apiExecuteService.getProjectApiResourcePoolId(apiTestCase.getProjectId());
-
-        TaskRequestDTO taskRequest = getTaskRequest(reportId, apiTestCase.getId(), apiTestCase.getProjectId(), ApiExecuteRunMode.RUN.name());
-        taskRequest.getRunModeConfig().setPoolId(poolId);
-        taskRequest.setSaveResult(true);
-
-        if (StringUtils.isEmpty(taskRequest.getReportId())) {
-            taskRequest.setRealTime(false);
-            reportId = IDGenerator.nextStr();
-            taskRequest.setReportId(reportId);
-        } else {
-            // 如果传了报告ID，则实时获取结果
-            taskRequest.setRealTime(true);
-        }
-
-        // 初始化报告
-        initApiReport(apiTestCase, reportId, poolId, userId);
-
-        return doExecute(taskRequest, runRequest, apiTestCase.getApiDefinitionId(), apiTestCase.getEnvironmentId());
-    }
-
-    /**
-     * 接口调试
-     * 不存报告，实时获取结果
-     *
-     * @param request
-     * @return
-     */
-    public TaskRequestDTO debug(ApiCaseRunRequest request) {
-        TaskRequestDTO taskRequest = getTaskRequest(request.getReportId(), request.getId(),
-                request.getProjectId(), apiExecuteService.getDebugRunModule(request.getFrontendDebug()));
-        taskRequest.setSaveResult(false);
-        taskRequest.setRealTime(true);
-
-        ApiResourceRunRequest runRequest = apiExecuteService.getApiResourceRunRequest(request);
-
-        return doExecute(taskRequest, runRequest, request.getApiDefinitionId(), request.getEnvironmentId());
-    }
-
-    private TaskRequestDTO doExecute(TaskRequestDTO taskRequest, ApiResourceRunRequest runRequest, String apiDefinitionId, String envId) {
-
-        ApiParamConfig apiParamConfig = apiExecuteService.getApiParamConfig(taskRequest.getReportId());
-
-        ApiDefinition apiDefinition = apiDefinitionMapper.selectByPrimaryKey(apiDefinitionId);
-
-        // 设置环境
-        apiParamConfig.setEnvConfig(environmentService.get(envId));
-        // 设置 method 等信息
-        apiCommonService.setApiDefinitionExecuteInfo(runRequest.getTestElement(), apiDefinition);
-
-        return apiExecuteService.apiExecute(runRequest, taskRequest, apiParamConfig);
-    }
-
-    /**
-     * 预生成用例的执行报告
-     *
-     * @param apiTestCase
-     * @param poolId
-     * @param userId
-     * @return
-     */
-    public ApiTestCaseRecord initApiReport(ApiTestCase apiTestCase, String reportId, String poolId, String userId) {
-
-        // 初始化报告
-        ApiReport apiReport = getApiReport(userId);
-        apiReport.setId(reportId);
-        apiReport.setTriggerMode(TaskTriggerMode.MANUAL.name());
-        apiReport.setName(apiTestCase.getName() + "_" + DateUtils.getTimeString(System.currentTimeMillis()));
-        apiReport.setRunMode(ApiBatchRunMode.PARALLEL.name());
-        apiReport.setPoolId(poolId);
-        apiReport.setEnvironmentId(apiTestCase.getEnvironmentId());
-        apiReport.setProjectId(apiTestCase.getProjectId());
-
-        // 创建报告和用例的关联关系
-        ApiTestCaseRecord apiTestCaseRecord = getApiTestCaseRecord(apiTestCase, apiReport);
-
-        apiReportService.insertApiReport(List.of(apiReport), List.of(apiTestCaseRecord));
-        //初始化步骤
-        apiReportService.insertApiReportStep(List.of(getApiReportStep(apiTestCase, reportId, 1L)));
-        return apiTestCaseRecord;
-    }
-
-    private ApiReportStep getApiReportStep(ApiTestCase apiTestCase, String reportId, long sort) {
-        ApiReportStep apiReportStep = new ApiReportStep();
-        apiReportStep.setReportId(reportId);
-        apiReportStep.setStepId(apiTestCase.getId());
-        apiReportStep.setSort(sort);
-        apiReportStep.setName(apiTestCase.getName());
-        apiReportStep.setStepType(ApiExecuteResourceType.API_CASE.name());
-        return apiReportStep;
-    }
-
-    public ApiTestCaseRecord getApiTestCaseRecord(ApiTestCase apiTestCase, ApiReport apiReport) {
-        ApiTestCaseRecord apiTestCaseRecord = new ApiTestCaseRecord();
-        apiTestCaseRecord.setApiTestCaseId(apiTestCase.getId());
-        apiTestCaseRecord.setApiReportId(apiReport.getId());
-        return apiTestCaseRecord;
-    }
-
-    public ApiReport getApiReport(String userId) {
-        ApiReport apiReport = new ApiReport();
-        apiReport.setId(IDGenerator.nextStr());
-        apiReport.setDeleted(false);
-        apiReport.setIntegrated(false);
-        apiReport.setStatus(ApiReportStatus.PENDING.name());
-        apiReport.setStartTime(System.currentTimeMillis());
-        apiReport.setUpdateTime(System.currentTimeMillis());
-        apiReport.setUpdateUser(userId);
-        apiReport.setCreateUser(userId);
-        return apiReport;
-    }
-
-    public TaskRequestDTO getTaskRequest(String reportId, String resourceId, String projectId, String runModule) {
-        TaskRequestDTO taskRequest = apiExecuteService.getTaskRequest(reportId, resourceId, projectId);
-        taskRequest.setResourceType(ApiResourceType.API_CASE.name());
-        taskRequest.setRunMode(runModule);
-        return taskRequest;
     }
 
     @Override
@@ -820,7 +710,7 @@ public class ApiTestCaseService extends MoveNodeService {
     }
 
     public void moveNode(PosRequest posRequest) {
-        NodeMoveRequest request = super.getNodeMoveRequest(posRequest);
+        NodeMoveRequest request = super.getNodeMoveRequest(posRequest, true);
         MoveNodeSortDTO sortDTO = super.getNodeSortDTO(
                 posRequest.getProjectId(),
                 request,
@@ -835,12 +725,157 @@ public class ApiTestCaseService extends MoveNodeService {
     }
 
     /**
-     * 校验TAG长度
-     * @param tags 标签集合
+     * 处理接口定义参数变更
+     *
+     * @param changeRequest
+     * @param originRequest
      */
-    public void checkTagLength(List<String> tags) {
-        if (CollectionUtils.isNotEmpty(tags) && tags.size() > MAX_TAG_SIZE) {
-            throw new MSException(Translator.getWithArgs("tags_size_large_than", String.valueOf(MAX_TAG_SIZE)));
+    public void handleApiParamChange(String apiDefinitionId, Object changeRequest, Object originRequest) {
+        boolean requestParamDifferent = HttpRequestParamDiffUtils.isRequestParamDiff(changeRequest, originRequest);
+        if (requestParamDifferent) {
+            // 添加接口变更标识
+            extApiTestCaseMapper.setApiChangeByApiDefinitionId(apiDefinitionId);
         }
+    }
+
+    public void clearApiChange(String id) {
+        checkResourceExist(id);
+        ApiTestCase apiTestCase = new ApiTestCase();
+        apiTestCase.setId(id);
+        apiTestCase.setApiChange(false);
+        apiTestCase.setIgnoreApiDiff(true);
+        apiTestCaseMapper.updateByPrimaryKeySelective(apiTestCase);
+    }
+
+    public ApiCaseCompareData getApiCompareData(String id) {
+        ApiTestCase apiTestCase = checkResourceExist(id);
+        ApiDefinition apiDefinition = getApiDefinition(apiTestCase.getApiDefinitionId());
+        ApiDefinitionBlob apiDefinitionBlob = apiDefinitionBlobMapper.selectByPrimaryKey(apiDefinition.getId());
+        AbstractMsTestElement apiMsTestElement = getApiMsTestElement(apiDefinitionBlob);
+        ApiTestCaseBlob apiTestCaseBlob = apiTestCaseBlobMapper.selectByPrimaryKey(id);
+        AbstractMsTestElement apiTestCaseMsTestElement = getTestElement(apiTestCaseBlob);
+        // 其他协议不处理
+        if (apiMsTestElement instanceof MsHTTPElement apiHttpTestElement && apiTestCaseMsTestElement instanceof MsHTTPElement apiCaseHttpTestElement) {
+            apiMsTestElement = HttpRequestParamDiffUtils.getCompareHttpElement(apiHttpTestElement);
+            apiTestCaseMsTestElement = HttpRequestParamDiffUtils.getCompareHttpElement(apiCaseHttpTestElement);
+        }
+        ApiCaseCompareData apiCaseCompareData = new ApiCaseCompareData();
+        apiCaseCompareData.setApiRequest(apiMsTestElement);
+        apiCaseCompareData.setCaseRequest(apiTestCaseMsTestElement);
+        return apiCaseCompareData;
+    }
+
+    private AbstractMsTestElement getApiMsTestElement(ApiDefinitionBlob apiDefinitionBlob) {
+        return ApiDataUtils.parseObject(new String(apiDefinitionBlob.getRequest()), AbstractMsTestElement.class);
+    }
+
+    public AbstractMsTestElement getTestElement(ApiTestCaseBlob apiTestCaseBlob) {
+        return ApiDataUtils.parseObject(new String(apiTestCaseBlob.getRequest()), AbstractMsTestElement.class);
+    }
+
+    public void ignoreApiChange(String id, boolean ignore) {
+        checkResourceExist(id);
+        ApiTestCase apiTestCase = new ApiTestCase();
+        apiTestCase.setId(id);
+        if (ignore) {
+            apiTestCase.setApiChange(false);
+            apiTestCase.setIgnoreApiDiff(true);
+            apiTestCase.setIgnoreApiChange(true);
+        } else {
+            apiTestCase.setIgnoreApiChange(false);
+        }
+        apiTestCaseMapper.updateByPrimaryKeySelective(apiTestCase);
+    }
+
+    public void batchSyncApiChange(ApiCaseBatchSyncRequest request, String userId) {
+        // 只处理 http 协议的接口
+        request.setProtocols(List.of(ApiConstants.HTTP_PROTOCOL));
+        List<String> ids = doSelectIds(request, false);
+        if (CollectionUtils.isEmpty(ids)) {
+            return;
+        }
+        Project project = projectMapper.selectByPrimaryKey(request.getProjectId());
+        SubListUtils.dealForSubList(ids, 500, subList -> doBatchSyncApiChange(request, subList, userId, project));
+    }
+
+    public void doBatchSyncApiChange(ApiCaseBatchSyncRequest request, List<String> ids, String userId, Project project) {
+        ApiTestCaseExample example = new ApiTestCaseExample();
+        example.createCriteria().andIdIn(ids);
+        List<ApiTestCase> apiTestCases = apiTestCaseMapper.selectByExample(example);
+        Set<String> apiDefinitionIds = apiTestCases.stream().map(ApiTestCase::getApiDefinitionId).collect(Collectors.toSet());
+
+        SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH);
+        ApiTestCaseBlobMapper apiTestCaseBlobBatchMapper = sqlSession.getMapper(ApiTestCaseBlobMapper.class);
+        ApiTestCaseMapper apiTestCaseBatchMapper = sqlSession.getMapper(ApiTestCaseMapper.class);
+
+        ApiCaseSyncRequest apiCaseSyncRequest = new ApiCaseSyncRequest();
+        apiCaseSyncRequest.setSyncItems(request.getSyncItems());
+        apiCaseSyncRequest.setDeleteRedundantParam(request.getDeleteRedundantParam());
+
+        Map<String, ApiTestCaseLogDTO> originMap = new HashMap<>();
+        Map<String, ApiTestCaseLogDTO> modifiedMap = new HashMap<>();
+
+        ApiDefinitionBlobExample apiDefinitionBlobExample = new ApiDefinitionBlobExample();
+        apiDefinitionBlobExample.createCriteria().andIdIn(new ArrayList<>(apiDefinitionIds));
+        Map<String, ApiDefinitionBlob> apiDefinitionBlobMap = apiDefinitionBlobMapper.selectByExampleWithBLOBs(apiDefinitionBlobExample)
+                .stream()
+                .collect(Collectors.toMap(ApiDefinitionBlob::getId, Function.identity()));
+
+        // 清除接口变更标识
+        extApiTestCaseMapper.clearApiChange(ids);
+        try {
+            for (ApiTestCase apiTestCase : apiTestCases) {
+                ApiDefinitionBlob apiDefinitionBlob = apiDefinitionBlobMap.get(apiTestCase.getApiDefinitionId());
+                AbstractMsTestElement apiMsTestElement = getApiMsTestElement(apiDefinitionBlob);
+                ApiTestCaseBlob apiTestCaseBlob = apiTestCaseBlobMapper.selectByPrimaryKey(apiTestCase.getId());
+                AbstractMsTestElement apiTestCaseMsTestElement = getTestElement(apiTestCaseBlob);
+                boolean requestParamDifferent = HttpRequestParamDiffUtils.isRequestParamDiff(apiMsTestElement, apiTestCaseMsTestElement);
+                if (requestParamDifferent) {
+                    // 如果参数与定义不一致，则同步参数，并记录日志和发送通知
+                    ApiTestCaseLogDTO originCase = BeanUtils.copyBean(new ApiTestCaseLogDTO(), apiTestCase);
+                    originCase.setRequest(apiTestCaseMsTestElement);
+                    originMap.put(apiTestCase.getId(), originCase);
+
+                    apiTestCase.setUpdateTime(System.currentTimeMillis());
+                    apiTestCase.setUpdateUser(userId);
+                    apiTestCase.setApiChange(false);
+                    apiTestCaseBatchMapper.updateByPrimaryKeySelective(apiTestCase);
+                    apiTestCaseMsTestElement = HttpRequestParamDiffUtils.syncRequestDiff(apiCaseSyncRequest, apiMsTestElement, apiTestCaseMsTestElement);
+                    apiTestCaseBlob.setRequest(ApiDataUtils.toJSONString(apiTestCaseMsTestElement).getBytes());
+                    apiTestCaseBlobBatchMapper.updateByPrimaryKeySelective(apiTestCaseBlob);
+
+                    ApiTestCaseLogDTO modifiedCase = BeanUtils.copyBean(new ApiTestCaseLogDTO(), apiTestCase);
+                    modifiedCase.setRequest(apiTestCaseMsTestElement);
+                    modifiedMap.put(apiTestCase.getId(), originCase);
+                }
+            }
+            apiTestCaseLogService.batchSyncLog(originMap, modifiedMap, project, userId);
+
+            User user = userMapper.selectByPrimaryKey(userId);
+            apiTestCaseNoticeService.batchSyncSendNotice(new ArrayList<>(modifiedMap.values()), user, project.getId(), request.getNotificationConfig(), NoticeConstants.Event.CASE_UPDATE);
+        } finally {
+            sqlSession.flushStatements();
+            SqlSessionUtils.closeSqlSession(sqlSession, sqlSessionFactory);
+        }
+    }
+
+    public AbstractMsTestElement syncApiChange(ApiCaseSyncRequest request) {
+        ApiTestCase apiTestCase = checkResourceExist(request.getId());
+        ApiDefinition apiDefinition = getApiDefinition(apiTestCase.getApiDefinitionId());
+        ApiDefinitionBlob apiDefinitionBlob = apiDefinitionBlobMapper.selectByPrimaryKey(apiDefinition.getId());
+        AbstractMsTestElement apiMsTestElement = getApiMsTestElement(apiDefinitionBlob);
+        AbstractMsTestElement apiTestCaseMsTestElement = ApiDataUtils.parseObject(JSON.toJSONString(request.getApiCaseRequest()), AbstractMsTestElement.class);
+        // 清除接口变更标识
+        extApiTestCaseMapper.clearApiChange(List.of(request.getId()));
+        return HttpRequestParamDiffUtils.syncRequestDiff(request, apiMsTestElement, apiTestCaseMsTestElement);
+    }
+
+    public Map<String, String> copyFile(ApiFileCopyRequest request) {
+        // 从接口定义复制
+        ApiTestCase apiTestCase = checkResourceExist(request.getResourceId());
+        String sourceDir = DefaultRepositoryDir.getApiCaseDir(apiTestCase.getProjectId(),
+                apiTestCase.getId());
+
+        return apiCommonService.copyFiles2TempDir(request.getFileIds(), sourceDir);
     }
 }

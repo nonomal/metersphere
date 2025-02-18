@@ -1,4 +1,5 @@
 import { ReviewItem, ReviewResult, ReviewStatus } from '@/models/caseManagement/caseReview';
+import type { DetailCase } from '@/models/caseManagement/featureCase';
 
 // 评审结果
 export type ReviewResultMap = Record<
@@ -82,6 +83,7 @@ export const reviewDefaultDetail: ReviewItem = {
   unPassCount: 0,
   reviewedCount: 0,
   underReviewedCount: 0,
+  unReviewCount: 0,
   pos: 5000,
   startTime: 0,
   endTime: 0,
@@ -104,4 +106,25 @@ export const minderTagMap = {
   TEXT_DESCRIPTION: 'minder.tag.desc',
   EXPECTED_RESULT: 'minder.tag.expect',
   DESCRIPTION: 'minder.tag.remark',
+};
+
+export const defaultCaseDetail: DetailCase = {
+  id: '',
+  projectId: '',
+  templateId: '',
+  name: '',
+  prerequisite: '', // prerequisite
+  caseEditType: '', // 编辑模式：步骤模式/文本模式
+  steps: '',
+  textDescription: '',
+  expectedResult: '', // 预期结果
+  description: '',
+  publicCase: false, // 是否公共用例
+  moduleId: '',
+  versionId: '',
+  tags: [],
+  customFields: [], // 自定义字段集合
+  relateFileMetaIds: [], // 关联文件ID集合
+  functionalPriority: '',
+  reviewStatus: 'UN_REVIEWED',
 };

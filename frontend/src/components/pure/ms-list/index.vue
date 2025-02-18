@@ -45,15 +45,15 @@
             </div>
             <slot name="itemRight" :item="item" :index="index"></slot>
           </div>
-          <div
-            v-if="props.mode === 'remote' && index === props.data.length - 1"
-            class="flex h-[32px] items-center justify-center"
-          >
-            <div v-if="noMoreData" class="text-[var(--color-text-4)]">{{ t('ms.timeline.noMoreData') }}</div>
-            <a-spin v-else />
-          </div>
         </div>
       </slot>
+      <div
+        v-if="props.mode === 'remote' && index === props.data.length - 1"
+        class="flex h-[32px] items-center justify-center"
+      >
+        <div v-if="noMoreData" class="text-[var(--color-text-4)]">{{ t('ms.timeline.noMoreData') }}</div>
+        <a-spin v-else />
+      </div>
     </template>
     <template v-if="$slots['empty'] || props.emptyText" #empty>
       <slot name="empty">
@@ -245,7 +245,7 @@
       .arco-list-item-meta {
         @apply p-0;
         .arco-list-item-meta-content {
-          @apply flex-1;
+          @apply flex-1 overflow-hidden;
         }
         .arco-list-item-meta-title:not(:last-child) {
           @apply mb-0;
@@ -265,6 +265,9 @@
     }
     :deep(.arco-list-content) {
       .ms-scroll-bar();
+    }
+    :deep(.arco-list-item-main) {
+      @apply overflow-hidden;
     }
   }
   .ms-list-ghost {

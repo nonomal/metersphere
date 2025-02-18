@@ -19,10 +19,10 @@
     <template #title>
       <div class="flex items-center justify-between gap-[4px]">
         <slot name="title">
-          <div class="flex flex-1 items-center justify-between">
-            <div class="flex items-center">
+          <div class="flex flex-1 items-center justify-between overflow-hidden">
+            <div class="flex flex-1 items-center overflow-hidden">
               <a-tooltip :disabled="!props.title" :content="props.title">
-                <span> {{ characterLimit(props.title) }}</span>
+                <span class="one-line-text max-w-[300px]"> {{ props.title }}</span>
               </a-tooltip>
 
               <slot name="headerLeft"></slot>
@@ -33,7 +33,7 @@
             <slot name="tbutton"></slot>
           </div>
         </slot>
-        <div class="right-operation-button-icon">
+        <div class="ms-drawer-right-operation-button">
           <MsButton
             v-if="props.showFullScreen"
             type="icon"
@@ -68,7 +68,16 @@
         >
           <template #value="{ item }">
             <slot name="descValue" :item="item">
-              {{ item.value === undefined || item.value === null || item.value?.toString() === '' ? '-' : item.value }}
+              <a-tooltip
+                :content="`${item.value}`"
+                :disabled="item.value === undefined || item.value === null || item.value?.toString() === ''"
+              >
+                <div>
+                  {{
+                    item.value === undefined || item.value === null || item.value?.toString() === '' ? '-' : item.value
+                  }}
+                </div>
+              </a-tooltip>
             </slot>
           </template>
         </MsDescription>
@@ -117,7 +126,6 @@
 
   import useFullScreen, { UseFullScreen } from '@/hooks/useFullScreen';
   import { useI18n } from '@/hooks/useI18n';
-  import { characterLimit } from '@/utils';
   import { getMaxZIndexLayer } from '@/utils/dom';
   // 懒加载描述组件
   const MsDescription = defineAsyncComponent(() => import('@/components/pure/ms-description/index.vue'));
@@ -256,7 +264,8 @@
           fullScreen.value = useFullScreen(topDrawer?.querySelector('.arco-drawer'));
         });
       }
-    }
+    },
+    { immediate: true }
   );
 </script>
 
@@ -268,27 +277,31 @@
 
 <style lang="less">
   .arco-drawer {
-    @apply bg-white;
-
     max-width: 100vw;
+    background-color: var(--color-text-fff);
     .arco-drawer-header {
+      display: flex;
       height: 56px;
       border-bottom: 1px solid var(--color-text-n8);
       .arco-drawer-title {
-        @apply w-full;
-
+        flex: 1;
+        overflow: hidden;
         line-height: 24px;
-        .right-operation-button-icon .ms-button-icon {
-          border-radius: var(--border-radius-small);
-          color: var(--color-text-1);
-          .arco-icon {
-            margin-right: 8px;
+        .ms-drawer-right-operation-button {
+          .ms-button-icon,
+          .ms-drawer-fullscreen-btn {
+            border-radius: var(--border-radius-small);
             color: var(--color-text-1);
-          }
-          &:hover {
-            color: rgb(var(--primary-5));
-            .arco-icon {
+            .arco-icon,
+            .ms-drawer-fullscreen-btn-icon {
+              margin-right: 8px;
+              color: var(--color-text-1);
+            }
+            &:hover {
               color: rgb(var(--primary-5));
+              .arco-icon {
+                color: rgb(var(--primary-5));
+              }
             }
           }
         }
@@ -301,6 +314,7 @@
       }
     }
     .arco-drawer-footer {
+      border-color: var(--color-text-n8);
       border-bottom: 1px solid var(--color-text-n8);
     }
   }
@@ -312,7 +326,7 @@
       @apply h-full w-full overflow-auto;
       .ms-scroll-bar();
 
-      min-width: 650px;
+      min-width: 448px; // 480 - 左右边距 32
       min-height: 500px;
     }
     .arco-scrollbar-track-direction-vertical {
@@ -340,7 +354,7 @@
 
     z-index: 200;
     width: 8px;
-    background-color: var(--color-neutral-3);
+    background-color: var(--color-text-n8);
     cursor: col-resize;
   }
 </style>

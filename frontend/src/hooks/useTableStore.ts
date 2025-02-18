@@ -76,7 +76,14 @@ export default function useTableStore() {
         const { columnBackup: oldColumn, pageSize } = tableColumnsMap;
         // 比较页面上定义的 column 和 浏览器备份的column 是否相同
         const isEqual = isArraysEqualWithOrder(oldColumn, column);
+
         if (!isEqual) {
+          column.forEach((col) => {
+            const storedCol = tableColumnsMap.column.find((sc) => sc.dataIndex === col.dataIndex);
+            if (storedCol) {
+              col.width = storedCol.width; // 使用上一次拖拽存储的宽度，避免组件里边使用时候初始化到最初的列宽
+            }
+          });
           // 如果不相等，说明有变动将新的column存入indexDB
           setItem(
             tableKey,
@@ -165,6 +172,18 @@ export default function useTableStore() {
       // eslint-disable-next-line no-console
       console.error('tableStore.setColumns', e);
     }
+  }
+
+  // 获取存储的列
+  async function getStoreColumns(tableKey: TableKeyEnum) {
+    const tableColumnsMap = await getItem<MsTableSelectorItem>(
+      tableKey,
+      tableKey.startsWith('SYSTEM') || tableKey.startsWith('ORGANIZATION')
+    );
+    if (tableColumnsMap) {
+      return tableColumnsMap.column;
+    }
+    return [];
   }
 
   async function getColumns(tableKey: TableKeyEnum, isSimple?: boolean) {
@@ -262,6 +281,31 @@ export default function useTableStore() {
     }
   }
 
+  async function updateColumnWidth(tableKey: TableKeyEnum, column: MsTableColumn) {
+    try {
+      // 从 IndexedDB 获取当前存储的列配置
+      const tableColumnsMap = await getItem<MsTableSelectorItem>(
+        tableKey,
+        tableKey.startsWith('SYSTEM') || tableKey.startsWith('ORGANIZATION')
+      );
+
+      if (tableColumnsMap) {
+        // 存储更新后的列配置到 IndexedDB
+        await setItem(
+          tableKey,
+          {
+            ...tableColumnsMap,
+            column,
+          },
+          tableKey.startsWith('SYSTEM') || tableKey.startsWith('ORGANIZATION')
+        );
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error updating column width:', error);
+    }
+  }
+
   return {
     initColumn,
     setMode,
@@ -273,5 +317,7 @@ export default function useTableStore() {
     getColumns,
     getShowInTableColumns,
     getPageSize,
+    getStoreColumns,
+    updateColumnWidth,
   };
 }

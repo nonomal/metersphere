@@ -19,6 +19,7 @@
     show-setting
     :selectable="true"
     :default-param-item="defaultParamItem"
+    show-quick-copy
     @change="handleParamTableChange"
     @batch-add="batchAddKeyValVisible = true"
   />
@@ -27,6 +28,7 @@
     :add-type-text="t('project.environmental.env.constantBatchAddTip')"
     :params="innerParams"
     no-param-type
+    :default-param-item="defaultParamItem"
     @apply="handleBatchParamApply"
   />
 </template>
@@ -38,6 +40,8 @@
   import { useI18n } from '@/hooks/useI18n';
 
   import { TableKeyEnum } from '@/enums/tableEnum';
+
+  import { filterKeyValParams } from '@/views/api-test/components/utils';
 
   defineOptions({ name: 'EnvManagementAllParams' });
 
@@ -53,10 +57,9 @@
     (e: 'change'): void; //  数据发生变化
   }>();
 
-  const searchValue = ref('');
+  const searchValue = defineModel<string>('keyword', { default: '' });
 
   const { t } = useI18n();
-
   const innerParams = defineModel<any[]>('params', {
     required: true,
   });
@@ -90,7 +93,7 @@
       showDrag: true,
       hasRequired: false,
       columnSelectorDisabled: true,
-      typeOptions: [
+      options: [
         {
           label: t('common.constant'),
           value: 'CONSTANT',
@@ -125,7 +128,7 @@
       showDrag: true,
     },
     {
-      title: 'project.environmental.desc',
+      title: 'common.desc',
       dataIndex: 'description',
       slotName: 'description',
       showInTable: true,
@@ -144,13 +147,11 @@
    * 批量参数代码转换为参数表格数据
    */
   function handleBatchParamApply(resultArr: any[]) {
-    resultArr.forEach((item) => {
-      item.paramType = 'CONSTANT';
-    });
-    if (resultArr.length < innerParams.value.length) {
-      innerParams.value.splice(0, innerParams.value.length - 1, ...resultArr);
+    const filterResult = filterKeyValParams(innerParams.value, defaultParamItem);
+    if (filterResult.lastDataIsDefault) {
+      innerParams.value = [...resultArr, innerParams.value[innerParams.value.length - 1]].filter(Boolean);
     } else {
-      innerParams.value = [...resultArr, innerParams.value[innerParams.value.length - 1]];
+      innerParams.value = resultArr.filter(Boolean);
     }
     emit('change');
   }
@@ -168,15 +169,24 @@
       backupParams.value = [...innerParams.value];
       firstSearch.value = false;
     }
-    if (!searchValue.value) {
-      innerParams.value = [...backupParams.value];
-    } else {
+    if (searchValue.value) {
       const result = backupParams.value.filter(
         (item) => item.key?.includes(searchValue.value) || (item.tags || []).includes(searchValue.value)
       );
       innerParams.value = [...result];
+    } else {
+      innerParams.value = [...backupParams.value];
     }
   }
+
+  watch(
+    () => searchValue.value,
+    (val) => {
+      if (!val.length) {
+        handleSearch();
+      }
+    }
+  );
 </script>
 
 <style lang="less" scoped></style>

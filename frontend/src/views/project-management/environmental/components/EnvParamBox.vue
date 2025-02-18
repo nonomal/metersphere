@@ -16,12 +16,7 @@
             @blur="store.currentEnvDetailInfo.name = form.name"
           />
         </a-form-item>
-        <a-form-item
-          class="mb-[16px]"
-          asterisk-position="end"
-          field="description"
-          :label="t('project.environmental.desc')"
-        >
+        <a-form-item class="mb-[16px]" asterisk-position="end" field="description" :label="t('common.desc')">
           <a-textarea
             v-model="form.description"
             :placeholder="t('project.environmental.envDescPlaceholder')"
@@ -40,9 +35,11 @@
         @change="handleTabChange"
       />
     </div>
-    <div class="content h-full">
-      <EnvParamsTab v-if="activeKey === EnvTabTypeEnum.ENVIRONMENT_PARAM" />
-      <HttpTab v-else-if="activeKey === EnvTabTypeEnum.ENVIRONMENT_HTTP" />
+    <div class="content w-full">
+      <div v-show="activeKey === EnvTabTypeEnum.ENVIRONMENT_PARAM">
+        <EnvParamsTab v-model:keyword="envKeyword" />
+      </div>
+      <HttpTab v-if="activeKey === EnvTabTypeEnum.ENVIRONMENT_HTTP" />
       <DataBaseTab v-else-if="activeKey === EnvTabTypeEnum.ENVIRONMENT_DATABASE" />
       <HostTab v-else-if="activeKey === EnvTabTypeEnum.ENVIRONMENT_HOST" ref="hostTabRef" />
       <div
@@ -139,6 +136,8 @@
     description: '',
   });
 
+  const envKeyword = ref('');
+
   const contentTabList = ref<ContentTabItem[]>([]);
   const isDisabled = computed(() => !hasAnyPermission(['PROJECT_ENVIRONMENT:READ+UPDATE']));
 
@@ -202,6 +201,70 @@
       : isEqual(store.currentEnvDetailInfo, store.backupEnvDetailInfo);
   });
 
+  function getParameters(isNew = false) {
+    const paramsConfig = cloneDeep(store.currentEnvDetailInfo.config);
+
+    const httpConfigList = paramsConfig.httpConfig.map((e) => {
+      return {
+        ...e,
+        headers: filterKeyValParams(e.headers, defaultHeaderParamsItem, true).validParams,
+      };
+    });
+    if (isNew) {
+      store.currentEnvDetailInfo.name = store.currentEnvDetailInfo.name
+        ? store.currentEnvDetailInfo.name
+        : t('project.environmental.newEnv');
+    }
+
+    return {
+      ...cloneDeep(store.currentEnvDetailInfo),
+      config: {
+        ...paramsConfig,
+        httpConfig: httpConfigList,
+      },
+    };
+  }
+
+  const saveCallBack = async (isNew = false) => {
+    // 校验通过回调保存
+    loading.value = true;
+    store.currentEnvDetailInfo.mock = true;
+    await updateOrAddEnv({
+      fileList: [],
+      request: getParameters(isNew),
+    });
+    setIsSave(true);
+    loading.value = false;
+    Message.success(store.currentEnvDetailInfo.id ? t('common.updateSuccess') : t('common.saveSuccess'));
+    emit('ok', store.currentEnvDetailInfo.id);
+  };
+
+  const handleSave = async () => {
+    await envForm.value?.validate(async (valid) => {
+      if (!valid) {
+        try {
+          // 保存Host-Tab的数据(目前只加了Host)
+          if (activeKey.value === EnvTabTypeEnum.ENVIRONMENT_HOST) {
+            hostTabRef.value?.validateForm(saveCallBack);
+          } else {
+            envKeyword.value = '';
+            await nextTick();
+            await saveCallBack();
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.log(error);
+        } finally {
+          loading.value = false;
+        }
+      }
+    });
+  };
+
+  defineExpose({
+    saveCallBack,
+  });
+
   // 初始化插件
   const initPlugin = async () => {
     try {
@@ -219,55 +282,6 @@
   const handleReset = () => {
     envForm.value?.resetFields();
     emit('resetEnv');
-  };
-
-  function getParameters() {
-    const paramsConfig = cloneDeep(store.currentEnvDetailInfo.config);
-
-    const httpConfigList = paramsConfig.httpConfig.map((e) => {
-      return {
-        ...e,
-        headers: filterKeyValParams(e.headers, defaultHeaderParamsItem, true).validParams,
-      };
-    });
-    return {
-      ...cloneDeep(store.currentEnvDetailInfo),
-      config: {
-        ...paramsConfig,
-        httpConfig: httpConfigList,
-      },
-    };
-  }
-
-  const saveCallBack = async () => {
-    // 校验通过回调保存
-    loading.value = true;
-    store.currentEnvDetailInfo.mock = true;
-    await updateOrAddEnv({ fileList: [], request: getParameters() });
-    setIsSave(true);
-
-    Message.success(store.currentEnvDetailInfo.id ? t('common.updateSuccess') : t('common.saveSuccess'));
-    emit('ok', store.currentEnvDetailInfo.id);
-  };
-
-  const handleSave = async () => {
-    await envForm.value?.validate(async (valid) => {
-      if (!valid) {
-        try {
-          // 保存Host-Tab的数据(目前只加了Host)
-          if (activeKey.value === EnvTabTypeEnum.ENVIRONMENT_HOST) {
-            hostTabRef.value?.validateForm(saveCallBack);
-          } else {
-            await saveCallBack();
-          }
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.log(error);
-        } finally {
-          loading.value = false;
-        }
-      }
-    });
   };
 
   watchEffect(() => {
@@ -297,6 +311,9 @@
   const handleTabChange = (key: string | number) => {
     if (key === 'SETTING') {
       tabSettingVisible.value = true;
+    }
+    if (key === EnvTabTypeEnum.ENVIRONMENT_PARAM) {
+      envKeyword.value = '';
     }
   };
 
@@ -328,11 +345,13 @@
       padding: 16px 16px 0;
     }
     .content {
+      .ms-scroll-bar();
+
       overflow-y: auto;
       padding: 0 16px;
       height: 100%;
       max-height: calc(100% - 320px);
-      background-color: #ffffff;
+      background-color: var(--color-text-fff);
     }
     .no-content {
       :deep(.arco-tabs-content) {
@@ -347,7 +366,7 @@
       display: flex;
       justify-content: flex-end;
       padding: 24px;
-      background-color: #ffffff;
+      background-color: var(--color-text-fff);
       box-shadow: 0 -1px 4px rgb(2 2 2 / 10%);
       gap: 16px;
     }

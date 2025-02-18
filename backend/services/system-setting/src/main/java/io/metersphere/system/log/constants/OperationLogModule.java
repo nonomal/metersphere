@@ -20,13 +20,14 @@ public class OperationLogModule {
     public static final String API_AUTOMATION_REPORT = "API_AUTOMATION_REPORT";
     // 接口管理
     public static final String API_TEST_MANAGEMENT_DEFINITION = "API_TEST_MANAGEMENT_DEFINITION";
+    public static final String API_TEST_MANAGEMENT_DEFINITION_SHARE = "API_TEST_MANAGEMENT_DEFINITION_SHARE";
     public static final String API_TEST_MANAGEMENT_MODULE = "API_TEST_MANAGEMENT_MODULE";
     public static final String API_TEST_MANAGEMENT_MOCK = "API_TEST_MANAGEMENT_MOCK";
     public static final String API_TEST_MANAGEMENT_CASE = "API_TEST_MANAGEMENT_CASE";
     // 场景管理
     public static final String API_SCENARIO_MANAGEMENT_SCENARIO = "API_TEST_SCENARIO_MANAGEMENT_SCENARIO";
     public static final String API_SCENARIO_MANAGEMENT_MODULE = "API_TEST_SCENARIO_MANAGEMENT_MODULE";
-    public static final String API_TEST_SCENARIO_RECYCLE = "API_TEST_SCENARIO_RECYCLE";
+    public static final String API_TEST_SCENARIO_RECYCLE = "API_TEST_SCENARIO_MANAGEMENT_RECYCLE";
     public static final String API_TEST_MANAGEMENT_RECYCLE = "API_TEST_MANAGEMENT_RECYCLE";
 
     public static final String API_REPORT = "API_TEST_REPORT_CASE";
@@ -135,13 +136,23 @@ public class OperationLogModule {
     public static final String FUNCTIONAL_CASE = "CASE_MANAGEMENT_CASE";
     public static final String CASE_MANAGEMENT_CASE_CREATE = "CASE_MANAGEMENT_CASE_CREATE";
     public static final String CASE_MANAGEMENT_CASE_UPDATE = "CASE_MANAGEMENT_CASE_UPDATE";
+    //功能用例-回收站
     public static final String CASE_MANAGEMENT_CASE_RECYCLE = "CASE_MANAGEMENT_CASE_RECYCLE";
+    //功能用例-模块
+    public static final String CASE_MANAGEMENT_CASE_MODULE = "CASE_MANAGEMENT_CASE_MODULE";
+    //功能用例-用例
+    public static final String CASE_MANAGEMENT_CASE_CASE = "CASE_MANAGEMENT_CASE_CASE";
 
     public static final String CASE_REVIEW = "CASE_MANAGEMENT_REVIEW";
 
     public static final String CASE_REVIEW_CREATE = "CASE_MANAGEMENT_REVIEW_CREATE";
     public static final String CASE_REVIEW_UPDATE = "CASE_MANAGEMENT_REVIEW_UPDATE";
+    //用例评审
+    public static final String CASE_MANAGEMENT_REVIEW_REVIEW = "CASE_MANAGEMENT_REVIEW_REVIEW";
+    //评审详情
     public static final String CASE_REVIEW_DETAIL = "CASE_MANAGEMENT_REVIEW_DETAIL";
+    //模块
+    public static final String CASE_MANAGEMENT_REVIEW_REVIEW_MODULE = "CASE_MANAGEMENT_REVIEW_REVIEW_MODULE";
 
     //接口调试
     public static final String API_TEST_DEBUG_MANAGEMENT_DEBUG = "API_TEST_DEBUG_MANAGEMENT_DEBUG";
@@ -154,7 +165,11 @@ public class OperationLogModule {
     public static final String BUG_MANAGEMENT_RECYCLE = "BUG_MANAGEMENT_BUG_RECYCLE";
     //测试计划
     public static final String TEST_PLAN = "TEST_PLAN";
+    public static final String TEST_PLAN_TEST_PLAN = "TEST_PLAN_PLAN";
+    public static final String TEST_PLAN_TEST_PLAN_GROUP = "TEST_PLAN_GROUP";
     public static final String TEST_PLAN_MODULE = "TEST_PLAN_MODULE";
+    public static final String TEST_PLAN_REPORT = "TEST_PLAN_REPORT_TEST_PLAN";
+    public static final String TEST_PLAN_GROUP_REPORT = "TEST_PLAN_REPORT_TEST_PLAN_GROUP";
 
     // 个人信息-基本信息
     public static final String PERSONAL_INFORMATION_BASE_INFO = "PERSONAL_INFORMATION_BASE_INFO";
@@ -170,6 +185,4 @@ public class OperationLogModule {
     public static final String SETTING_ORGANIZATION_TASK_CENTER = "SETTING_ORGANIZATION_TASK_CENTER";
     //项目任务中心：PROJECT_MANAGEMENT_TASK_CENTER
     public static final String PROJECT_MANAGEMENT_TASK_CENTER = "PROJECT_MANAGEMENT_TASK_CENTER";
-
-    public static final String TEST_PLAN_REPORT = "TEST_PLAN_REPORT";
 }

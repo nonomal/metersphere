@@ -2,7 +2,7 @@
   <MsCard simple class="mb-[16px]" auto-height :loading="loading">
     <div class="outer-wrapper">
       <div class="mb-[16px] flex justify-between">
-        <div class="font-medium text-[var(--color-text-000)]">{{ t('organization.service.integrationList') }}</div>
+        <div class="font-medium text-[var(--color-text-1)]">{{ t('organization.service.integrationList') }}</div>
         <div>
           <a-input-search
             v-model="keyword"
@@ -90,8 +90,7 @@
                   >
 
                   <a-button
-                    v-if="item.config"
-                    v-permission="['SYSTEM_SERVICE_INTEGRATION:READ+DELETE']"
+                    v-if="hasAnyPermission(['SYSTEM_SERVICE_INTEGRATION:READ+DELETE']) && item.config"
                     type="outline"
                     class="arco-btn-outline--secondary"
                     size="mini"
@@ -132,7 +131,6 @@
 
 <script setup lang="ts">
   import { onBeforeMount, ref } from 'vue';
-  import { useRouter } from 'vue-router';
 
   import MsCard from '@/components/pure/ms-card/index.vue';
   import ConfigModal from './configModal.vue';
@@ -150,7 +148,6 @@
 
   const { t } = useI18n();
   const { openModal } = useModal();
-  const router = useRouter();
 
   const appStore = useAppStore();
   const lastOrganizationId = appStore.currentOrgId;
@@ -270,7 +267,7 @@
         padding: 24px;
         height: 144px;
         border-radius: 4px;
-        background: white;
+        background: var(--color-text-fff);
         @apply flex flex-col justify-between;
         .ms-enable {
           font-size: 12px;

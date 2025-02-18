@@ -11,6 +11,8 @@ import io.metersphere.api.dto.definition.EnvApiTreeDTO;
 import io.metersphere.api.dto.request.http.MsHTTPElement;
 import io.metersphere.api.mapper.*;
 import io.metersphere.api.service.definition.ApiDefinitionModuleService;
+import io.metersphere.plan.domain.TestPlanConfig;
+import io.metersphere.plan.mapper.TestPlanConfigMapper;
 import io.metersphere.project.domain.Project;
 import io.metersphere.project.mapper.ProjectMapper;
 import io.metersphere.sdk.constants.ApplicationNumScope;
@@ -27,6 +29,7 @@ import io.metersphere.system.uid.IDGenerator;
 import io.metersphere.system.uid.NumGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
@@ -37,7 +40,6 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultMatcher;
-import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -64,6 +66,7 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
     private static final ResultMatcher ERROR_REQUEST_MATCHER = status().is5xxServerError();
     private static Project project;
     private static List<BaseTreeNode> preliminaryTreeNodes = new ArrayList<>();
+    private static ApiDefinition apiDefinition;
     private final ProjectServiceInvoker serviceInvoker;
     @Resource
     private ProjectMapper projectMapper;
@@ -77,6 +80,8 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
     private ApiDefinitionModuleService apiDefinitionModuleService;
     @Resource
     private SqlSessionFactory sqlSessionFactory;
+    @Resource
+    private TestPlanConfigMapper testPlanConfigMapper;
 
     @Autowired
     public ApiDefinitionModuleControllerTests(ProjectServiceInvoker serviceInvoker) {
@@ -153,6 +158,8 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
         apiDefinitionBlob.setRequest(new byte[0]);
         apiDefinitionBlob.setResponse(new byte[0]);
         apiDefinitionBlobMapper.insertSelective(apiDefinitionBlob);
+
+        this.apiDefinition = apiDefinition;
 
         MsHTTPElement msHttpElement = MsHTTPElementTest.getMsHttpElement();
         SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH);
@@ -471,7 +478,7 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
         List<ApiDefinitionModule> apiDebugModules = apiDefinitionModuleMapper.selectByExample(example);
         assert CollectionUtils.isNotEmpty(apiDebugModules);
         updateRequest = new ModuleUpdateRequest();
-        updateRequest.setId(apiDebugModules.get(0).getId());
+        updateRequest.setId(apiDebugModules.getFirst().getId());
         updateRequest.setName("default-update-Project");
         requestPostPermissionTest(PermissionConstants.PROJECT_API_DEFINITION_UPDATE, URL_MODULE_UPDATE, updateRequest);
     }
@@ -810,8 +817,11 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
     @Order(8)
     public void TestModuleCountSuccess() throws Exception {
         this.preliminaryData();
+        this.requestPostWithOkAndReturn(URL_FILE_MODULE_COUNT, new ApiModuleRequest() {{
+            this.setProjectId(project.getId());
+        }});
         ApiModuleRequest request = new ApiModuleRequest() {{
-            this.setProtocol(ApiConstants.HTTP_PROTOCOL);
+            this.setProtocols(List.of(ApiConstants.HTTP_PROTOCOL));
             this.setProjectId(project.getId());
         }};
         MvcResult moduleCountMvcResult = this.requestPostWithOkAndReturn(URL_FILE_MODULE_COUNT, request);
@@ -822,6 +832,23 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
         request.setProjectId(DEFAULT_PROJECT_ID);
         requestPostPermissionTest(PermissionConstants.PROJECT_API_DEFINITION_READ, URL_FILE_MODULE_COUNT, request);
 
+        TestPlanConfig planConfig = new TestPlanConfig();
+        planConfig.setTestPlanId("wx_123");
+        planConfig.setPassThreshold(0.8);
+        planConfig.setRepeatCase(false);
+        planConfig.setAutomaticStatusUpdate(false);
+        request.setTestPlanId("wx_123");
+        testPlanConfigMapper.insertSelective(planConfig);
+        this.requestPostWithOkAndReturn(URL_FILE_MODULE_COUNT, request);
+
+        request = new ApiModuleRequest() {{
+            this.setProtocols(List.of(ApiConstants.HTTP_PROTOCOL));
+            this.setProjectId(project.getId());
+        }};
+        request.setKeyword(apiDefinition.getPath());
+        MvcResult mvcResult = this.requestPostWithOkAndReturn(URL_FILE_MODULE_COUNT, request);
+        Map countMap = getResultData(mvcResult, Map.class);
+        Assertions.assertEquals(countMap.get(apiDefinition.getModuleId()), 1);
     }
 
     @Test
@@ -866,8 +893,11 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
         ApiDefinition apiDefinition = new ApiDefinition();
         apiDefinition.setDeleted(true);
         apiDefinitionMapper.updateByExampleSelective(apiDefinition, example);
+        this.requestPostWithOkAndReturn(URL_MODULE_TRASH_TREE, new ApiModuleRequest() {{
+            this.setProjectId(project.getId());
+        }});
         MvcResult result = this.requestPostWithOkAndReturn(URL_MODULE_TRASH_TREE, new ApiModuleRequest() {{
-            this.setProtocol(ApiConstants.HTTP_PROTOCOL);
+            this.setProtocols(List.of(ApiConstants.HTTP_PROTOCOL));
             this.setProjectId(project.getId());
         }});
 
@@ -879,8 +909,12 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
     @Test
     @Order(12)
     public void getModuleTrashTreeCount() throws Exception {
+
+        this.requestPostWithOkAndReturn(URL_MODULE_TRASH_COUNT, new ApiModuleRequest() {{
+            this.setProjectId(project.getId());
+        }});
         ApiModuleRequest request = new ApiModuleRequest() {{
-            this.setProtocol(ApiConstants.HTTP_PROTOCOL);
+            this.setProtocols(List.of(ApiConstants.HTTP_PROTOCOL));
             this.setProjectId(project.getId());
         }};
         MvcResult moduleCountMvcResult = this.requestPostWithOkAndReturn(URL_MODULE_TRASH_COUNT, request);
@@ -941,12 +975,18 @@ public class ApiDefinitionModuleControllerTests extends BaseTest {
 
 
     private List<BaseTreeNode> getModuleTreeNode() throws Exception {
+        this.requestPostWithOkAndReturn(URL_MODULE_TREE, new ApiModuleRequest() {{
+            this.setProjectId(project.getId());
+        }});
         MvcResult result = this.requestPostWithOkAndReturn(URL_MODULE_TREE, new ApiModuleRequest() {{
-            this.setProtocol(ApiConstants.HTTP_PROTOCOL);
+            this.setProtocols(List.of(ApiConstants.HTTP_PROTOCOL));
             this.setProjectId(project.getId());
         }});
         this.requestPostWithOkAndReturn(URL_MODULE_ONLY_TREE, new ApiModuleRequest() {{
-            this.setProtocol(ApiConstants.HTTP_PROTOCOL);
+            this.setProjectId(project.getId());
+        }});
+        this.requestPostWithOkAndReturn(URL_MODULE_ONLY_TREE, new ApiModuleRequest() {{
+            this.setProtocols(List.of(ApiConstants.HTTP_PROTOCOL));
             this.setProjectId(project.getId());
         }});
         String returnData = result.getResponse().getContentAsString(StandardCharsets.UTF_8);

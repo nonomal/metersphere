@@ -1,10 +1,10 @@
 export default {
-  'login.form.title': 'One-stop open source continuous testing platform',
+  'login.form.title': 'Open Source Continuous Testing Tools',
   'login.form.userName.errMsg': 'Username cannot be empty',
   'login.form.password.errMsg': 'Password cannot be empty',
   'login.form.login.errMsg': 'Login error, refresh and try again',
   'login.form.login.success': 'welcome to use',
-  'login.form.userName.placeholder': 'Please enter your email',
+  'login.form.userName.placeholder': 'Please enter your username',
   'login.form.userName.placeholderOther': 'Please enter your account',
   'login.form.password.placeholder': 'Please enter your password',
   'login.form.rememberPassword': 'Remember password',
@@ -16,4 +16,7 @@ export default {
   'login.form.modeLoginMethods': 'More',
   'login.form.accountLogin': 'Account login',
   'login.form.LDAPLogin': 'LDAP',
+  'login.form.username': 'Username',
+  'login.form.password': 'Password',
+  'login.form.loading': 'Logging in',
 };

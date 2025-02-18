@@ -17,18 +17,13 @@
                 <div class="folder-count">({{ recycleModulesCount.all || 0 }})</div></div
               >
               <div class="ml-auto flex items-center">
-                <a-tooltip
-                  :content="
-                    isExpandAll ? t('project.fileManagement.collapseAll') : t('project.fileManagement.expandAll')
-                  "
-                >
+                <a-tooltip :content="isExpandAll ? t('common.collapseAllSubModule') : t('common.expandAllSubModule')">
                   <MsButton type="icon" status="secondary" class="!mr-0 p-[4px]" @click="expandHandler">
                     <MsIcon :type="isExpandAll ? 'icon-icon_folder_collapse1' : 'icon-icon_folder_expansion1'" />
                   </MsButton>
                 </a-tooltip>
               </div>
             </div>
-            <a-divider class="my-[8px]" />
             <a-spin class="h-[calc(100vh-274px)] w-full" :loading="loading">
               <MsTree
                 v-model:focus-node-key="focusNodeKey"
@@ -68,29 +63,12 @@
             v-model:keyword="keyword"
             :filter-config-list="filterConfigList"
             :custom-fields-config-list="searchCustomFields"
-            :row-count="filterRowCount"
+            :count="recycleModulesCount[activeFolder] || 0"
+            :name="moduleNamePath"
             :search-placeholder="t('caseManagement.featureCase.searchPlaceholder')"
             @keyword-search="fetchData"
-            @adv-search="handleAdvSearch"
             @refresh="fetchData()"
-          >
-            <template #left>
-              <a-popover title="" position="bottom">
-                <div class="show-table-top-title">
-                  <div class="one-line-text max-h-[32px] max-w-[116px] text-[var(--color-text-1)]">
-                    {{ moduleNamePath }}
-                  </div>
-                  <span class="text-[var(--color-text-4)]"> ({{ recycleModulesCount[activeFolder] || 0 }})</span>
-                </div>
-                <template #content>
-                  <div class="max-w-[400px] text-[14px] font-medium text-[var(--color-text-1)]">
-                    {{ moduleNamePath }}
-                    <span class="text-[var(--color-text-4)]">({{ recycleModulesCount[activeFolder] || 0 }})</span>
-                  </div>
-                </template>
-              </a-popover>
-            </template>
-          </MsAdvanceFilter>
+          />
           <ms-base-table
             class="my-4"
             v-bind="propsRes"
@@ -105,6 +83,11 @@
             </template>
             <template #caseLevel="{ record }">
               <caseLevel :case-level="(getCaseLevels(record.customFields) as CaseLevel)" />
+            </template>
+            <template #deleteUserName="{ record }">
+              <a-tooltip :content="`${record.deleteUserName}`" position="tl">
+                <div class="one-line-text">{{ record.deleteUserName }}</div>
+              </a-tooltip>
             </template>
             <!-- 用例等级 -->
             <template #[FilterSlotNameEnum.CASE_MANAGEMENT_CASE_LEVEL]="{ filterContent }">
@@ -192,7 +175,7 @@
   import dayjs from 'dayjs';
 
   import { CustomTypeMaps, MsAdvanceFilter } from '@/components/pure/ms-advance-filter';
-  import { FilterFormItem, FilterResult, FilterType } from '@/components/pure/ms-advance-filter/type';
+  import { FilterFormItem } from '@/components/pure/ms-advance-filter/type';
   import MsButton from '@/components/pure/ms-button/index.vue';
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
   import MsSplitBox from '@/components/pure/ms-split-box/index.vue';
@@ -225,6 +208,7 @@
 
   import type { CaseManagementTable, CustomAttributes } from '@/models/caseManagement/featureCase';
   import type { ModuleTreeNode, TableQueryParams } from '@/models/common';
+  import { FilterType } from '@/enums/advancedFilterEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
   import { FilterRemoteMethodsEnum, FilterSlotNameEnum } from '@/enums/tableFilterEnum';
 
@@ -243,7 +227,7 @@
   const currentProjectId = computed(() => appStore.currentProjectId);
   const scrollWidth = ref<number>(3400);
 
-  const { propsRes, propsEvent, loadList, setLoadListParams, resetSelector, setAdvanceFilter, setKeyword } = useTable(
+  const { propsRes, propsEvent, loadList, setLoadListParams, resetSelector, setKeyword } = useTable(
     getRecycleListRequest,
     {
       tableKey: TableKeyEnum.CASE_MANAGEMENT_RECYCLE_TABLE,
@@ -251,7 +235,6 @@
       selectable: true,
       showSetting: true,
       heightUsed: 380,
-      enableDrag: true,
       showSubdirectory: true,
     },
     (record) => ({
@@ -287,7 +270,6 @@
       },
       'filter-icon-align-left': true,
       'showTooltip': true,
-      'ellipsis': true,
       'showDrag': false,
       'columnSelectorDisabled': true,
     },
@@ -302,7 +284,6 @@
         sortDirections: ['ascend', 'descend'],
         sorter: true,
       },
-      ellipsis: true,
       showDrag: false,
       columnSelectorDisabled: true,
     },
@@ -378,7 +359,6 @@
           projectId: appStore.currentProjectId,
         },
         remoteMethod: FilterRemoteMethodsEnum.PROJECT_PERMISSION_MEMBER,
-        placeholderText: t('caseManagement.featureCase.PleaseSelect'),
       },
       showInTable: true,
       showTooltip: true,
@@ -408,7 +388,6 @@
           projectId: appStore.currentProjectId,
         },
         remoteMethod: FilterRemoteMethodsEnum.PROJECT_PERMISSION_MEMBER,
-        placeholderText: t('caseManagement.featureCase.PleaseSelect'),
       },
       showInTable: true,
       width: 200,
@@ -428,17 +407,16 @@
     },
     {
       title: 'caseManagement.featureCase.tableColumnDeleteUser',
-      dataIndex: 'deleteUserName',
+      slotName: 'deleteUserName',
+      dataIndex: 'deleteUser',
       filterConfig: {
         mode: 'remote',
         loadOptionParams: {
           projectId: appStore.currentProjectId,
         },
         remoteMethod: FilterRemoteMethodsEnum.PROJECT_PERMISSION_MEMBER,
-        placeholderText: t('caseManagement.featureCase.PleaseSelect'),
       },
       showInTable: true,
-      showTooltip: true,
       width: 200,
       showDrag: true,
     },
@@ -669,13 +647,22 @@
     initRecycleList();
   };
 
+  function brashModule() {
+    resetSelector();
+    getRecycleModules();
+    if (activeFolder.value !== 'all') {
+      activeFolder.value = 'all';
+    } else {
+      initRecycleList();
+    }
+  }
+
   // 批量恢复
   async function handleBatchRecover() {
     try {
       await restoreCaseList(getBatchParams());
       Message.success(t('caseManagement.featureCase.recoveredSuccessfully'));
-      resetSelector();
-      initRecycleList();
+      brashModule();
     } catch (error) {
       console.log(error);
     }
@@ -695,8 +682,7 @@
         try {
           await batchDeleteRecycleCase(getBatchParams());
           Message.success(t('common.deleteSuccess'));
-          resetSelector();
-          initRecycleList();
+          brashModule();
         } catch (error) {
           console.log(error);
         }
@@ -733,8 +719,7 @@
     try {
       await recoverRecycleCase(id);
       Message.success(t('caseManagement.featureCase.recoveredSuccessfully'));
-      resetSelector();
-      initRecycleList();
+      brashModule();
     } catch (error) {
       console.log(error);
     }
@@ -755,8 +740,7 @@
         try {
           await deleteRecycleCaseList(record.id);
           Message.success(t('common.deleteSuccess'));
-          resetSelector();
-          initRecycleList();
+          brashModule();
         } catch (error) {
           console.log(error);
         }
@@ -788,8 +772,6 @@
   const filterConfigList = ref<FilterFormItem[]>([]);
   const searchCustomFields = ref<FilterFormItem[]>([]);
 
-  const filterRowCount = ref(0);
-
   // 处理自定义字段列
   let customFieldsColumns: Record<string, any>[] = [];
 
@@ -812,7 +794,9 @@
         width: 300,
       };
     });
-    caseLevelFields.value = result.customFields.find((item: any) => item.internal && item.fieldName === '用例等级');
+    caseLevelFields.value = result.customFields.find(
+      (item: any) => item.internal && item.internalFieldKey === 'functional_priority'
+    );
     if (caseLevelColumn[0].filterConfig?.options) {
       caseLevelColumn[0].filterConfig.options = cloneDeep(unref(caseLevelFields.value?.options)) || [];
     }
@@ -915,26 +899,6 @@
     });
   }
 
-  const filterResult = ref<FilterResult>({ accordBelow: 'AND', combine: {} });
-  // 当前选择的条数
-  const currentSelectParams = ref<BatchActionQueryParams>({ selectAll: false, currentSelectCount: 0 });
-  // 高级检索
-  const handleAdvSearch = (filter: FilterResult) => {
-    filterResult.value = filter;
-    const { accordBelow, combine } = filter;
-    setAdvanceFilter(filter);
-    currentSelectParams.value = {
-      ...currentSelectParams.value,
-      condition: {
-        keyword: keyword.value,
-        searchMode: accordBelow,
-        filter: { ...propsRes.value.filter },
-        combine,
-      },
-    };
-    initRecycleList();
-  };
-
   onMounted(async () => {
     await getRecycleModules();
     await initFilter();
@@ -948,7 +912,7 @@
     min-width: 1000px;
     height: calc(100vh - 126px);
     border-radius: var(--border-radius-large);
-    @apply bg-white;
+    background-color: var(--color-text-fff);
     .back {
       margin-right: 8px;
       width: 20px;

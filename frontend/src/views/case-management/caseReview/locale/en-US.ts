@@ -5,6 +5,7 @@ export default {
   'caseManagement.caseReview.searchPlaceholder': 'Search by ID or name',
   'caseManagement.caseReview.list.searchPlaceholder': 'Search by ID, name, or tag',
   'caseManagement.caseReview.archive': 'Archive',
+  'caseManagement.caseReview.cannotReviewTip': 'Tips: Non reviewers cannot review',
   'caseManagement.caseReview.tableNoData': 'No data yet, please',
   'caseManagement.caseReview.tableNoDataNoPermission': 'No data yet',
   'caseManagement.caseReview.name': 'Review name',
@@ -31,7 +32,6 @@ export default {
   'caseManagement.caseReview.singleTip': 'The last review result is the final review result',
   'caseManagement.caseReview.multi': 'Multiple reviewers',
   'caseManagement.caseReview.multiTip': 'If all reviewers pass the review, then it passes',
-  'caseManagement.caseReview.desc': 'Description',
   'caseManagement.caseReview.passRateTip': 'Passed use cases/all use cases*100%',
   'caseManagement.caseReview.deleteReviewTitle': 'Are you sure you want to delete {name}?',
   'caseManagement.caseReview.deleteReviewContent':
@@ -91,8 +91,8 @@ export default {
   'caseManagement.caseReview.reviewResultTip':
     'When "See only mine" is turned on, you can view my review results on the list',
   'caseManagement.caseReview.disassociate': 'Disassociate',
-  'caseManagement.caseReview.disassociateConfirmTitle':
-    'Are you sure you want to cancel the selected {count} test cases?',
+  'caseManagement.caseReview.disassociateCase': 'Disassociate case',
+  'caseManagement.caseReview.disassociateConfirmTitle': 'Are you sure to disassociate {count} use cases?',
   'caseManagement.caseReview.version': 'Version',
   'caseManagement.caseReview.unReview': 'Unreviewed',
   'caseManagement.caseReview.reviewPass': 'Review passed',
@@ -113,7 +113,7 @@ export default {
   'caseManagement.caseReview.append': 'Append',
   'caseManagement.caseReview.appendTip1': 'Open: Add reviewer',
   'caseManagement.caseReview.appendTip2': 'Close: Update reviewers',
-  'caseManagement.caseReview.myReviewStatus': 'My reviews status',
+  'caseManagement.caseReview.myReviewStatus': 'My review results',
   'caseManagement.caseReview.caseLevel': 'Case level',
   'caseManagement.caseReview.caseVersion': 'Case version',
   'caseManagement.caseReview.caseStatus': 'Case status',
@@ -134,6 +134,14 @@ export default {
   'caseManagement.caseReview.crateCase': 'Create case',
   'caseManagement.caseReview.demandCases': 'Requirements association list',
   'caseManagement.caseReview.demandSearchPlaceholder': 'Search by name',
+  'caseManagement.caseReview.updateCase': 'update case',
   'caseManagement.caseReview.reviewSuccess.widthAdmin':
     'Submitted successfully! You are not the designated reviewer for the current project. The system will only record your review and will not affect the final review result.',
+  'caseManagement.caseReview.reviewFormTip':
+    'Add the review results of the operator, and multiple reviewers must pass the review by all reviewers',
+  'caseManagement.caseReview.reviewerTip':
+    "If you need to review use cases, you need to add the user as a reviewer; only the reviewer's review results take effect.",
+  'caseManagement.caseReview.reviewDisabledTip': 'Non-reviewers cannot review, but can review after modification',
+  'caseManagement.caseReview.startTime': 'Review start time',
+  'caseManagement.caseReview.endTime': 'End time of review',
 };

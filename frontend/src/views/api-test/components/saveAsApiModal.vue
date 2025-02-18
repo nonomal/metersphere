@@ -5,6 +5,7 @@
     class="ms-modal-form"
     title-align="start"
     body-class="!p-0"
+    @close="emit('close')"
   >
     <a-form ref="saveModalFormRef" :model="saveModalForm" layout="vertical">
       <a-form-item
@@ -35,6 +36,7 @@
       <a-form-item :label="t('apiTestDebug.requestModule')" class="mb-0">
         <a-tree-select
           v-model:modelValue="saveModalForm.moduleId"
+          :filter-tree-node="filterTreeNode"
           :data="apiModuleTree"
           :field-names="{ title: 'name', key: 'id', children: 'children' }"
           :tree-props="{
@@ -72,6 +74,7 @@
   import { addCase, addDefinition, getModuleTreeOnlyModules } from '@/api/modules/api-test/management';
   import { useI18n } from '@/hooks/useI18n';
   import useAppStore from '@/store/modules/app';
+  import { filterTreeNode } from '@/utils';
 
   import { AddApiCaseParams } from '@/models/apiTest/management';
   import { RequestCaseStatus, RequestDefinitionStatus } from '@/enums/apiEnum';
@@ -84,6 +87,7 @@
   const props = defineProps<{
     detail: RequestParam | ApiDefinitionRequestParam;
   }>();
+  const emit = defineEmits(['close']);
 
   const appStore = useAppStore();
   const { t } = useI18n();
@@ -105,7 +109,7 @@
     try {
       apiModuleTree.value = await getModuleTreeOnlyModules({
         keyword: '',
-        protocol,
+        protocols: [protocol],
         projectId: appStore.currentProjectId,
         moduleIds: [],
       });
@@ -146,7 +150,6 @@
 
   /**
    * 保存请求
-   * @param isSaveCase 是否需要保存用例
    */
   async function realSaveAsApi() {
     try {

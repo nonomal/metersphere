@@ -1,6 +1,7 @@
 <template>
   <a-dropdown-button
     v-if="hasLocalExec && !props.executeLoading"
+    :size="props.size"
     type="primary"
     @click="() => execute(isPriorityLocalExec ? 'localExec' : 'serverExec')"
     @select="execute"
@@ -15,10 +16,15 @@
       </a-doption>
     </template>
   </a-dropdown-button>
-  <a-button v-else-if="!hasLocalExec && !props.executeLoading" type="primary" @click="() => execute('serverExec')">
+  <a-button
+    v-else-if="!hasLocalExec && !props.executeLoading"
+    :size="props.size"
+    type="primary"
+    @click="() => execute('serverExec')"
+  >
     {{ t('apiTestDebug.serverExec') }}
   </a-button>
-  <a-button v-else type="primary" @click="emit('stopDebug')">
+  <a-button v-else type="primary" :size="props.size" @click="emit('stopDebug')">
     {{ t('common.stop') }}
   </a-button>
 </template>
@@ -30,6 +36,7 @@
 
   const props = defineProps<{
     executeLoading?: boolean;
+    size?: 'mini' | 'small' | 'medium' | 'large';
   }>();
 
   const emit = defineEmits<{

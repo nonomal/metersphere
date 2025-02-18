@@ -3,7 +3,7 @@ import { Message } from '@arco-design/web-vue';
 import dayjs from 'dayjs';
 
 import { i18n } from '@/locale';
-import { loadLocalePool, setHtmlPageLang } from '@/locale/helper';
+import { loadLocalePool } from '@/locale/helper';
 
 import type { LocaleType, Recordable } from '#/global';
 
@@ -24,7 +24,6 @@ function setI18nLanguage(locale: LocaleType) {
     (i18n.global.locale as any).value = locale;
   }
   localStorage.setItem('MS-locale', locale);
-  setHtmlPageLang(locale);
 }
 
 /**
@@ -36,6 +35,7 @@ async function changeLocale(locale: LocaleType) {
   const globalI18n = i18n.global;
   const currentLocale = unref(globalI18n.locale);
   if (currentLocale === locale) {
+    setI18nLanguage(locale); // 初始化的时候需要设置一次本地语言
     return locale;
   }
   Message.loading(currentLocale === 'zh-CN' ? '语言切换中...' : 'Language switching...');

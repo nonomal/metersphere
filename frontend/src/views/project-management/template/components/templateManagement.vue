@@ -104,7 +104,7 @@
       <PreviewTemplate
         :select-field="(selectData as DefinedFieldItem[])"
         :template-type="route.query.type"
-        :defect-form="defectForm"
+        :system-fields="systemFields"
       />
     </MsDrawer>
   </MsCard>
@@ -144,7 +144,7 @@
   import { characterLimit } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
-  import type { DefinedFieldItem, OrdTemplateManagement } from '@/models/setting/template';
+  import type { CustomField, DefinedFieldItem, OrdTemplateManagement } from '@/models/setting/template';
   import { ProjectManagementRouteEnum } from '@/enums/routeEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
 
@@ -189,7 +189,7 @@
       showInTable: true,
     },
     {
-      title: 'system.orgTemplate.description',
+      title: 'common.desc',
       dataIndex: 'remark',
       showDrag: true,
       showInTable: true,
@@ -315,6 +315,7 @@
     router.push({
       name: routeName.value,
       query: {
+        ...route.query,
         type: route.query.type,
       },
       params: {
@@ -328,6 +329,7 @@
     router.push({
       name: routeName.value,
       query: {
+        ...route.query,
         id,
         type: route.query.type,
       },
@@ -342,6 +344,7 @@
     router.push({
       name: routeName.value,
       query: {
+        ...route.query,
         id,
         type: route.query.type,
       },
@@ -366,6 +369,8 @@
   };
   const titleDetail = ref<string>();
   const defectForm = ref<Record<string, any>>({ ...initDetailForm });
+  const systemFields = ref<CustomField[]>([]);
+
   // 预览详情
   const previewDetail = async (id: string) => {
     showDetailVisible.value = true;
@@ -376,9 +381,7 @@
       const res = await getProjectTemplateInfo(id);
       titleDetail.value = res.name;
       selectData.value = getCustomDetailFields(totalData.value as DefinedFieldItem[], res.customFields);
-      res.systemFields.forEach((item: any) => {
-        defectForm.value[item.fieldId] = item.defaultValue;
-      });
+      systemFields.value = res.systemFields;
     } catch (error) {
       console.log(error);
     }

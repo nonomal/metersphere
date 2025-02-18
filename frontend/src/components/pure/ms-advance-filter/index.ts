@@ -1,35 +1,47 @@
-export { default as FilterForm } from './FilterForm.vue';
+import { FilterType, OperatorEnum, ViewTypeEnum } from '@/enums/advancedFilterEnum';
+
 export { default as MsAdvanceFilter } from './index.vue';
 
-// const IN = { label: 'advanceFilter.operator.in', value: 'in' };
-// const NOT_IN = { label: 'advanceFilter.operator.not_in', value: 'not_in' };
-export const LIKE = { label: 'advanceFilter.operator.like', value: 'like' };
-export const NOT_LIKE = { label: 'advanceFilter.operator.not_like', value: 'not_like' };
-export const GT = { label: 'advanceFilter.operator.gt', value: 'GT' };
-export const GE = { label: 'advanceFilter.operator.ge', value: 'GT_OR_EQUALS' };
-export const LT = { label: 'advanceFilter.operator.lt', value: 'LT' };
-export const LE = { label: 'advanceFilter.operator.le', value: 'LT_OR_EQUALS' };
-export const EQUAL = { label: 'advanceFilter.operator.equal', value: 'EQUALS' };
-export const NOT_EQUAL = { label: 'advanceFilter.operator.notEqual', value: 'NOT_EQUALS' };
-export const BETWEEN = { label: 'advanceFilter.operator.between', value: 'between' };
-export const NO_CHECK = { label: 'advanceFilter.operator.no_check', value: 'UNCHECK' };
-export const CONTAINS = { label: 'advanceFilter.operator.contains', value: 'CONTAINS' };
-export const NO_CONTAINS = { label: 'advanceFilter.operator.not_contains', value: 'NOT_CONTAINS' };
-export const START_WITH = { label: 'advanceFilter.operator.start_with', value: 'START_WITH' };
-export const END_WITH = { label: 'advanceFilter.operator.end_with', value: 'END_WITH' };
-export const EMPTY = { label: 'advanceFilter.operator.empty', value: 'EMPTY' };
-export const NOT_EMPTY = { label: 'advanceFilter.operator.not_empty', value: 'NOT_EMPTY' };
-export const REGEX = { label: 'advanceFilter.operator.regexp', value: 'REGEX' };
-export const LENGTH_EQUAL = { label: 'advanceFilter.operator.length.equal', value: 'LENGTH_EQUALS' };
-export const LENGTH_GT = { label: 'advanceFilter.operator.length.gt', value: 'LENGTH_GT' };
-export const LENGTH_GE = { label: 'advanceFilter.operator.length.ge', value: 'LENGTH_GT_OR_EQUALS' };
-export const LENGTH_LT = { label: 'advanceFilter.operator.length.lt', value: 'LENGTH_LT' };
-export const LENGTH_LE = { label: 'advanceFilter.operator.length.le', value: 'LENGTH_LT_OR_EQUALS' };
-export const OPERATOR_MAP = {
-  string: [LIKE, NOT_LIKE, EQUAL, NOT_EQUAL],
-  number: [GT, GE, LT, LE, EQUAL, NOT_EQUAL, BETWEEN],
-  date: [GT, GE, LT, LE, EQUAL, NOT_EQUAL, BETWEEN],
-  array: [BETWEEN],
+export const BELONG_TO = { label: 'advanceFilter.operator.belongTo', value: OperatorEnum.BELONG_TO }; // 属于
+export const NOT_BELONG_TO = { label: 'advanceFilter.operator.notBelongTo', value: OperatorEnum.NOT_BELONG_TO }; // 不属于
+export const GT = { label: 'advanceFilter.operator.gt', value: OperatorEnum.GT }; // 大于
+export const GE = { label: 'advanceFilter.operator.ge', value: 'GT_OR_EQUALS' }; // 大于等于
+export const LT = { label: 'advanceFilter.operator.lt', value: OperatorEnum.LT }; // 小于
+export const LE = { label: 'advanceFilter.operator.le', value: 'LT_OR_EQUALS' }; // 小于等于
+export const EQUAL = { label: 'advanceFilter.operator.equal', value: OperatorEnum.EQUAL }; // 等于
+export const NOT_EQUAL = { label: 'advanceFilter.operator.notEqual', value: OperatorEnum.NOT_EQUAL }; // 不等于
+export const BETWEEN = { label: 'advanceFilter.operator.between', value: OperatorEnum.BETWEEN }; // 介于
+export const COUNT_GT = { label: 'advanceFilter.operator.count.gt', value: OperatorEnum.COUNT_GT }; // 数量大下
+export const COUNT_LT = { label: 'advanceFilter.operator.count.lt', value: OperatorEnum.COUNT_LT }; // 数量小于
+
+export const EMPTY = { label: 'advanceFilter.operator.empty', value: OperatorEnum.EMPTY }; // 为空
+export const NOT_EMPTY = { label: 'advanceFilter.operator.not_empty', value: OperatorEnum.NOT_EMPTY }; // 不为空
+export const NO_CHECK = { label: 'advanceFilter.operator.no_check', value: 'UNCHECK' }; // 不校验
+export const CONTAINS = { label: 'advanceFilter.operator.contains', value: OperatorEnum.CONTAINS }; // 包含
+export const NO_CONTAINS = { label: 'advanceFilter.operator.not_contains', value: OperatorEnum.NOT_CONTAINS }; // 不包含
+export const START_WITH = { label: 'advanceFilter.operator.start_with', value: 'START_WITH' }; // 以...开始
+export const END_WITH = { label: 'advanceFilter.operator.end_with', value: 'END_WITH' }; // 以...结束
+export const REGEX = { label: 'advanceFilter.operator.regexp', value: 'REGEX' }; // 正则匹配
+export const LENGTH_EQUAL = { label: 'advanceFilter.operator.length.equal', value: 'LENGTH_EQUALS' }; // 长度等于
+export const LENGTH_GT = { label: 'advanceFilter.operator.length.gt', value: 'LENGTH_GT' }; // 长度大于
+export const LENGTH_GE = { label: 'advanceFilter.operator.length.ge', value: 'LENGTH_GT_OR_EQUALS' }; // 长度大于等于
+export const LENGTH_LT = { label: 'advanceFilter.operator.length.lt', value: 'LENGTH_LT' }; // 长度小于
+export const LENGTH_LE = { label: 'advanceFilter.operator.length.le', value: 'LENGTH_LT_OR_EQUALS' }; // 长度小于等于
+
+const COMMON_TEXT_OPERATORS = [CONTAINS, NO_CONTAINS, EMPTY, NOT_EMPTY, EQUAL, NOT_EQUAL];
+const COMMON_SELECTION_OPERATORS = [BELONG_TO, NOT_BELONG_TO, EMPTY, NOT_EMPTY];
+
+export const operatorOptionsMap: Record<string, { value: string; label: string }[]> = {
+  [FilterType.INPUT]: COMMON_TEXT_OPERATORS,
+  [FilterType.TEXTAREA]: COMMON_TEXT_OPERATORS,
+  [FilterType.NUMBER]: [GT, LT, EQUAL, EMPTY, NOT_EMPTY],
+  [FilterType.SELECT]: COMMON_SELECTION_OPERATORS,
+  [FilterType.CASCADER]: COMMON_SELECTION_OPERATORS,
+  [FilterType.SELECT_EQUAL]: [EQUAL],
+  [FilterType.MEMBER]: COMMON_SELECTION_OPERATORS,
+  [FilterType.TAGS_INPUT]: [EMPTY, CONTAINS, NO_CONTAINS, COUNT_LT, COUNT_GT],
+  [FilterType.TREE_SELECT]: [BELONG_TO, NOT_BELONG_TO],
+  [FilterType.DATE_PICKER]: [BETWEEN, GT, LT, EMPTY, NOT_EMPTY],
 };
 
 export const timeSelectOptions = [GE, LE];
@@ -56,51 +68,45 @@ export const statusCodeOptions = [
   LENGTH_EQUAL,
 ];
 
+const baseSelectProps = {
+  mode: 'static',
+  multiple: true,
+  valueKey: 'value',
+  labelKey: 'text',
+  options: [],
+};
+
 export const CustomTypeMaps: Record<string, any> = {
   INPUT: {
     type: 'INPUT',
   },
+  CASCADER: {
+    type: 'CASCADER',
+    propsKey: 'cascaderProps',
+    props: { multiple: true, valueKey: 'value', labelKey: 'text', options: [] },
+  },
   SELECT: {
     type: 'SELECT',
     propsKey: 'selectProps',
-    props: {
-      mode: 'static',
-      valueKey: 'value',
-      labelKey: 'text',
-      options: [],
-    },
+    props: { ...baseSelectProps },
   },
   MULTIPLE_SELECT: {
     type: 'SELECT',
     propsKey: 'selectProps',
-    props: {
-      mode: 'static',
-      multiple: true,
-      valueKey: 'value',
-      labelKey: 'text',
-      options: [],
-    },
+    props: { ...baseSelectProps },
   },
   RADIO: {
-    type: 'RADIO',
-    propsKey: 'radioProps',
-    props: {
-      options: [],
-      valueKey: 'value',
-      labelKey: 'text',
-    },
+    type: 'SELECT',
+    propsKey: 'selectProps',
+    props: { ...baseSelectProps },
   },
   CHECKBOX: {
-    type: 'CHECKBOX',
-    propsKey: 'checkProps',
-    props: {
-      options: [],
-      valueKey: 'value',
-      labelKey: 'text',
-    },
+    type: 'SELECT',
+    propsKey: 'selectProps',
+    props: { ...baseSelectProps },
   },
   MEMBER: {
-    type: 'SELECT',
+    type: 'MEMBER',
     propsKey: 'selectProps',
     props: {
       mode: 'remote',
@@ -115,7 +121,7 @@ export const CustomTypeMaps: Record<string, any> = {
     },
   },
   MULTIPLE_MEMBER: {
-    type: 'SELECT',
+    type: 'MEMBER',
     propsKey: 'selectProps',
     props: {
       mode: 'remote',
@@ -132,6 +138,10 @@ export const CustomTypeMaps: Record<string, any> = {
   },
   DATE: {
     type: 'DATE_PICKER',
+    propsKey: 'dataProps',
+    props: {
+      showTime: false,
+    },
   },
   DATETIME: {
     type: 'DATE_PICKER',
@@ -150,13 +160,76 @@ export const CustomTypeMaps: Record<string, any> = {
   TEXTAREA: {
     type: 'TEXTAREA',
   },
+  RICH_TEXT: {
+    type: 'TEXTAREA',
+  },
   MULTIPLE_INPUT: {
     type: 'TAGS_INPUT',
+    propsKey: 'numberProps',
+    props: {
+      precision: 0,
+    },
   },
 };
 
-export const MULTIPLE_OPERATOR_LIST = ['between'];
-
-export function isMutipleOperator(operator: string) {
-  return MULTIPLE_OPERATOR_LIST.includes(operator);
+// 处理自定义字段
+export function getFilterCustomFields(result: any[]) {
+  return result.map((item: any) => {
+    const FilterTypeKey: keyof typeof FilterType = CustomTypeMaps[item.type].type;
+    const formObject = CustomTypeMaps[item.type];
+    const { props: formProps } = formObject;
+    const currentItem: any = {
+      title: item.name ?? item.fieldName,
+      dataIndex: item.id ?? item.fieldId,
+      type: FilterType[FilterTypeKey],
+      customField: true,
+      customFieldType: item.type,
+    };
+    if (formObject.propsKey) {
+      if (item.options || item.platformOptionJson) {
+        formProps.options = item.options ?? JSON.parse(item.platformOptionJson);
+      }
+      currentItem[formObject.propsKey] = {
+        ...formProps,
+      };
+    }
+    return currentItem;
+  });
 }
+
+// 全部数据默认显示搜索条件：ID、名称、模块；
+export function getAllDataDefaultConditions(viewType: ViewTypeEnum) {
+  const conditions = [
+    { name: 'num', operator: OperatorEnum.CONTAINS },
+    { name: 'name', operator: OperatorEnum.CONTAINS },
+    { name: 'moduleId', operator: OperatorEnum.BELONG_TO },
+  ];
+  if (
+    [
+      ViewTypeEnum.API_DEFINITION,
+      ViewTypeEnum.PLAN_API_CASE,
+      ViewTypeEnum.PLAN_API_DEFINITION_DRAWER,
+      ViewTypeEnum.PLAN_API_CASE_DRAWER,
+    ].includes(viewType)
+  ) {
+    conditions.push({ name: 'protocol', operator: OperatorEnum.BELONG_TO });
+  }
+  if ([ViewTypeEnum.BUG, ViewTypeEnum.PLAN_BUG, ViewTypeEnum.PLAN_BUG_DRAWER].includes(viewType)) {
+    conditions.push({ name: 'title', operator: OperatorEnum.CONTAINS });
+  }
+  if ([ViewTypeEnum.API_MOCK].includes(viewType)) {
+    conditions.push({ name: 'expectNum', operator: OperatorEnum.CONTAINS });
+  }
+  if (
+    [ViewTypeEnum.PLAN_API_SCENARIO, ViewTypeEnum.PLAN_API_CASE, ViewTypeEnum.PLAN_FUNCTIONAL_CASE].includes(viewType)
+  ) {
+    conditions.push({ name: 'testPlanCollectionId', operator: OperatorEnum.BELONG_TO });
+  }
+  return conditions;
+}
+
+// 系统视图对应不显示的第一列下拉条件
+export const internalViewsHiddenConditionsMap: Record<string, string[]> = {
+  my_create: ['createUser'],
+  my_review: ['reviewId'],
+};

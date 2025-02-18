@@ -27,7 +27,7 @@
           v-if="props.activeFolderType === 'folder'"
           v-model:model-value="fileType"
           type="button"
-          class="file-show-type min-w-[92px]"
+          class="file-show-type min-w-[96px]"
           @change="changeFileType"
         >
           <a-radio value="module" class="show-type-icon">{{ t('project.fileManagement.module') }}</a-radio>
@@ -51,34 +51,74 @@
         @module-change="searchList"
       >
         <template #name="{ record, rowIndex }">
-          <MsTag
-            v-if="record.fileType.toLowerCase() === 'jar'"
-            theme="light"
-            type="success"
-            :self-style="
-              record.enable
-                ? {}
-                : {
-                    color: 'var(--color-text-4)',
-                    backgroundColor: 'var(--color-text-n9)',
-                  }
-            "
-          >
-            {{ t(record.enable ? 'common.enable' : 'common.disable') }}
-          </MsTag>
-          <a-tooltip :content="record.name">
-            <a-button type="text" class="px-0" @click="openFileDetail(record.id, rowIndex)">
-              <div class="one-line-text max-w-[168px]">{{ record.name }}</div>
-            </a-button>
-          </a-tooltip>
+          <div class="flex w-full items-center justify-start overflow-hidden">
+            <MsTag
+              v-if="record.fileType.toLowerCase() === 'jar'"
+              theme="light"
+              type="success"
+              :self-style="
+                record.enable
+                  ? {}
+                  : {
+                      color: 'var(--color-text-4)',
+                      backgroundColor: 'var(--color-text-n9)',
+                    }
+              "
+            >
+              {{ t(record.enable ? 'common.enable' : 'common.disable') }}
+            </MsTag>
+            <a-tooltip :content="record.name">
+              <a-button
+                type="text"
+                class="max-w-[calc(100%-60px)] flex-1 justify-start px-0"
+                @click="openFileDetail(record.id, rowIndex)"
+              >
+                <div class="one-line-text">{{ record.name }}</div>
+              </a-button>
+            </a-tooltip>
+          </div>
         </template>
         <template #size="{ record }">
           <span>{{ formatFileSize(record.size) }}</span>
         </template>
         <template #action="{ record }">
-          <MsButton type="text" class="mr-[8px]" @click="handleDownload(record)">
+          <a-switch
+            v-if="record.fileType === 'jar' && hasAnyPermission(['PROJECT_FILE_MANAGEMENT:READ+UPDATE'])"
+            v-model:model-value="record.enable"
+            size="small"
+            :before-change="(val) => handleChangeEnable(val, record)"
+          />
+          <a-divider
+            v-if="record.fileType === 'jar' && hasAnyPermission(['PROJECT_FILE_MANAGEMENT:READ+UPDATE'])"
+            direction="vertical"
+            :margin="8"
+          />
+          <MsButton
+            v-if="record.fileType !== 'jar' && hasAnyPermission(['PROJECT_FILE_MANAGEMENT:READ+UPDATE'])"
+            type="text"
+            class="!mr-0"
+            @click="handleMove(record)"
+          >
+            {{ t('project.fileManagement.move') }}
+          </MsButton>
+          <a-divider
+            v-if="record.fileType !== 'jar' && hasAnyPermission(['PROJECT_FILE_MANAGEMENT:READ+UPDATE'])"
+            direction="vertical"
+            :margin="8"
+          />
+          <MsButton
+            v-if="hasAnyPermission(['PROJECT_FILE_MANAGEMENT:READ+DOWNLOAD'])"
+            type="text"
+            class="!mr-0"
+            @click="handleDownload(record)"
+          >
             {{ t('project.fileManagement.download') }}
           </MsButton>
+          <a-divider
+            v-if="hasAnyPermission(['PROJECT_FILE_MANAGEMENT:READ+DOWNLOAD'])"
+            direction="vertical"
+            :margin="8"
+          />
           <MsTableMoreAction
             :list="record.fileType === 'jar' ? getJarFileActions(record) : normalFileActions"
             @select="handleMoreActionSelect($event, record)"
@@ -164,7 +204,9 @@
       v-model:file-list="fileList"
       :accept="acceptType"
       :auto-upload="false"
-      :sub-text="acceptType === 'jar' ? '' : t('project.fileManagement.normalFileSubText', { size: 50 })"
+      :sub-text="
+        acceptType === 'jar' ? '' : t('project.fileManagement.normalFileSubText', { size: appStore.getFileMaxSize })
+      "
       multiple
       draggable
       size-unit="MB"
@@ -194,7 +236,7 @@
             @change="enableAllJar"
           ></a-switch>
           {{ t('project.fileManagement.enableAll') }}
-          <a-tooltip :content="t('project.fileManagement.uploadTip')">
+          <a-tooltip position="tr" :content="t('project.fileManagement.uploadTip')">
             <MsIcon type="icon-icon-maybe_outlined" class="cursor-pointer hover:text-[rgb(var(--primary-5))]" />
           </a-tooltip>
         </div>
@@ -459,6 +501,7 @@
           label: 'project.fileManagement.delete',
           eventTag: 'delete',
           danger: true,
+          permission: ['PROJECT_FILE_MANAGEMENT:READ+DELETE'],
         },
       ];
     }
@@ -466,6 +509,7 @@
       {
         label: 'project.fileManagement.move',
         eventTag: 'move',
+        permission: ['PROJECT_FILE_MANAGEMENT:READ+UPDATE'],
       },
       {
         isDivider: true,
@@ -473,6 +517,7 @@
       {
         label: 'project.fileManagement.delete',
         eventTag: 'delete',
+        permission: ['PROJECT_FILE_MANAGEMENT:READ+DELETE'],
         danger: true,
       },
     ];
@@ -481,6 +526,7 @@
         {
           label: 'project.fileManagement.download',
           eventTag: 'download',
+          permission: ['PROJECT_FILE_MANAGEMENT:READ+DOWNLOAD'],
         },
         ...normalActions,
       ];
@@ -489,46 +535,63 @@
   });
 
   function getJarFileActions(record: FileItem) {
-    let jarFileActions: ActionsItem[] = [
+    const moveFileActions: ActionsItem[] = [
       {
         label: 'project.fileManagement.move',
         eventTag: 'move',
+        permission: ['PROJECT_FILE_MANAGEMENT:READ+UPDATE'],
       },
+    ];
+    let enableFileActions = [
       {
         label: 'common.enable',
         eventTag: 'toggle',
+        permission: ['PROJECT_FILE_MANAGEMENT:READ+UPDATE'],
       },
       {
         label: 'common.disable',
         eventTag: 'toggle',
+        permission: ['PROJECT_FILE_MANAGEMENT:READ+UPDATE'],
       },
+    ];
+
+    if (record.enable) {
+      enableFileActions = enableFileActions.filter((e) => e.label !== 'common.enable');
+    } else if (record.enable === false) {
+      enableFileActions = enableFileActions.filter((e) => e.label !== 'common.disable');
+    }
+
+    const deleteFileActions: ActionsItem[] = [
       {
         isDivider: true,
       },
       {
         label: 'project.fileManagement.delete',
         eventTag: 'delete',
+        permission: ['PROJECT_FILE_MANAGEMENT:READ+DELETE'],
         danger: true,
       },
     ];
     if (showType.value === 'card') {
-      jarFileActions = [
+      return [
         {
           label: 'project.fileManagement.download',
           eventTag: 'download',
+          permission: ['PROJECT_FILE_MANAGEMENT:READ+DOWNLOAD'],
         },
-        ...jarFileActions,
+        ...moveFileActions,
+        ...enableFileActions,
+        ...deleteFileActions,
       ];
     }
+
     if (record.storage === 'GIT') {
-      jarFileActions = jarFileActions.filter((e) => e.eventTag !== 'move');
+      enableFileActions = showType.value === 'list' ? [] : enableFileActions;
+
+      return [...enableFileActions, ...deleteFileActions];
     }
-    if (record.enable) {
-      jarFileActions = jarFileActions.filter((e) => e.label !== 'common.enable');
-    } else if (record.enable === false) {
-      jarFileActions = jarFileActions.filter((e) => e.label !== 'common.disable');
-    }
-    return jarFileActions;
+
+    return [...moveFileActions, ...deleteFileActions];
   }
   const hasOperationPermission = computed(() =>
     hasAnyPermission([
@@ -543,7 +606,6 @@
       title: 'project.fileManagement.name',
       slotName: 'name',
       dataIndex: 'name',
-      fixed: 'left',
       sortable: {
         sortDirections: ['ascend', 'descend'],
         sorter: true,
@@ -594,7 +656,7 @@
       slotName: 'action',
       dataIndex: 'operation',
       fixed: 'right',
-      width: hasOperationPermission.value ? 120 : 50,
+      width: hasOperationPermission.value ? 180 : 50,
     },
   ];
   const tableStore = useTableStore();
@@ -993,6 +1055,13 @@
     }
   }
 
+  // 移动
+  function handleMove(record: FileItem) {
+    isBatchMove.value = false;
+    activeFile.value = record;
+    moveModalVisible.value = true;
+  }
+
   /**
    * 处理表格更多按钮事件
    * @param item
@@ -1000,9 +1069,7 @@
   function handleMoreActionSelect(item: ActionsItem, record: FileItem) {
     switch (item.eventTag) {
       case 'move':
-        isBatchMove.value = false;
-        activeFile.value = record;
-        moveModalVisible.value = true;
+        handleMove(record);
         break;
       case 'delete':
         delFile(record, false);
@@ -1274,6 +1341,12 @@
       await addStorageFile();
       handleStorageModalCancel();
     });
+  }
+
+  // 开启|禁用
+  function handleChangeEnable(newValue: string | number | boolean, record: FileItem) {
+    toggleJarFile(record);
+    return false;
   }
 
   await tableStore.initColumn(TableKeyEnum.FILE_MANAGEMENT_FILE, columns, 'drawer');

@@ -4,7 +4,7 @@
       :title="t('project.permission.projectAndPermission')"
       :default-key="currentKey"
       :menu-list="menuList"
-      class="mr-[16px] w-[208px] min-w-[208px] bg-white p-[16px]"
+      class="mr-[16px] w-[208px] min-w-[208px] bg-[var(--color-text-fff)] p-[16px]"
       @toggle-menu="toggleMenu"
     />
     <!-- 272:左边MsMenuPanel的宽度224+边距16*3 -->
@@ -37,6 +37,26 @@
   const route = useRoute();
   const licenseStore = useLicenseStore();
 
+  function memberPermissionShowCondition(): boolean {
+    let show = false;
+    const routerList = router.getRoutes();
+    for (let i = 0; i < routerList.length; i++) {
+      const rou = routerList[i];
+      if (
+        [
+          ProjectManagementRouteEnum.PROJECT_MANAGEMENT_PERMISSION_MEMBER,
+          ProjectManagementRouteEnum.PROJECT_MANAGEMENT_PERMISSION_USER_GROUP,
+        ].includes(rou.name as ProjectManagementRouteEnum)
+      ) {
+        show = permission.accessRouter(rou);
+      }
+      if (show) {
+        break;
+      }
+    }
+    return show;
+  }
+
   const sourceMenuList = ref([
     {
       key: 'project',
@@ -68,6 +88,7 @@
       title: t('project.permission.memberPermission'),
       level: 1,
       name: '',
+      showCondition: memberPermissionShowCondition,
     },
     {
       key: 'projectMember',
@@ -134,15 +155,14 @@
         .menu-item {
           height: 38px;
           line-height: 38px;
-          font-family: 'PingFang SC';
         }
       }
     }
   }
   .right-menu-wrapper {
     border-radius: 12px;
+    background-color: var(--color-text-fff);
     box-shadow: 0 0 10px rgb(120 56 135/ 5%);
-    @apply bg-white;
   }
   .is-active {
     border-radius: 4px;

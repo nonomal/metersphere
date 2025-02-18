@@ -14,6 +14,7 @@
         :upload-image="handleUploadImage"
         :comment-list="commentList"
         :preview-url="PreviewEditorImageUrl"
+        :permissions="['FUNCTIONAL_CASE:READ+COMMENT']"
         @delete="handleDelete"
         @update-or-add="handleUpdateOrAdd"
       />
@@ -25,6 +26,7 @@
       v-show="activeComment === 'reviewComment' || activeComment === 'executiveComment'"
       :review-comment-list="reviewCommentList"
       :active-comment="activeComment"
+      show-step-detail-trigger
     />
   </div>
 </template>
@@ -57,12 +59,12 @@
   const featureCaseStore = useFeatureCaseStore();
   const router = useRouter();
   const route = useRoute();
-  // const activeTab = computed(() => featureCaseStore.activeTab);
   const { openModal } = useModal();
   const { t } = useI18n();
 
   const props = defineProps<{
     caseId: string;
+    commentValue: { id: string; name: string }[];
   }>();
 
   const activeComment = ref('caseComment');
@@ -192,14 +194,6 @@
       }
     }
   );
-  // watch(
-  //   () => activeTab.value,
-  //   (val) => {
-  //     if (val === 'comments') {
-  //       getAllCommentList();
-  //     }
-  //   }
-  // );
 
   async function handleUploadImage(file: File) {
     const { data } = await editorUploadFile({
@@ -223,6 +217,10 @@
 
   defineExpose({
     getAllCommentList,
+  });
+
+  onBeforeMount(() => {
+    activeComment.value = props.commentValue.find((item) => Number(item.name) > 0)?.id || 'caseComment';
   });
 </script>
 

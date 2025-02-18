@@ -23,10 +23,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.ibatis.session.ExecutorType;
-import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
-import org.mybatis.spring.SqlSessionUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -82,55 +79,6 @@ public class UserRoleRelationService {
         return logs;
     }
 
-    public void batchSave(List<String> userRoleIdList, List<User> userList) {
-        long operationTime = System.currentTimeMillis();
-        List<UserRoleRelation> userRoleRelationSaveList = new ArrayList<>();
-        //添加用户组织关系
-        for (String userRoleId : userRoleIdList) {
-            for (User user : userList) {
-                UserRoleRelation userRoleRelation = new UserRoleRelation();
-                userRoleRelation.setId(IDGenerator.nextStr());
-                userRoleRelation.setUserId(user.getId());
-                userRoleRelation.setRoleId(userRoleId);
-                userRoleRelation.setSourceId(UserRoleScope.SYSTEM);
-                userRoleRelation.setCreateTime(operationTime);
-                userRoleRelation.setCreateUser(user.getCreateUser());
-                userRoleRelation.setOrganizationId(UserRoleScope.SYSTEM);
-                userRoleRelationSaveList.add(userRoleRelation);
-            }
-        }
-        SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH);
-        UserRoleRelationMapper batchSaveMapper = sqlSession.getMapper(UserRoleRelationMapper.class);
-        int insertIndex = 0;
-        for (UserRoleRelation userRoleRelation : userRoleRelationSaveList) {
-            batchSaveMapper.insert(userRoleRelation);
-            insertIndex++;
-            if (insertIndex % 50 == 0) {
-                sqlSession.flushStatements();
-            }
-        }
-        sqlSession.flushStatements();
-        SqlSessionUtils.closeSqlSession(sqlSession, sqlSessionFactory);
-    }
-
-    public void batchSave(List<String> userRoleIdList, User user) {
-        long operationTime = System.currentTimeMillis();
-        List<UserRoleRelation> userRoleRelationSaveList = new ArrayList<>();
-        //添加用户组织关系
-        for (String userRoleId : userRoleIdList) {
-            UserRoleRelation userRoleRelation = new UserRoleRelation();
-            userRoleRelation.setId(IDGenerator.nextStr());
-            userRoleRelation.setUserId(user.getId());
-            userRoleRelation.setRoleId(userRoleId);
-            userRoleRelation.setSourceId(UserRoleScope.SYSTEM);
-            userRoleRelation.setOrganizationId(UserRoleScope.SYSTEM);
-            userRoleRelation.setCreateTime(operationTime);
-            userRoleRelation.setCreateUser(user.getCreateUser());
-            userRoleRelationSaveList.add(userRoleRelation);
-        }
-        userRoleRelationMapper.batchInsert(userRoleRelationSaveList);
-    }
-
     public Map<Organization, List<Project>> selectOrganizationProjectByUserId(String userId) {
         Map<Organization, List<Project>> returnMap = new LinkedHashMap<>();
         UserRoleRelationExample example = new UserRoleRelationExample();
@@ -150,7 +98,7 @@ public class UserRoleRelationService {
     }
 
     public Map<String, UserTableResponse> selectGlobalUserRoleAndOrganization(@Valid @NotEmpty List<String> userIdList) {
-        List<UserRoleRelation> userRoleRelationList = extUserRoleRelationMapper.selectGlobalRoleByUserIdList(userIdList);
+        List<UserRoleRelation> userRoleRelationList = extUserRoleRelationMapper.selectRoleByUserIdList(userIdList);
         List<String> userRoleIdList = userRoleRelationList.stream().map(UserRoleRelation::getRoleId).distinct().collect(Collectors.toList());
         List<String> sourceIdList = userRoleRelationList.stream().map(UserRoleRelation::getSourceId).distinct().collect(Collectors.toList());
         Map<String, UserRole> userRoleMap = new HashMap<>();
@@ -177,11 +125,11 @@ public class UserRoleRelationService {
             }
             UserRole userRole = userRoleMap.get(userRoleRelation.getRoleId());
             if (userRole != null && StringUtils.equalsIgnoreCase(userRole.getType(), UserRoleScope.SYSTEM)) {
-                userInfo.getUserRoleList().add(userRole);
+                userInfo.setUserRole(userRole);
             }
             Organization organization = organizationMap.get(userRoleRelation.getSourceId());
             if (organization != null && !userInfo.getOrganizationList().contains(organization)) {
-                userInfo.getOrganizationList().add(organization);
+                userInfo.setOrganization(organization);
             }
         }
         return returnMap;

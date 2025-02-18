@@ -1,55 +1,84 @@
 <template>
   <a-popover
     v-if="props.isSimple"
+    class="ms-mini-setting-popover"
     unmount-on-close
-    content-class="w-[240px]"
     position="rt"
     trigger="click"
     @hide="handleCancel"
   >
-    <icon-settings class="setting-icon" />
+    <icon-settings :class="`setting-icon ${props.isHiddenSetting ? 'invisible' : 'visible'}`" />
     <template #content>
-      <div class="mb-2 flex items-center justify-between">
-        <div class="font-medium text-[var(--color-text-1)]">{{ t('msTable.columnSetting.display') }}</div>
-        <MsButton :disabled="!hasChange" @click="handleReset">{{ t('msTable.columnSetting.resetDefault') }}</MsButton>
+      <div class="flex items-center justify-between p-[16px]">
+        <div class="text-[16px] font-medium text-[var(--color-text-1)]">{{ t('msTable.columnSetting.display') }}</div>
       </div>
-      <div class="flex-col">
-        <div v-for="item in nonSortColumn" :key="item.dataIndex" class="column-item">
-          <div>{{ t((item.title || item.columnTitle) as string) }}</div>
-          <a-switch
-            v-if="item.slotName !== SpecialColumnEnum.OPERATION"
-            v-model="item.showInTable"
-            size="small"
-            type="line"
-            @change="handleSwitchChange"
+      <a-divider orientation="center" class="!m-0" />
+      <div class="p-[16px]">
+        <template v-if="props.showPagination">
+          <div class="font-medium text-[var(--color-text-4)]">{{ t('msTable.columnSetting.pageSize') }} </div>
+          <PageSizeSelector
+            v-model:model-value="pageSize"
+            class="mt-[8px]"
+            @page-size-change="(v: number) => emit('pageSizeChange',v)"
           />
+        </template>
+        <a-divider v-if="!props.onlyPageSize" orientation="center" class="!my-[16px]" />
+        <div v-if="!props.onlyPageSize" class="mb-2 flex items-center justify-between">
+          <div class="font-medium text-[var(--color-text-4)]">{{ t('msTable.columnSetting.header') }}</div>
+          <MsButton v-if="!props.onlyPageSize" size="mini" :disabled="!hasChange" @click="handleReset">
+            {{ t('msTable.columnSetting.resetDefault') }}
+          </MsButton>
         </div>
-      </div>
-      <a-divider v-if="nonSortColumn.length" orientation="center" class="non-sort"
-        ><span class="one-line-text text-[12px] text-[var(--color-text-4)]">{{
-          t('msTable.columnSetting.nonSort')
-        }}</span></a-divider
-      >
-      <VueDraggable v-model="couldSortColumn" handle=".sort-handle" ghost-class="ghost" @change="handleSwitchChange">
-        <div v-for="element in couldSortColumn" :key="element.dataIndex" class="column-drag-item">
-          <div class="flex w-[90%] items-center">
-            <MsIcon type="icon-icon_drag" class="sort-handle cursor-move text-[16px] text-[var(--color-text-4)]" />
-            <span class="one-line-text ml-[8px] max-w-[85%]">{{
-              t((element.title || element.columnTitle) as string)
-            }}</span>
+        <template v-if="!props.onlyPageSize">
+          <div class="mt-[16px] flex-col pl-[14px]">
+            <div v-for="item in nonSortColumn" :key="item.dataIndex" class="column-item">
+              <div>{{ t((item.title || item.columnTitle) as string) }}</div>
+              <a-switch
+                v-if="item.slotName !== SpecialColumnEnum.OPERATION"
+                v-model="item.showInTable"
+                :disabled="item.columnSelectorDisabled"
+                size="small"
+                type="line"
+                @change="handleSwitchChange"
+              />
+            </div>
           </div>
-          <a-switch
-            v-model="element.showInTable"
-            :disabled="element.columnSelectorDisabled"
-            size="small"
-            type="line"
+          <a-divider v-if="nonSortColumn.length" orientation="center" class="non-sort">
+            <span class="one-line-text text-[12px] text-[var(--color-text-4)]">
+              {{ t('msTable.columnSetting.nonSort') }}
+            </span>
+          </a-divider>
+          <VueDraggable
+            v-model="couldSortColumn"
+            handle=".sort-handle"
+            ghost-class="ghost"
             @change="handleSwitchChange"
-          />
-        </div>
-      </VueDraggable>
+          >
+            <div v-for="element in couldSortColumn" :key="element.dataIndex" class="column-drag-item">
+              <div class="flex w-[90%] items-center">
+                <MsIcon type="icon-icon_drag" class="sort-handle cursor-move text-[16px] text-[var(--color-text-4)]" />
+                <span class="one-line-text ml-[8px] max-w-[85%]">
+                  {{ t((element.title || element.columnTitle) as string) }}
+                </span>
+              </div>
+              <a-switch
+                v-model="element.showInTable"
+                :disabled="element.columnSelectorDisabled"
+                size="small"
+                type="line"
+                @change="handleSwitchChange"
+              />
+            </div>
+          </VueDraggable>
+        </template>
+      </div>
     </template>
   </a-popover>
-  <icon-settings v-else class="setting-icon" @click="handleShowSetting" />
+  <icon-settings
+    v-else
+    :class="`setting-icon ${props.isHiddenSetting ? 'invisible' : 'visible'}`"
+    @click="handleShowSetting"
+  />
 </template>
 
 <script setup lang="ts">
@@ -57,6 +86,7 @@
 
   import MsButton from '@/components/pure/ms-button/index.vue';
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
+  import PageSizeSelector from './comp/pageSizeSelector.vue';
 
   import { useI18n } from '@/hooks/useI18n';
   import { useTableStore } from '@/store';
@@ -75,6 +105,7 @@
 
   // 是否有改动
   const hasChange = ref(false);
+  const pageSize = ref();
 
   const handleSwitchChange = () => {
     hasChange.value = true;
@@ -83,11 +114,15 @@
   const props = defineProps<{
     tableKey: TableKeyEnum;
     isSimple: boolean;
+    onlyPageSize?: boolean;
+    showPagination?: boolean;
+    isHiddenSetting?: boolean; // 是否隐藏设置
   }>();
 
   const emit = defineEmits<{
     (e: 'showSetting'): void; //  数据发生变化
     (e: 'initData'): void;
+    (e: 'pageSizeChange', value: number): void;
   }>();
 
   const handleCancel = async () => {
@@ -112,9 +147,14 @@
 
   const handleReset = () => {
     loadColumn(props.tableKey);
+    hasChange.value = false;
   };
+
   onBeforeMount(() => {
     if (props.tableKey) {
+      tableStore.getPageSize(props.tableKey).then((res) => {
+        pageSize.value = res;
+      });
       loadColumn(props.tableKey);
     }
   });
@@ -134,9 +174,9 @@
   }
   .column-item {
     display: flex;
+    padding: 8px;
     flex-flow: row nowrap;
-    justify-content: space-between;
-    align-items: center;
+    @apply flex flex-nowrap items-center justify-between;
     &:hover {
       border-radius: 6px;
       background: var(--color-text-n9);
@@ -157,5 +197,13 @@
   .ghost {
     border: 1px dashed rgba(var(--primary-5));
     background-color: rgba(var(--primary-1));
+  }
+</style>
+
+<style lang="less">
+  .ms-mini-setting-popover {
+    .arco-popover-popup-content {
+      padding: 0;
+    }
   }
 </style>

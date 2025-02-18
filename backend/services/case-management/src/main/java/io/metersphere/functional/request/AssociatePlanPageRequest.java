@@ -1,6 +1,6 @@
 package io.metersphere.functional.request;
 
-import io.metersphere.request.BaseProviderCondition;
+import io.metersphere.sdk.dto.BaseCondition;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -8,9 +8,11 @@ import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
+import java.util.List;
+
 @Data
 @EqualsAndHashCode(callSuper = false)
-public class AssociatePlanPageRequest extends BaseProviderCondition {
+public class AssociatePlanPageRequest extends BaseCondition {
 
 
     @Schema(description = "功能用例id", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -26,4 +28,7 @@ public class AssociatePlanPageRequest extends BaseProviderCondition {
     @Max(value = 500, message = "每页显示条数不能大于500")
     @Schema(description =  "每页显示条数")
     private int pageSize;
+
+    @Schema(description = "要包含的测试计划ID")
+    private List<String> includeTestPlanIds;
 }

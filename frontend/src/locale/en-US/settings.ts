@@ -1,6 +1,6 @@
 export default {
   'settings.title': 'Settings',
-  'settings.themeColor': 'Theme Color',
+  'settings.themeColor': 'Switch between light/dark mode',
   'settings.content': 'Content Setting',
   'settings.search': 'Search',
   'settings.language': 'Language',
@@ -14,6 +14,9 @@ export default {
   'settings.navbar.help': 'Help center',
   'settings.help.guide': 'Use Guide',
   'settings.help.doc': 'Help docs',
+  'settings.help.forumHelp': 'Forum Help',
+  'settings.help.gitHubProject': 'GitHub project',
+  'settings.help.enterpriseVersionTrial': 'Enterprise version trial',
   'settings.help.APIDoc': 'API docs',
   'settings.help.versionInfo': 'Version info',
   'settings.help.version': 'Version',
@@ -28,4 +31,5 @@ export default {
   'settings.copySettings.message': 'Copy succeeded, please paste to file src/settings.json.',
   'settings.close': 'Close',
   'settings.color.tooltip': '10 gradient colors generated according to the theme color',
+  'settings.navbar.createProject': 'Create project',
 };

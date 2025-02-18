@@ -4,7 +4,6 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import com.github.pagehelper.page.PageMethod;
 import io.metersphere.api.constants.ApiResource;
-import io.metersphere.api.constants.ApiResourceType;
 import io.metersphere.api.domain.ApiDefinitionMock;
 import io.metersphere.api.dto.definition.ApiDefinitionMockDTO;
 import io.metersphere.api.dto.definition.ApiMockBatchEditRequest;
@@ -25,6 +24,7 @@ import io.metersphere.sdk.constants.PermissionConstants;
 import io.metersphere.system.dto.OperationHistoryDTO;
 import io.metersphere.system.dto.request.OperationHistoryRequest;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
+import io.metersphere.system.file.annotation.FileLimit;
 import io.metersphere.system.log.annotation.Log;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.notice.annotation.SendNotice;
@@ -137,6 +137,7 @@ public class ApiDefinitionMockController {
         return apiDefinitionMockService.copy(request, SessionUtils.getUserId());
     }
 
+    @FileLimit
     @PostMapping("/upload/temp/file")
     @Operation(summary = "上传接口 Mock 所需的文件资源，并返回文件ID")
     @RequiresPermissions(logical = Logical.OR, value = {PermissionConstants.PROJECT_API_DEFINITION_MOCK_ADD, PermissionConstants.PROJECT_API_DEFINITION_MOCK_UPDATE})

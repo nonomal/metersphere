@@ -1,12 +1,14 @@
 <template>
   <condition
     v-model:list="innerParams"
+    condition-type="postOperation"
     :condition-types="[RequestConditionProcessor.SCRIPT, RequestConditionProcessor.SQL]"
     add-text="apiTestDebug.postCondition"
     response=""
     :show-associated-scene="props.showAssociatedScene"
     :show-pre-post-request="props.showPrePostRequest"
     :request-radio-text-props="props.requestRadioTextProps"
+    show-quick-copy
   >
   </condition>
 </template>

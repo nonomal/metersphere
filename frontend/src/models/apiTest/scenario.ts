@@ -1,4 +1,5 @@
-import { BatchActionQueryParams } from '@/components/pure/ms-table/type';
+import type { BatchActionQueryParams } from '@/components/pure/ms-table/type';
+import type { saveParams } from '@/components/business/ms-associate-case/types';
 import type { CaseLevel } from '@/components/business/ms-case-associate/types';
 
 import { ApiDefinitionCustomField, ApiRunModeRequest } from '@/models/apiTest/management';
@@ -7,6 +8,7 @@ import {
   RequestAssertionCondition,
   RequestComposition,
   RequestDefinitionStatus,
+  type RequestImportFormat,
   RequestMethods,
   ScenarioExecuteStatus,
   ScenarioFailureStrategy,
@@ -16,6 +18,7 @@ import {
   ScenarioStepType,
   WhileConditionType,
 } from '@/enums/apiEnum';
+import type { ExecuteResultEnum, ExecuteStatusEnum } from '@/enums/taskCenter';
 
 import { BatchApiParams, TableQueryParams } from '../common';
 import {
@@ -59,6 +62,11 @@ export interface ApiScenarioScheduleConfig {
   };
 }
 
+// 场景-批量编辑定时任务参数
+export interface ApiScenarioBatchScheduleConfig extends BatchActionQueryParams, Partial<ApiScenarioScheduleConfig> {
+  projectId: string;
+}
+
 // 场景详情
 export interface ApiScenarioTableItem {
   id: string;
@@ -95,6 +103,7 @@ export interface ApiScenarioTableItem {
   status: RequestDefinitionStatus;
   customFields: ApiDefinitionCustomField[];
   scheduleConfig?: ApiScenarioScheduleConfig;
+  lastReportId?: string;
 }
 
 // 场景列表查询参数
@@ -157,6 +166,8 @@ export interface ApiScenarioBatchEditParams extends ApiScenarioBatchParams {
 
   // 修改优先级
   priority?: string;
+  // 修改定时任务
+  scheduleOpen?: boolean;
 }
 
 // 批量编辑场景参数
@@ -175,10 +186,6 @@ export interface ExecutePageParams extends TableQueryParams {
   id: string;
 }
 
-export interface ApiScenarioBatchParam extends BatchActionQueryParams {
-  moduleIds: string[];
-}
-
 // 场景-执行历史-请求参数
 export interface ExecuteHistoryItem {
   id: string;
@@ -187,8 +194,14 @@ export interface ExecuteHistoryItem {
   operationUser: string;
   createUser: string;
   startTime: number;
-  status: string;
+  status: ExecuteResultEnum;
   triggerMode: string;
+  execStatus: ExecuteStatusEnum;
+  deleted: boolean;
+  historyDeleted: boolean;
+  integrated: boolean;
+  testPlanId?: string;
+  testPlanNum?: string;
 }
 
 // 场景-变更历史列表查询参数
@@ -257,6 +270,7 @@ export interface CsvVariable {
   };
   // 以下为前端字段
   settingVisible: boolean;
+  copyId?: string; // 复制场景时，源场景的 csv 参数的 id
 }
 export interface CommonVariable {
   id: string | number;
@@ -412,6 +426,7 @@ export interface Scenario {
   stepFileParam: Record<string, ScenarioStepFileParams>;
   fileParam: ScenarioFileParams;
   follow?: boolean;
+  copyFromScenarioId?: string | number;
   uploadFileIds: string[];
   linkFileIds: string[];
   // 前端渲染字段
@@ -511,4 +526,58 @@ export interface ScenarioStepResourceInfo {
   projectId: string;
   projectName: string;
   delete: boolean;
+}
+
+export interface ScenarioAssociateCaseParams {
+  scenarioId?: string | number;
+  moduleMaps?: Record<string, saveParams>;
+  selectAllModule: boolean; // 是否全选
+  refType: 'COPY' | 'REF';
+  projectId: string;
+  protocols: string[];
+  associateType?: string;
+}
+
+// 多模块关联
+export interface ImportSystemData {
+  API: ScenarioAssociateCaseParams; // 接口
+  CASE: ScenarioAssociateCaseParams; // 用例
+  SCENARIO: ScenarioAssociateCaseParams; // 场景
+}
+
+// 导入场景请求参数
+export interface ImportScenarioRequest {
+  moduleId: string;
+  projectId: string;
+  type: RequestImportFormat.MeterSphere | RequestImportFormat.Jmeter | RequestImportFormat.Har;
+  coverData: boolean;
+}
+
+// 导入场景参数
+export interface ImportScenarioParams {
+  file: File | null;
+  request: ImportScenarioRequest;
+}
+
+// 导出场景参数
+export interface ExportScenarioParams extends BatchActionQueryParams {
+  apiScenarioId: string;
+  exportAllRelatedData: boolean;
+  fileId: string;
+}
+
+// 场景统计项
+export interface ScenarioStatisticsItem {
+  id: string;
+  execPassRate: string;
+}
+
+// 场景未保存步骤请求参数
+export interface GetScenarioUnSaveStepParams {
+  copyFromStepId?: string;
+  resourceId?: string;
+  stepType?: string;
+  refType: string;
+  isTempFile: boolean; // 复制未保存的步骤时 true
+  fileIds?: string[]; // 未保存的步骤文件 id，复制未加载/修改过详情的步骤时无需传
 }

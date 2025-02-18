@@ -35,13 +35,10 @@ public class TestPlanReport implements Serializable {
     @Schema(description = "创建时间")
     private Long createTime;
 
-    @Schema(description = "执行时间;计划真正执行的时间")
-    private Long executeTime;
-
     @Schema(description = "开始时间;计划开始执行的时间")
     private Long startTime;
 
-    @Schema(description = "结束时间;计划执行结束的时间")
+    @Schema(description = "结束时间;计划结束执行的时间")
     private Long endTime;
 
     @Schema(description = "执行状态", requiredMode = Schema.RequiredMode.REQUIRED)
@@ -79,6 +76,21 @@ public class TestPlanReport implements Serializable {
     @NotNull(message = "{test_plan_report.deleted.not_blank}", groups = {Created.class})
     private Boolean deleted;
 
+    @Schema(description = "执行率")
+    private Double executeRate;
+
+    @Schema(description = "独立报告的父级ID")
+    private String parentId;
+
+    @Schema(description = "测试计划名称", requiredMode = Schema.RequiredMode.REQUIRED)
+    @NotBlank(message = "{test_plan_report.test_plan_name.not_blank}", groups = {Created.class})
+    @Size(min = 1, max = 255, message = "{test_plan_report.test_plan_name.length_range}", groups = {Created.class, Updated.class})
+    private String testPlanName;
+
+    @Schema(description = "是否默认布局", requiredMode = Schema.RequiredMode.REQUIRED)
+    @NotNull(message = "{test_plan_report.default_layout.not_blank}", groups = {Created.class})
+    private Boolean defaultLayout;
+
     private static final long serialVersionUID = 1L;
 
     public enum Column {
@@ -87,7 +99,6 @@ public class TestPlanReport implements Serializable {
         name("name", "name", "VARCHAR", true),
         createUser("create_user", "createUser", "VARCHAR", false),
         createTime("create_time", "createTime", "BIGINT", false),
-        executeTime("execute_time", "executeTime", "BIGINT", false),
         startTime("start_time", "startTime", "BIGINT", false),
         endTime("end_time", "endTime", "BIGINT", false),
         execStatus("exec_status", "execStatus", "VARCHAR", false),
@@ -97,7 +108,11 @@ public class TestPlanReport implements Serializable {
         passThreshold("pass_threshold", "passThreshold", "DECIMAL", false),
         projectId("project_id", "projectId", "VARCHAR", false),
         integrated("integrated", "integrated", "BIT", false),
-        deleted("deleted", "deleted", "BIT", false);
+        deleted("deleted", "deleted", "BIT", false),
+        executeRate("execute_rate", "executeRate", "DECIMAL", false),
+        parentId("parent_id", "parentId", "VARCHAR", false),
+        testPlanName("test_plan_name", "testPlanName", "VARCHAR", false),
+        defaultLayout("default_layout", "defaultLayout", "BIT", false);
 
         private static final String BEGINNING_DELIMITER = "`";
 

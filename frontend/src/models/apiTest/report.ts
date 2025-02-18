@@ -1,5 +1,6 @@
 import { RequestResult } from '@/models/apiTest/common';
 import type { RequestMethods } from '@/enums/apiEnum';
+import type { ExecuteResultEnum, ExecuteStatusEnum } from '@/enums/taskCenter';
 
 export interface LegendData {
   label: string;
@@ -73,7 +74,7 @@ export interface ReportStepDetailItem {
   id: string;
   reportId: string;
   stepId: string;
-  status: string;
+  status: ExecuteStatusEnum;
   fakeCode: string;
   requestName: string;
   requestTime: number;
@@ -91,7 +92,8 @@ export interface ScenarioItemType {
   stepId: string;
   reportId: string;
   name: string; // 步骤名称
-  sort: number; // 序号
+  sort: number; // 临时序号
+  index: number; // 序号
   stepType: string; // 步骤类型/API/CASE等
   parentId: string; // 父级id
   status: string; // 结果状态 SUCCESS/ERROR
@@ -116,6 +118,7 @@ export interface ReportDetail {
   name: string; // 报告名称
   testPlanId: string;
   createUser: string;
+  createTime?: number;
   deleteTime: number;
   deleteUser: string;
   deleted: boolean;
@@ -124,7 +127,8 @@ export interface ReportDetail {
   startTime: number; // 开始时间/同创建时间一致
   endTime: number; //  结束时间/报告执行完成
   requestDuration: number; // 请求总耗时
-  status: string; // 报告状态/SUCCESS/ERROR
+  status: ExecuteStatusEnum; // 报告状态/SUCCESS/ERROR
+  execStatus?: ExecuteStatusEnum; // 报告状态/SUCCESS/ERROR
   triggerMode: string; // 触发方式
   runMode: string; // 执行模式
   poolId: string; // 资源池
@@ -149,6 +153,11 @@ export interface ReportDetail {
   children: ScenarioItemType[]; // 步骤列表
   stepTotal: number; // 步骤总数
   console: string; // 控制台
+  taskOrigin?: string; // 任务来源
+  taskOriginName?: string; // 任务来源名称
+  result?: ExecuteResultEnum;
+  resourcePoolNode?: string; // 资源池节点
+  threadId?: string; // 线程ID
   [key: string]: any;
 }
 
@@ -158,4 +167,25 @@ export type ReportDetailPartial = Partial<ScenarioItemType>;
 export interface GetShareId {
   reportId: string;
   projectId: string;
+}
+// 用例任务报告详情
+export interface TaskReportDetail {
+  id: string;
+  name: string; // 报告名称
+  createUser: string;
+  createTime: number;
+  startTime: number; // 开始时间/同创建时间一致
+  endTime: number; //  结束时间/报告执行完成
+  status: ExecuteStatusEnum; // 报告状态
+  poolId: string; // 资源池
+  resourcePoolName: string; // 资源池名称
+  integrated: boolean; // 是否是集成报告
+  environmentId: string; // 环境id
+  environmentName: string; // 环境名称
+  taskOrigin: string; // 任务来源
+  taskOriginName: string; // 任务来源名称
+  result: ExecuteResultEnum;
+  resourcePoolNode: string; // 资源池节点
+  threadId: string; // 线程ID
+  apiReportDetailDTOList: ReportStepDetailItem[];
 }

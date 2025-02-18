@@ -10,11 +10,12 @@ import io.metersphere.system.dto.request.*;
 import io.metersphere.system.dto.sdk.OptionDTO;
 import io.metersphere.system.dto.user.UserExtendDTO;
 import io.metersphere.system.log.annotation.Log;
+import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.service.OrganizationService;
+import io.metersphere.system.service.SimpleUserService;
 import io.metersphere.system.service.SystemOrganizationLogService;
 import io.metersphere.system.service.SystemProjectService;
-import io.metersphere.system.service.UserService;
 import io.metersphere.system.utils.PageUtils;
 import io.metersphere.system.utils.Pager;
 import io.metersphere.system.utils.SessionUtils;
@@ -43,7 +44,7 @@ import java.util.Map;
 public class SystemOrganizationController {
 
     @Resource
-    private UserService userService;
+    private SimpleUserService simpleUserService;
     @Resource
     private SystemProjectService systemProjectService;
     @Resource
@@ -55,7 +56,7 @@ public class SystemOrganizationController {
     public Pager<List<OrganizationDTO>> list(@Validated @RequestBody OrganizationRequest request) {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString()) ? request.getSortString() : "create_time desc");
-        return PageUtils.setPageInfo(page, organizationService.list(request));
+        return PageUtils.setPageInfo(page, organizationService.list(request, SessionUtils.getUserId()));
     }
 
     @PostMapping("/update")
@@ -119,7 +120,7 @@ public class SystemOrganizationController {
 
     @PostMapping("/option/all")
     @Operation(summary = "系统设置-系统-组织与项目-组织-获取系统所有组织下拉选项")
-    @RequiresPermissions(value = {PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ, PermissionConstants.ORGANIZATION_PROJECT_READ}, logical = Logical.OR)
+    @RequiresPermissions(value = {PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ, PermissionConstants.ORGANIZATION_PROJECT_READ, PermissionConstants.PROJECT_BASE_INFO_READ}, logical = Logical.OR)
     public List<OptionDTO> listAll() {
         return organizationService.listAll();
     }
@@ -171,7 +172,7 @@ public class SystemOrganizationController {
     @GetMapping("/total")
     @Operation(summary = "系统设置-系统-组织与项目-组织-获取组织和项目总数")
     @RequiresPermissions(PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ)
-    public Map<String, Long> getTotal(@RequestParam(value = "organizationId",required = false) String organizationId) {
+    public Map<String, Long> getTotal(@RequestParam(value = "organizationId", required = false) String organizationId) {
         return organizationService.getTotal(organizationId);
     }
 
@@ -181,7 +182,23 @@ public class SystemOrganizationController {
     @Parameter(name = "sourceId", description = "组织ID或项目ID", schema = @Schema(requiredMode = Schema.RequiredMode.REQUIRED))
     public List<UserExtendDTO> getMemberOption(@PathVariable String sourceId,
                                                @Schema(description = "查询关键字，根据邮箱和用户名查询")
-                                            @RequestParam(value = "keyword", required = false) String keyword) {
-        return userService.getMemberOption(sourceId, keyword);
+                                               @RequestParam(value = "keyword", required = false) String keyword) {
+        return simpleUserService.getMemberOption(sourceId, keyword);
+    }
+
+
+    @PostMapping("/member-list")
+    @Operation(summary = "系统设置-系统-组织与项目-获取添加成员列表")
+    @RequiresPermissions(PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ)
+    public Pager<List<UserExtendDTO>> getMemberOptionList(@Validated @RequestBody MemberRequest request) {
+        Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize());
+        return PageUtils.setPageInfo(page, simpleUserService.getMemberList(request));
+    }
+
+    @PostMapping("/update-member")
+    @Operation(summary = "系统设置-系统-组织与项目-组织-成员-更新成员用户组")
+    @RequiresPermissions(PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_MEMBER_UPDATE)
+    public void updateMember(@Validated @RequestBody OrganizationMemberUpdateRequest organizationMemberExtendRequest) {
+        organizationService.updateMember(organizationMemberExtendRequest, SessionUtils.getUserId(), "/system/organization/update-member", OperationLogModule.SETTING_SYSTEM_ORGANIZATION);
     }
 }

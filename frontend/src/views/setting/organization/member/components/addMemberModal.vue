@@ -20,7 +20,7 @@
         <!-- 编辑项目 -->
         <a-form-item v-if="type === 'edit'" :label="t('organization.member.project')" asterisk-position="end">
           <MsUserSelector
-            v-model="form.projectIds"
+            v-model:modelValue="form.projectIds"
             :load-option-params="{ organizationId: lastOrganizationId }"
             :type="UserRequestTypeEnum.SYSTEM_ORGANIZATION_PROJECT"
             placeholder="organization.member.selectProjectScope"
@@ -35,7 +35,7 @@
           :rules="[{ required: true, message: t('organization.member.selectMemberEmptyTip') }]"
         >
           <MsUserSelector
-            v-model="form.memberIds"
+            v-model:modelValue="form.memberIds"
             :load-option-params="{ organizationId: lastOrganizationId }"
             :type="UserRequestTypeEnum.SYSTEM_ORGANIZATION_MEMBER"
             placeholder="organization.member.selectMemberScope"
@@ -47,14 +47,18 @@
           asterisk-position="end"
           :rules="[{ required: true, message: t('organization.member.selectUserEmptyTip') }]"
         >
-          <a-select
-            v-model="form.userRoleIds"
-            multiple
+          <MsSelect
+            v-model:model-value="form.userRoleIds"
+            :options="props.userGroupOptions"
+            :allow-search="true"
             allow-clear
+            :search-keys="['name']"
+            value-key="id"
+            label-key="name"
+            class="w-full"
+            :multiple="true"
             :placeholder="t('organization.member.selectUserScope')"
-          >
-            <a-option v-for="item of props.userGroupOptions" :key="item.id" :value="item.id">{{ item.name }}</a-option>
-          </a-select>
+          />
         </a-form-item>
       </a-form>
     </div>
@@ -71,6 +75,7 @@
   import { ref, watch, watchEffect } from 'vue';
   import { FormInstance, Message, ValidatedError } from '@arco-design/web-vue';
 
+  import MsSelect from '@/components/business/ms-select';
   import MsUserSelector from '@/components/business/ms-user-selector/index.vue';
   import { UserRequestTypeEnum } from '@/components/business/ms-user-selector/utils';
 
@@ -100,8 +105,8 @@
   export interface InitFromType {
     organizationId?: string;
     userRoleIds: string[];
-    memberIds: string[];
-    projectIds: string[];
+    memberIds: (string | number)[];
+    projectIds: (string | number)[];
   }
 
   const initFormValue: InitFromType = {

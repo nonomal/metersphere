@@ -62,8 +62,10 @@ export enum TestPlanRouteEnum {
   TEST_PLAN = 'testPlan',
   TEST_PLAN_INDEX = 'testPlanIndex',
   TEST_PLAN_INDEX_DETAIL = 'testPlanIndexDetail',
+  TEST_PLAN_INDEX_CONFIG = 'testPlanIndexConfig',
   TEST_PLAN_INDEX_DETAIL_FEATURE_CASE_DETAIL = 'testPlanIndexDetailFeatureCaseDetail',
   TEST_PLAN_REPORT = 'testPlanReport',
+  TEST_PLAN_REPORT_DETAIL = 'testPlanReportDetail',
 }
 
 export enum UITestRouteEnum {
@@ -72,6 +74,10 @@ export enum UITestRouteEnum {
 
 export enum WorkbenchRouteEnum {
   WORKBENCH = 'workstation',
+  WORKBENCH_INDEX = 'workstationIndex',
+  WORKBENCH_INDEX_WAIT = 'workstationIndexWait',
+  WORKBENCH_INDEX_FOLLOW = 'workstationIndexFollowed',
+  WORKBENCH_INDEX_CREATED = 'workstationIndexCreated',
 }
 
 export enum SettingRouteEnum {
@@ -106,7 +112,16 @@ export enum SettingRouteEnum {
 export enum ShareEnum {
   SHARE = 'share',
   SHARE_REPORT_SCENARIO = 'shareReportScenario',
+  SHARE_DEFINITION_API = 'shareDefinitionApi',
   SHARE_REPORT_CASE = 'shareReportCase',
+  SHARE_REPORT_TEST_PLAN = 'shareReportTestPlan',
+}
+
+export enum FullPageEnum {
+  FULL_PAGE = 'fullPage',
+  FULL_PAGE_TEST_PLAN_EXPORT_PDF = 'fullPageTestPlanExportPDF',
+  FULL_PAGE_SCENARIO_EXPORT_PDF = 'fullPageScenarioExportPDF',
+  FULL_PAGE_API_CASE_EXPORT_PDF = 'fullPageApiCaseExportPDF',
 }
 
 export const RouteEnum = {
@@ -120,4 +135,5 @@ export const RouteEnum = {
   ...UITestRouteEnum,
   ...WorkbenchRouteEnum,
   ...ShareEnum,
+  ...FullPageEnum,
 };

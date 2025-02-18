@@ -2,14 +2,22 @@
   <a-collapse v-model:active-key="activeDetailKey" :bordered="false">
     <a-collapse-item key="request">
       <template #header>
-        <div class="flex items-center gap-[4px]">
-          <div v-if="activeDetailKey.includes('request')" class="down-icon">
-            <icon-down :size="10" class="block" />
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-[4px]">
+            <div class="font-medium">{{ t('apiTestManagement.requestParams') }}</div>
+            <div v-if="activeDetailKey.includes('request')" class="down-icon">
+              <icon-down :size="10" class="block" />
+            </div>
+            <div v-else class="h-[16px] w-[16px] !rounded-full p-[4px]">
+              <icon-right :size="10" class="block" />
+            </div>
           </div>
-          <div v-else class="h-[16px] w-[16px] !rounded-full p-[4px]">
-            <icon-right :size="10" class="block" />
-          </div>
-          <div class="font-medium">{{ t('apiTestManagement.requestParams') }}</div>
+          <ApiChangeTag
+            :ignore-api-change="props.detail.ignoreApiChange"
+            :ignore-api-diff="props.detail.ignoreApiDiff"
+            :inconsistent-with-api="props.detail.inconsistentWithApi"
+            @show-diff="showDiffDrawer"
+          />
         </div>
       </template>
       <div class="detail-collapse-item">
@@ -17,115 +25,125 @@
           <div v-if="previewDetail.headers.length > 0" class="detail-item">
             <div class="detail-item-title">
               <div class="detail-item-title-text">{{ t('apiTestManagement.requestHeader') }}</div>
-              <a-radio-group v-model:model-value="headerShowType" type="button" size="mini">
-                <a-radio value="table">Table</a-radio>
-                <a-radio value="raw">Raw</a-radio>
-              </a-radio-group>
+              <div class="detail-item-title-right">
+                <a-button
+                  v-show="headerShowType === 'raw'"
+                  type="outline"
+                  class="arco-btn-outline--secondary mr-[12px] p-[0_8px]"
+                  size="small"
+                  @click="copyScript(headerRawCode)"
+                >
+                  <template #icon>
+                    <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" />
+                  </template>
+                  {{ t('common.copy') }}
+                </a-button>
+                <a-radio-group v-model:model-value="headerShowType" type="button" size="mini">
+                  <a-radio value="table">Table</a-radio>
+                  <a-radio value="raw">Raw</a-radio>
+                </a-radio-group>
+              </div>
             </div>
             <MsFormTable
               v-show="headerShowType === 'table'"
               :columns="headerColumns"
               :data="previewDetail.headers?.filter((e) => e.key !== '') || []"
               :selectable="false"
+              :scroll="{ x: '100%' }"
             />
             <MsCodeEditor
               v-show="headerShowType === 'raw'"
               :model-value="headerRawCode"
               theme="MS-text"
-              height="200px"
+              is-adaptive
               :show-full-screen="false"
               :show-theme-change="false"
               read-only
-            >
-              <template #rightTitle>
-                <a-button
-                  type="outline"
-                  class="arco-btn-outline--secondary p-[0_8px]"
-                  size="mini"
-                  @click="copyScript(headerRawCode)"
-                >
-                  <template #icon>
-                    <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" size="12" />
-                  </template>
-                </a-button>
-              </template>
-            </MsCodeEditor>
+            />
             <a-divider type="dashed" :margin="0" class="!mt-[16px] border-[var(--color-text-n8)]" />
           </div>
           <div v-if="previewDetail.query.length > 0" class="detail-item">
             <div class="detail-item-title">
               <div class="detail-item-title-text">Query</div>
-              <a-radio-group v-model:model-value="queryShowType" type="button" size="mini">
-                <a-radio value="table">Table</a-radio>
-                <a-radio value="raw">Raw</a-radio>
-              </a-radio-group>
+              <div class="detail-item-title-right">
+                <a-button
+                  v-show="queryShowType === 'raw'"
+                  type="outline"
+                  class="arco-btn-outline--secondary mr-[12px] p-[0_8px]"
+                  size="small"
+                  @click="copyScript(queryRawCode)"
+                >
+                  <template #icon>
+                    <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" />
+                  </template>
+                  {{ t('common.copy') }}
+                </a-button>
+                <a-radio-group v-model:model-value="queryShowType" type="button" size="mini">
+                  <a-radio value="table">Table</a-radio>
+                  <a-radio value="raw">Raw</a-radio>
+                </a-radio-group>
+              </div>
             </div>
             <MsFormTable
               v-show="queryShowType === 'table'"
               :columns="queryRestColumns"
               :data="previewDetail.query?.filter((e) => e.key !== '') || []"
               :selectable="false"
+              :show-setting="true"
+              :table-key="TableKeyEnum.API_TEST_DEBUG_QUERY"
+              :scroll="{ x: '100%' }"
             />
             <MsCodeEditor
               v-show="queryShowType === 'raw'"
               :model-value="queryRawCode"
               theme="MS-text"
-              height="200px"
+              is-adaptive
               :show-full-screen="false"
               :show-theme-change="false"
               read-only
-            >
-              <template #rightTitle>
-                <a-button
-                  type="outline"
-                  class="arco-btn-outline--secondary p-[0_8px]"
-                  size="mini"
-                  @click="copyScript(queryRawCode)"
-                >
-                  <template #icon>
-                    <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" size="12" />
-                  </template>
-                </a-button>
-              </template>
-            </MsCodeEditor>
+            />
             <a-divider type="dashed" :margin="0" class="!mt-[16px] border-[var(--color-text-n8)]" />
           </div>
           <div v-if="previewDetail.rest.length > 0" class="detail-item">
             <div class="detail-item-title">
               <div class="detail-item-title-text">REST</div>
-              <a-radio-group v-model:model-value="restShowType" type="button" size="mini">
-                <a-radio value="table">Table</a-radio>
-                <a-radio value="raw">Raw</a-radio>
-              </a-radio-group>
+              <div class="detail-item-title-right">
+                <a-button
+                  v-show="restShowType === 'raw'"
+                  type="outline"
+                  class="arco-btn-outline--secondary mr-[12px] p-[0_8px]"
+                  size="small"
+                  @click="copyScript(restRawCode)"
+                >
+                  <template #icon>
+                    <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" />
+                  </template>
+                  {{ t('common.copy') }}
+                </a-button>
+                <a-radio-group v-model:model-value="restShowType" type="button" size="mini">
+                  <a-radio value="table">Table</a-radio>
+                  <a-radio value="raw">Raw</a-radio>
+                </a-radio-group>
+              </div>
             </div>
             <MsFormTable
               v-show="restShowType === 'table'"
               :columns="queryRestColumns?.filter((e) => e.key !== '')"
               :data="previewDetail.rest || []"
               :selectable="false"
+              :show-setting="true"
+              :table-key="TableKeyEnum.API_TEST_DEBUG_REST"
+              :scroll="{ x: '100%' }"
             />
             <MsCodeEditor
               v-show="restShowType === 'raw'"
               :model-value="restRawCode"
               theme="MS-text"
-              height="200px"
+              is-adaptive
               :show-full-screen="false"
               :show-theme-change="false"
               read-only
-            >
-              <template #rightTitle>
-                <a-button
-                  type="outline"
-                  class="arco-btn-outline--secondary p-[0_8px]"
-                  size="mini"
-                  @click="copyScript(restRawCode)"
-                >
-                  <template #icon>
-                    <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" size="12" />
-                  </template>
-                </a-button>
-              </template>
-            </MsCodeEditor>
+            />
             <a-divider type="dashed" :margin="0" class="!mt-[16px] border-[var(--color-text-n8)]" />
           </div>
           <div v-if="previewDetail.body.bodyType !== RequestBodyFormat.NONE" class="detail-item">
@@ -133,15 +151,30 @@
               <div class="detail-item-title-text">
                 {{ `${t('apiTestManagement.requestBody')}-${previewDetail.body.bodyType}` }}
               </div>
-              <!-- <a-radio-group
-                    v-if="previewDetail.body.bodyType !== RequestBodyFormat.NONE"
-                    v-model:model-value="bodyShowType"
-                    type="button"
-                    size="mini"
-                  >
-                    <a-radio value="table">Table</a-radio>
-                    <a-radio value="code">Code</a-radio>
-                  </a-radio-group> -->
+              <div v-if="previewDetail.body.bodyType === RequestBodyFormat.JSON" class="detail-item-title-right">
+                <a-button
+                  v-show="bodyShowType === 'json' || props.isCase"
+                  type="outline"
+                  class="arco-btn-outline--secondary p-[0_8px]"
+                  size="small"
+                  @click="copyScript(bodyCode)"
+                >
+                  <template #icon>
+                    <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" />
+                  </template>
+                  {{ t('common.copy') }}
+                </a-button>
+                <a-radio-group
+                  v-if="!props.isCase"
+                  v-model:model-value="bodyShowType"
+                  type="button"
+                  size="mini"
+                  class="ml-[12px]"
+                >
+                  <a-radio value="schema">Schema</a-radio>
+                  <a-radio value="json">JSON</a-radio>
+                </a-radio-group>
+              </div>
             </div>
             <!--            <div
               v-if="previewDetail.body.bodyType === RequestBodyFormat.NONE"
@@ -158,50 +191,66 @@
               :columns="bodyColumns"
               :data="bodyTableData"
               :selectable="false"
+              :show-setting="true"
+              :table-key="TableKeyEnum.API_TEST_DEBUG_FORM_DATA"
+              :scroll="{ x: '100%' }"
             />
-            <MsCodeEditor
+            <template
               v-else-if="
                 [RequestBodyFormat.JSON, RequestBodyFormat.RAW, RequestBodyFormat.XML].includes(
                   previewDetail.body.bodyType
                 )
               "
-              :model-value="bodyCode"
-              theme="vs"
-              height="200px"
-              :language="bodyCodeLanguage"
-              :show-full-screen="false"
-              :show-theme-change="false"
-              read-only
             >
-              <template #rightTitle>
-                <a-button
-                  type="outline"
-                  class="arco-btn-outline--secondary p-[0_8px]"
-                  size="mini"
-                  @click="copyScript(bodyCode)"
-                >
-                  <template #icon>
-                    <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" size="12" />
-                  </template>
-                </a-button>
-              </template>
-            </MsCodeEditor>
+              <MsJsonSchema
+                v-if="
+                  previewDetail.body.bodyType === RequestBodyFormat.JSON && bodyShowType === 'schema' && !props.isCase
+                "
+                :data="previewDetail.body.jsonBody.jsonSchemaTableData"
+                disabled
+              />
+              <MsCodeEditor
+                v-else
+                :model-value="bodyCode"
+                theme="vs"
+                is-adaptive
+                :language="bodyCodeLanguage"
+                :show-full-screen="false"
+                :show-theme-change="false"
+                read-only
+              />
+            </template>
             <a-divider type="dashed" :margin="0" class="!mt-[16px] border-[var(--color-text-n8)]" />
           </div>
         </template>
         <div v-else class="detail-item">
           <div class="detail-item-title">
             <div class="detail-item-title-text">{{ t('apiTestManagement.requestData') }}</div>
-            <a-radio-group v-model:model-value="pluginShowType" type="button" size="mini">
-              <a-radio value="table">Table</a-radio>
-              <a-radio value="raw">Raw</a-radio>
-            </a-radio-group>
+            <div class="detail-item-title-right">
+              <a-button
+                v-show="pluginShowType === 'raw'"
+                type="outline"
+                class="arco-btn-outline--secondary mr-[12px] p-[0_8px]"
+                size="small"
+                @click="copyScript(pluginRawCode)"
+              >
+                <template #icon>
+                  <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" />
+                </template>
+                {{ t('common.copy') }}
+              </a-button>
+              <a-radio-group v-model:model-value="pluginShowType" type="button" size="mini">
+                <a-radio value="table">Table</a-radio>
+                <a-radio value="raw">Raw</a-radio>
+              </a-radio-group>
+            </div>
           </div>
           <MsFormTable
             v-show="pluginShowType === 'table'"
             :columns="pluginTableColumns"
             :data="pluginTableData?.filter((e) => e.key !== '')"
             :selectable="false"
+            :scroll="{ x: '100%' }"
           />
           <MsCodeEditor
             v-show="pluginShowType === 'raw'"
@@ -211,20 +260,7 @@
             :show-full-screen="false"
             :show-theme-change="false"
             read-only
-          >
-            <template #rightTitle>
-              <a-button
-                type="outline"
-                class="arco-btn-outline--secondary p-[0_8px]"
-                size="mini"
-                @click="copyScript(pluginRawCode)"
-              >
-                <template #icon>
-                  <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" size="12" />
-                </template>
-              </a-button>
-            </template>
-          </MsCodeEditor>
+          />
           <a-divider type="dashed" :margin="0" class="!mt-[16px] border-[var(--color-text-n8)]" />
         </div>
       </div>
@@ -241,13 +277,13 @@
       <template #header>
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-[4px]">
+            <div class="font-medium">{{ t('apiTestManagement.responseContent') }}</div>
             <div v-if="activeDetailKey.includes('response')" class="down-icon">
               <icon-down :size="10" class="block" />
             </div>
             <div v-else class="h-[16px] w-[16px] !rounded-full p-[4px]">
               <icon-right :size="10" class="block" />
             </div>
-            <div class="font-medium">{{ t('apiTestManagement.responseContent') }}</div>
           </div>
           <responseCodeTimeSize v-if="props.isCase" :request-result="previewDetail.response?.requestResults[0]" />
         </div>
@@ -272,36 +308,81 @@
             <div class="detail-item-title-text">
               {{ `${t('apiTestDebug.responseBody')}-${activeResponse?.body.bodyType}` }}
             </div>
+            <div class="detail-item-title-right">
+              <a-button
+                v-show="
+                  !(
+                    activeResponse?.body.bodyType === ResponseBodyFormat.BINARY ||
+                    (activeResponse?.body.bodyType === ResponseBodyFormat.JSON &&
+                      activeResponse.body.jsonBody.enableJsonSchema)
+                  )
+                "
+                type="outline"
+                class="arco-btn-outline--secondary p-[0_8px]"
+                size="small"
+                @click="copyScript(responseCode || '')"
+              >
+                <template #icon>
+                  <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" />
+                </template>
+                {{ t('common.copy') }}
+              </a-button>
+              <div
+                v-if="activeResponse?.body.bodyType === ResponseBodyFormat.JSON"
+                class="ml-[12px] flex items-center gap-[8px]"
+              >
+                <MsButton
+                  type="text"
+                  class="!mr-0"
+                  :class="
+                    activeResponse.body.jsonBody.enableJsonSchema
+                      ? 'font-medium !text-[rgb(var(--primary-5))]'
+                      : '!text-[var(--color-text-4)]'
+                  "
+                  @click="handleChangeJsonType('Schema')"
+                >
+                  Schema
+                </MsButton>
+                <a-divider :margin="0" direction="vertical"></a-divider>
+                <MsButton
+                  type="text"
+                  class="!mr-0"
+                  :class="
+                    !activeResponse.body.jsonBody.enableJsonSchema
+                      ? 'font-medium !text-[rgb(var(--primary-5))]'
+                      : '!text-[var(--color-text-4)]'
+                  "
+                  @click="handleChangeJsonType('Json')"
+                >
+                  Json
+                </MsButton>
+              </div>
+            </div>
           </div>
           <MsFormTable
             v-if="activeResponse?.body.bodyType === ResponseBodyFormat.BINARY"
             :columns="responseBodyColumns"
             :data="responseBodyTableData"
             :selectable="false"
+            :scroll="{ x: '100%' }"
+          />
+          <MsJsonSchema
+            v-else-if="
+              activeResponse?.body.bodyType === ResponseBodyFormat.JSON && activeResponse.body.jsonBody.enableJsonSchema
+            "
+            :data="activeResponse.body.jsonBody.jsonSchemaTableData"
+            disabled
           />
           <MsCodeEditor
             v-else
             :model-value="responseCode"
             theme="vs"
-            height="200px"
+            is-adaptive
             :language="responseCodeLanguage"
             :show-full-screen="false"
             :show-theme-change="false"
             read-only
-          >
-            <template #rightTitle>
-              <a-button
-                type="outline"
-                class="arco-btn-outline--secondary p-[0_8px]"
-                size="mini"
-                @click="copyScript(responseCode || '')"
-              >
-                <template #icon>
-                  <MsIcon type="icon-icon_copy_outlined" class="text-var(--color-text-4)" size="12" />
-                </template>
-              </a-button>
-            </template>
-          </MsCodeEditor>
+          />
         </div>
         <div v-if="activeResponse?.headers && activeResponse?.headers.length > 0" class="detail-item">
           <div class="detail-item-title">
@@ -313,6 +394,7 @@
             :columns="responseHeaderColumns"
             :data="activeResponse?.headers?.filter((e) => e.key !== '') || []"
             :selectable="false"
+            :scroll="{ x: '100%' }"
           />
         </div>
       </template>
@@ -323,7 +405,7 @@
           "
           class="h-full"
         >
-          <result
+          <Result
             v-model:active-tab="previewDetail.responseActiveTab"
             :request-result="previewDetail.response?.requestResults[0]"
             :console="previewDetail.response?.console"
@@ -344,21 +426,28 @@
   import { Message } from '@arco-design/web-vue';
   import { cloneDeep } from 'lodash-es';
 
+  import MsButton from '@/components/pure/ms-button/index.vue';
   import MsCodeEditor from '@/components/pure/ms-code-editor/index.vue';
   import { LanguageEnum } from '@/components/pure/ms-code-editor/types';
   import MsEditableTab from '@/components/pure/ms-editable-tab/index.vue';
   import { TabItem } from '@/components/pure/ms-editable-tab/types';
   import MsFormTable, { FormTableColumn } from '@/components/pure/ms-form-table/index.vue';
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
+  import MsJsonSchema from '@/components/pure/ms-json-schema/index.vue';
+  import { parseSchemaToJsonSchemaTableData } from '@/components/pure/ms-json-schema/utils';
   import { ResponseItem } from '@/views/api-test/components/requestComposition/response/edit.vue';
   import responseCodeTimeSize from '@/views/api-test/components/requestComposition/response/responseCodeTimeSize.vue';
-  import result from '@/views/api-test/components/requestComposition/response/result.vue';
+  import Result from '@/views/api-test/components/requestComposition/response/result.vue';
+  import ApiChangeTag from '@/views/api-test/management/components/management/case/apiChangeTag.vue';
 
   import { getPluginScript } from '@/api/modules/api-test/common';
+  import { getDocSharePluginScript } from '@/api/modules/api-test/management';
   import { useI18n } from '@/hooks/useI18n';
+  import { useAppStore } from '@/store';
 
   import { PluginConfig, ProtocolItem } from '@/models/apiTest/common';
   import { RequestBodyFormat, RequestParamsType, ResponseBodyFormat } from '@/enums/apiEnum';
+  import { TableKeyEnum } from '@/enums/tableEnum';
 
   import type { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
 
@@ -370,10 +459,12 @@
   }>();
   const emit = defineEmits<{
     (e: 'execute', val: 'localExec' | 'serverExec'): void;
+    (e: 'showDiff'): void;
   }>();
 
   const { t } = useI18n();
   const { copy, isSupported } = useClipboard({ legacy: true });
+  const appStore = useAppStore();
 
   const previewDetail = ref<RequestParam>(props.detail);
   const activeResponse = ref<TabItem & ResponseItem>();
@@ -417,12 +508,16 @@
     return '';
   });
   const pluginError = ref(false);
+  const docShareId = inject<string>('docShareId', '');
   async function initPluginScript(protocol: string) {
-    const pluginId = props.protocols.find((e) => e.protocol === protocol)?.pluginId;
-    if (!pluginId) {
-      Message.warning(t('apiTestDebug.noPluginTip'));
-      pluginError.value = true;
-      return;
+    let pluginId: string = '';
+    if (!docShareId) {
+      pluginId = props.protocols.find((e) => e.protocol === protocol)?.pluginId ?? '';
+      if (!pluginId) {
+        Message.warning(t('apiTestDebug.noPluginTip'));
+        pluginError.value = true;
+        return;
+      }
     }
     pluginError.value = false;
     if (pluginScriptMap.value[protocol] !== undefined) {
@@ -431,7 +526,12 @@
     }
     try {
       pluginLoading.value = true;
-      const res = await getPluginScript(pluginId);
+      let res;
+      if (docShareId) {
+        res = await getDocSharePluginScript(previewDetail.value.id, appStore.currentOrgId);
+      } else {
+        res = await getPluginScript(pluginId);
+      }
       pluginScriptMap.value[protocol] = res;
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -494,6 +594,7 @@
       dataIndex: 'description',
       inputType: 'text',
       showTooltip: true,
+      width: 300,
     },
   ];
   const headerShowType = ref('table');
@@ -510,34 +611,37 @@
       dataIndex: 'key',
       inputType: 'text',
       width: 220,
-    },
-    {
-      title: 'apiTestDebug.paramType',
-      dataIndex: 'paramType',
-      inputType: 'text',
-      width: 96,
-    },
-    {
-      title: 'apiTestManagement.paramVal',
-      dataIndex: 'value',
-      inputType: 'text',
-      width: 220,
+      columnSelectorDisabled: true,
     },
     {
       title: 'apiTestManagement.required',
       dataIndex: 'required',
       slotName: 'required',
       inputType: 'text',
+      columnSelectorDisabled: true,
       valueFormat: (record) => {
         return record.required ? t('common.yes') : t('common.no');
       },
       width: 68,
     },
     {
+      title: 'apiTestDebug.paramType',
+      dataIndex: 'paramType',
+      inputType: 'text',
+      width: 96,
+      columnSelectorDisabled: true,
+    },
+    {
+      title: 'apiTestManagement.paramVal',
+      dataIndex: 'value',
+      inputType: 'text',
+    },
+    {
       title: 'apiTestDebug.paramLengthRange',
       dataIndex: 'lengthRange',
       slotName: 'lengthRange',
       inputType: 'text',
+      showInTable: false,
       valueFormat: (record) => {
         return [null, undefined].includes(record.minLength) && [null, undefined].includes(record.maxLength)
           ? '-'
@@ -550,6 +654,7 @@
       dataIndex: 'encode',
       slotName: 'encode',
       inputType: 'text',
+      showInTable: false,
       valueFormat: (record) => {
         return record.encode ? t('common.yes') : t('common.no');
       },
@@ -560,6 +665,13 @@
       dataIndex: 'description',
       inputType: 'text',
       showTooltip: true,
+    },
+    {
+      title: '',
+      dataIndex: 'operation',
+      slotName: 'operation',
+      fixed: 'right',
+      width: 100,
     },
   ];
   const queryShowType = ref('table');
@@ -582,35 +694,38 @@
           dataIndex: 'key',
           inputType: 'text',
           width: 220,
-        },
-        {
-          title: 'apiTestManagement.paramsType',
-          dataIndex: 'paramType',
-          inputType: 'text',
-          width: 96,
-        },
-        {
-          title: 'apiTestManagement.paramVal',
-          dataIndex: 'value',
-          inputType: 'text',
-          showTooltip: true,
-          width: 220,
+          columnSelectorDisabled: true,
         },
         {
           title: 'apiTestManagement.required',
           dataIndex: 'required',
           slotName: 'required',
           inputType: 'text',
+          columnSelectorDisabled: true,
           valueFormat: (record) => {
             return record.required ? t('common.yes') : t('common.no');
           },
           width: 68,
         },
         {
+          title: 'apiTestManagement.paramsType',
+          dataIndex: 'paramType',
+          inputType: 'text',
+          width: 96,
+          columnSelectorDisabled: true,
+        },
+        {
+          title: 'apiTestManagement.paramVal',
+          dataIndex: 'value',
+          inputType: 'text',
+          showTooltip: true,
+        },
+        {
           title: 'apiTestDebug.paramLengthRange',
           dataIndex: 'lengthRange',
           slotName: 'lengthRange',
           inputType: 'text',
+          showInTable: false,
           valueFormat: (record) => {
             return [null, undefined].includes(record.minLength) && [null, undefined].includes(record.maxLength)
               ? '-'
@@ -619,20 +734,17 @@
           width: 110,
         },
         {
-          title: 'apiTestDebug.encode',
-          dataIndex: 'encode',
-          slotName: 'encode',
-          inputType: 'text',
-          valueFormat: (record) => {
-            return record.encode ? t('common.yes') : t('common.no');
-          },
-          width: 68,
-        },
-        {
           title: 'common.desc',
           dataIndex: 'description',
           inputType: 'text',
           showTooltip: true,
+        },
+        {
+          title: '',
+          dataIndex: 'operation',
+          slotName: 'operation',
+          fixed: 'right',
+          width: 100,
         },
       ];
     }
@@ -651,7 +763,7 @@
       },
     ];
   });
-  // const bodyShowType = ref('table');
+  const bodyShowType = ref('schema');
   const bodyTableData = computed(() => {
     switch (previewDetail.value.body.bodyType) {
       case RequestBodyFormat.FORM_DATA:
@@ -688,6 +800,17 @@
         return previewDetail.value.body.xmlBody?.value;
       default:
         return '';
+    }
+  });
+  watchEffect(() => {
+    if (previewDetail.value.body.jsonBody?.jsonSchema) {
+      const { result } = parseSchemaToJsonSchemaTableData(previewDetail.value.body.jsonBody.jsonSchema);
+      previewDetail.value.body.jsonBody.jsonSchemaTableData = result;
+    } else if (
+      !previewDetail.value.body.jsonBody.jsonSchemaTableData ||
+      previewDetail.value.body.jsonBody.jsonSchemaTableData.length === 0
+    ) {
+      previewDetail.value.body.jsonBody.jsonSchemaTableData = [];
     }
   });
   const bodyCodeLanguage = computed(() => {
@@ -760,11 +883,32 @@
         ]
       : [];
   });
+
+  watchEffect(() => {
+    if (activeResponse.value) {
+      if (activeResponse.value.body.jsonBody.jsonSchema) {
+        const { result } = parseSchemaToJsonSchemaTableData(activeResponse.value.body.jsonBody.jsonSchema);
+        activeResponse.value.body.jsonBody.jsonSchemaTableData = result;
+      } else {
+        activeResponse.value.body.jsonBody.jsonSchemaTableData = [];
+      }
+    }
+  });
+  function handleChangeJsonType(type: 'Schema' | 'Json') {
+    if (activeResponse.value) {
+      activeResponse.value.body.jsonBody.enableJsonSchema = type === 'Schema';
+    }
+  }
+
+  // 查看diff对比
+  function showDiffDrawer() {
+    emit('showDiff');
+  }
 </script>
 
 <style lang="less" scoped>
   .down-icon {
-    padding: 4px;
+    padding: 3px;
     width: 16px;
     height: 16px;
     border-radius: 50%;
@@ -782,9 +926,8 @@
       .arco-collapse-item-header-title {
         @apply block w-full;
 
-        padding: 8px 16px;
+        padding: 8px 0;
         border-radius: var(--border-radius-small);
-        background-color: var(--color-text-n9);
       }
     }
     .detail-collapse-item {
@@ -794,7 +937,7 @@
   .detail-item {
     padding-top: 16px;
     .detail-item-title {
-      @apply flex items-center;
+      @apply flex items-center justify-between;
 
       margin-bottom: 8px;
       gap: 16px;
@@ -803,6 +946,12 @@
 
         color: var(--color-text-1);
       }
+      .detail-item-title-right {
+        @apply flex items-center;
+      }
+    }
+    :deep(.ms-code-editor-container) {
+      padding: 0;
     }
   }
   .response-tab {
@@ -817,5 +966,11 @@
       background-size: contain;
       box-shadow: 0 0 7px 0 rgb(15 0 78 / 9%);
     }
+  }
+  :deep(.arco-table-td-content) {
+    padding: 5px 8px;
+  }
+  :deep(.ms-json-schema) .arco-table-td-content {
+    padding: 0;
   }
 </style>

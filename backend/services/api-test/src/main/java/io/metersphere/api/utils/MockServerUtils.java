@@ -6,6 +6,7 @@ import io.metersphere.api.dto.request.http.body.Body;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.LogUtils;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.Part;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.shiro.web.servlet.ShiroHttpServletRequest;
@@ -13,9 +14,9 @@ import org.springframework.http.MediaType;
 import org.springframework.web.multipart.support.StandardMultipartHttpServletRequest;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
@@ -45,12 +46,17 @@ public class MockServerUtils {
         String requestPostString = null;
 
         try {
+            if (request instanceof HttpServletRequestWrapper requestWrapper) {
+                request = (HttpServletRequest) requestWrapper.getRequest();
+            }
             if (request instanceof ShiroHttpServletRequest shiroHttpServletRequest) {
-                InputStream inputStream = shiroHttpServletRequest.getRequest().getInputStream();
-                if (inputStream != null && inputStream.available() > 0 && StringUtils.equals(request.getContentType(), MediaType.APPLICATION_OCTET_STREAM_VALUE)) {
+                String contentType = StringUtils.isBlank(request.getContentType()) ? StringUtils.EMPTY : request.getContentType();
+                List<String> contentTypeLists = List.of(MediaType.APPLICATION_JSON_VALUE, MediaType.APPLICATION_XML_VALUE, MediaType.TEXT_XML_VALUE, MediaType.TEXT_PLAIN_VALUE);
+                if (StringUtils.equals(contentType, MediaType.APPLICATION_OCTET_STREAM_VALUE)) {
+                    InputStream inputStream = shiroHttpServletRequest.getRequest().getInputStream();
                     byte[] binaryParams = inputStream.readAllBytes();
                     requestParam.setBinaryParamsObj(binaryParams);
-                } else if (StringUtils.equals(request.getContentType(), MediaType.APPLICATION_JSON_VALUE)) {
+                } else if (contentTypeLists.contains(contentType)) {
                     String inputLine;
                     StringBuilder receiveData = new StringBuilder();
                     try (BufferedReader in = new BufferedReader(new InputStreamReader(
@@ -60,15 +66,32 @@ public class MockServerUtils {
                         }
                     }
                     requestPostString = receiveData.toString();
+                } else if (StringUtils.equals(contentType, MediaType.APPLICATION_FORM_URLENCODED_VALUE)) {
+                    Map<String, String[]> parameterMap = request.getParameterMap();
+                    LinkedHashMap<String, String> bodyParams = new LinkedHashMap<>();
+                    if (parameterMap != null && !parameterMap.isEmpty()) {
+                        for (Map.Entry<String, String[]> entry : parameterMap.entrySet()) {
+                            String key = entry.getKey();
+                            String[] value = entry.getValue();
+                            if (value != null && value.length > 0) {
+                                String valueStr = value[0];
+                                if (StringUtils.isNotEmpty(valueStr)) {
+                                    bodyParams.put(key, valueStr);
+                                }
+                            }
+                        }
+                        requestParam.setBodyParamsObj(bodyParams);
+                    }
                 }
             }
             String queryString = request.getQueryString();
+
             if (StringUtils.isNotEmpty(queryString)) {
                 String[] queryParamArr = queryString.split("&");
                 for (String queryParam : queryParamArr) {
                     String[] queryParamKV = queryParam.split("=");
                     if (queryParamKV.length == 2) {
-                        queryParamsMap.put(queryParamKV[0], queryParamKV[1]);
+                        queryParamsMap.put(queryParamKV[0], URLDecoder.decode(queryParamKV[1], StandardCharsets.UTF_8));
                     }
                 }
             }
@@ -142,26 +165,11 @@ public class MockServerUtils {
                     if (sendParamArr.length > i) {
                         value = sendParamArr[i];
                     }
-                    restParams.put(param, value);
+                    restParams.put(param, URLDecoder.decode(value, StandardCharsets.UTF_8));
                 }
             }
         }
         return restParams;
-    }
-
-    private static String getRequestStr(HttpServletRequest request) {
-        String inputLine;
-        // 接收到的数据
-        StringBuilder receiveData = new StringBuilder();
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(
-                request.getInputStream(), StandardCharsets.UTF_8))) {
-            while ((inputLine = in.readLine()) != null) {
-                receiveData.append(inputLine);
-            }
-        } catch (IOException ignored) {
-        }
-
-        return receiveData.toString();
     }
 
     public static String getUrlSuffix(String mockUrlInfo, HttpServletRequest request) {

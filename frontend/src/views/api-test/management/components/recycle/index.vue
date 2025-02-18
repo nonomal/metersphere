@@ -28,14 +28,14 @@
     :module-tree="props.moduleTree"
     :active-module="props.activeModule"
     :offspring-ids="props.offspringIds"
-    :protocol="protocol"
+    :selected-protocols="props.selectedProtocols"
   />
   <api-case
     v-show="currentTab === 'case'"
     :member-options="memberOptions"
     :active-module="props.activeModule"
     :offspring-ids="props.offspringIds"
-    :protocol="protocol"
+    :selected-protocols="props.selectedProtocols"
   ></api-case>
 </template>
 
@@ -55,7 +55,7 @@
   const props = defineProps<{
     activeModule: string;
     offspringIds: string[];
-    protocol: string;
+    selectedProtocols: string[]; // 查看的协议类型
     moduleTree: ModuleTreeNode[]; // 模块树
   }>();
 

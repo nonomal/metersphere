@@ -5,18 +5,16 @@
       t('project.environmental.httpNoWarning')
     }}</span>
   </div>
-  <div class="grid grid-cols-6">
-    <div class="col-start-1">
-      <a-button
-        v-if="!store.currentEnvDetailInfo.mock"
-        v-permission="['PROJECT_ENVIRONMENT:READ+UPDATE']"
-        type="outline"
-        @click="handleAddHttp"
-        >{{ t('project.environmental.addHttp') }}</a-button
-      >
-    </div>
+  <div class="flex items-center justify-between">
+    <a-button
+      v-if="!store.currentEnvDetailInfo.mock"
+      v-permission="['PROJECT_ENVIRONMENT:READ+UPDATE']"
+      type="outline"
+      @click="handleAddHttp"
+      >{{ t('project.environmental.addHttp') }}</a-button
+    >
 
-    <div class="col-span-2 col-end-7 flex flex-row gap-[8px]">
+    <div class="flex items-center justify-end gap-[8px]">
       <a-input-number
         v-model:model-value="form.requestTimeout"
         :min="0"
@@ -24,6 +22,7 @@
         :precision="0"
         :max="600000"
         :disabled="isDisabled"
+        class="w-[180px]"
       >
         <template #prefix>
           <span class="text-[var(--color-text-3)]">{{ t('project.environmental.http.linkTimeOut') }}</span>
@@ -36,6 +35,7 @@
         :max="600000"
         :precision="0"
         :disabled="isDisabled"
+        class="w-[180px]"
       >
         <template #prefix>
           <span class="text-[var(--color-text-3)]">{{ t('project.environmental.http.resTimeOut') }}</span>
@@ -91,13 +91,7 @@
       </div>
     </template>
   </MsBaseTable>
-  <AddHttpDrawer
-    v-model:visible="addVisible"
-    :module-tree="moduleTree"
-    :is-copy="isCopy"
-    :current-id="httpId"
-    @close="addVisible = false"
-  />
+  <AddHttpDrawer v-model:visible="addVisible" :is-copy="isCopy" :current-id="httpId" @close="addVisible = false" />
 </template>
 
 <script lang="ts" async setup>
@@ -116,7 +110,7 @@
   import useVisit from '@/hooks/useVisit';
   import { useAppStore, useTableStore } from '@/store';
   import useProjectEnvStore from '@/store/modules/setting/useProjectEnvStore';
-  import { findNodeNames } from '@/utils';
+  import { findNodeByKey, findNodeNames } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { BugListItem } from '@/models/bug-management';
@@ -143,7 +137,7 @@
       columnSelectorDisabled: true,
     },
     {
-      title: 'project.environmental.http.desc',
+      title: 'common.desc',
       dataIndex: 'description',
       showDrag: true,
       showTooltip: true,
@@ -178,7 +172,7 @@
     noDisable: true,
     showSetting: true,
     showPagination: false,
-    enableDrag: true,
+    draggable: { type: 'handle' },
     showMode: false,
     heightUsed: 644,
     debug: true,
@@ -317,7 +311,17 @@
 
   function getModuleName(record: HttpForm) {
     if (record.type === 'MODULE') {
-      const moduleIds: string[] = record.moduleMatchRule.modules.map((item) => item.moduleId);
+      const moduleIds: string[] = [];
+      // 勾了包含子模块的只显示父模块
+      record.moduleMatchRule.modules.forEach((item) => {
+        const realNode = findNodeByKey<ModuleTreeNode>(moduleTree.value, item.moduleId, 'id');
+        const notShow = record.moduleMatchRule.modules.find(
+          (i) => i.moduleId === realNode?.parentId && i.containChildModule
+        );
+        if (!notShow) {
+          moduleIds.push(item.moduleId);
+        }
+      });
       const result = findNodeNames(moduleTree.value, moduleIds);
       return result.join(',');
     }

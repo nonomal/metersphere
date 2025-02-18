@@ -1,13 +1,21 @@
 <template>
   <div class="preview">
     <div class="px-[18px] pt-[16px]">
-      <MsDetailCard
-        :title="`【${previewDetail.num}】${previewDetail.name}`"
-        :description="description"
-        :simple-show-count="4"
-      >
+      <MsDetailCard :title="`[${previewDetail.num}] ${previewDetail.name}`" :description="description">
+        <template #titlePrefix>
+          <apiStatus :status="previewDetail.status" size="small" />
+          <apiMethodName :method="previewDetail.method as RequestMethods" tag-size="small" is-tag />
+        </template>
         <template #titleAppend>
-          <a-tooltip :content="t(previewDetail.follow ? 'common.forked' : 'common.notForked')">
+          <a-tooltip v-if="!docShareId" :content="t('report.detail.api.copyLink')">
+            <MsIcon
+              type="icon-icon_unlink"
+              class="cursor-pointer text-[var(--color-text-4)]"
+              :size="16"
+              @click="share"
+            />
+          </a-tooltip>
+          <a-tooltip v-if="!docShareId" :content="t(previewDetail.follow ? 'common.forked' : 'common.notForked')">
             <MsIcon
               v-permission="['PROJECT_API_DEFINITION:READ+UPDATE']"
               :loading="followLoading"
@@ -18,22 +26,21 @@
               @click="toggleFollowReview"
             />
           </a-tooltip>
-          <a-tooltip :content="t('report.detail.api.copyLink')">
+          <a-tooltip v-if="docShareId && shareDetailInfo?.allowExport" :content="t('common.export')">
             <MsIcon
-              type="icon-icon_share1"
+              type="icon-icon_top-align_outlined"
               class="cursor-pointer text-[var(--color-text-4)]"
               :size="16"
-              @click="share"
+              @click="exportShare"
             />
           </a-tooltip>
-          <apiStatus :status="previewDetail.status" size="small" />
-        </template>
-        <template #type="{ value }">
-          <apiMethodName :method="value as RequestMethods" tag-size="small" is-tag />
         </template>
       </MsDetailCard>
     </div>
-    <a-tabs v-model:active-key="activeKey" animation lazy-load>
+    <div v-if="docShareId" class="px-[16px]">
+      <detailTab :detail="previewDetail" :protocols="props.protocols" />
+    </div>
+    <a-tabs v-else v-model:active-key="activeKey" animation lazy-load>
       <a-tab-pane key="detail" :title="t('apiTestManagement.detail')" class="px-[18px] py-[16px]">
         <detailTab :detail="previewDetail" :protocols="props.protocols" />
       </a-tab-pane>
@@ -68,6 +75,7 @@
   import { toggleFollowDefinition } from '@/api/modules/api-test/management';
 
   import { ProtocolItem } from '@/models/apiTest/common';
+  import { ShareDetailType } from '@/models/apiTest/management';
   import { RequestMethods } from '@/enums/apiEnum';
 
   import { getValidRequestTableParams } from '@/views/api-test/components/utils';
@@ -76,12 +84,14 @@
     detail: RequestParam;
     protocols: ProtocolItem[];
   }>();
-  const emit = defineEmits(['updateFollow']);
+  const emit = defineEmits(['updateFollow', 'exportShare']);
 
   const { copy, isSupported } = useClipboard({ legacy: true });
   const { t } = useI18n();
 
   const previewDetail = ref<RequestParam>(cloneDeep(props.detail));
+  const docShareId = inject<string>('docShareId', '');
+  const shareDetailInfo = inject<Ref<ShareDetailType>>('shareDetailInfo');
 
   watch(
     () => props.detail.id,
@@ -112,11 +122,6 @@
 
   const description = computed(() => [
     {
-      key: 'type',
-      locale: 'apiTestManagement.apiType',
-      value: previewDetail.value.method,
-    },
-    {
       key: 'path',
       locale: 'apiTestManagement.path',
       value: previewDetail.value.url || previewDetail.value.path,
@@ -130,12 +135,11 @@
       key: 'description',
       locale: 'common.desc',
       value: previewDetail.value.description,
-      width: '100%',
     },
     {
       key: 'belongModule',
       locale: 'apiTestManagement.belongModule',
-      value: previewDetail.value.path,
+      value: previewDetail.value.moduleName,
     },
     {
       key: 'creator',
@@ -184,14 +188,37 @@
   }
 
   const activeKey = ref('detail');
+  // 导出分享
+  function exportShare() {
+    emit('exportShare');
+  }
 </script>
 
 <style lang="less" scoped>
   .preview {
     @apply h-full w-full overflow-y-auto overflow-x-hidden;
     .ms-scroll-bar();
+    :deep(.arco-tabs-nav) {
+      border-bottom: 1px solid var(--color-text-n8);
+    }
     :deep(.arco-tabs-pane) {
       @apply h-auto;
+    }
+    :deep(.arco-tabs-content) {
+      @apply pt-0;
+    }
+  }
+  :deep(.ms-detail-card) {
+    gap: 12px;
+    .ms-detail-card-desc {
+      row-gap: 8px;
+      .ms-detail-card-desc-item {
+        width: auto;
+        max-width: 300px;
+      }
+      .ms-detail-card-desc-tag {
+        max-width: fit-content;
+      }
     }
   }
 </style>

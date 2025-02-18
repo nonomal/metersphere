@@ -1,37 +1,40 @@
 <template>
   <div :class="['p-[0_16px_8px_16px]', props.class]">
-    <div class="mb-[16px] flex items-center justify-end">
-      <div class="flex items-center gap-[8px]">
-        <a-input-search
-          v-model:model-value="keyword"
-          :placeholder="t('apiTestManagement.searchPlaceholder')"
-          allow-clear
-          class="mr-[8px] w-[240px]"
-          @search="loadApiList(false)"
-          @press-enter="loadApiList(false)"
-          @clear="loadApiList(false)"
+    <MsAdvanceFilter
+      ref="msAdvanceFilterRef"
+      v-model:keyword="keyword"
+      :view-type="ViewTypeEnum.API_DEFINITION"
+      :filter-config-list="filterConfigList"
+      :search-placeholder="t('apiTestManagement.searchPlaceholder')"
+      @keyword-search="loadApiList(false)"
+      @adv-search="handleAdvSearch"
+      @refresh="loadApiList(false)"
+    >
+      <template #right>
+        <ShareButton
+          v-if="hasAnyPermission(['PROJECT_API_DEFINITION:READ+SHARE'])"
+          ref="shareButtonRef"
+          @create="createShare"
+          @show-share-list="showShareList"
         />
-        <a-button type="outline" class="arco-btn-outline--secondary !p-[8px]" @click="loadApiList(false)">
-          <template #icon>
-            <icon-refresh class="text-[var(--color-text-4)]" />
-          </template>
-        </a-button>
-      </div>
-    </div>
+      </template>
+    </MsAdvanceFilter>
     <ms-base-table
       ref="apiTableRef"
       v-bind="propsRes"
       :action-config="batchActions"
       :first-column-width="44"
       no-disable
+      class="mt-[16px]"
+      :not-show-table-filter="isAdvancedSearchMode"
       filter-icon-align-left
       v-on="propsEvent"
       @selected-change="handleTableSelect"
       @batch-action="handleTableBatch"
       @drag-change="handleTableDragSort"
-      @module-change="loadApiList(false)"
+      @filter-change="filterChange"
     >
-      <template v-if="props.protocol === 'HTTP'" #[FilterSlotNameEnum.API_TEST_API_REQUEST_METHODS]="{ filterContent }">
+      <template #[FilterSlotNameEnum.API_TEST_API_REQUEST_METHODS]="{ filterContent }">
         <apiMethodName :method="filterContent.value" />
       </template>
       <template #[FilterSlotNameEnum.API_TEST_API_REQUEST_API_STATUS]="{ filterContent }">
@@ -40,22 +43,11 @@
       <template #num="{ record }">
         <MsButton type="text" @click="openApiTab(record)">{{ record.num }}</MsButton>
       </template>
+      <template #protocol="{ record }">
+        <apiMethodName :method="record.protocol" />
+      </template>
       <template #method="{ record }">
-        <a-select
-          v-if="props.protocol === 'HTTP' && hasAnyPermission(['PROJECT_API_DEFINITION:READ+UPDATE'])"
-          v-model:model-value="record.method"
-          class="param-input w-full"
-          size="mini"
-          @change="() => handleMethodChange(record)"
-        >
-          <template #label>
-            <apiMethodName :method="record.method" is-tag />
-          </template>
-          <a-option v-for="item of Object.values(RequestMethods)" :key="item" :value="item">
-            <apiMethodName :method="item" is-tag />
-          </a-option>
-        </a-select>
-        <apiMethodName v-else :method="record.method" is-tag />
+        <apiMethodName :method="record.method" is-tag />
       </template>
       <template #caseTotal="{ record }">
         {{ record.caseTotal }}
@@ -145,18 +137,31 @@
         :rules="[{ required: true, message: t('apiTestManagement.attrRequired') }]"
         asterisk-position="end"
       >
+        <template v-if="batchForm.attr === 'method'" #extra>{{ t('apiTestManagement.requestTypeTip') }}</template>
         <a-select v-model="batchForm.attr" :placeholder="t('common.pleaseSelect')">
-          <a-option v-for="item of attrOptions" :key="item.value" :value="item.value">
+          <a-option v-for="item of fullAttrs" :key="item.value" :value="item.value">
             {{ t(item.name) }}
           </a-option>
         </a-select>
       </a-form-item>
       <a-form-item
         v-if="batchForm.attr === 'tags'"
+        :class="`${selectedTagType === TagUpdateTypeEnum.CLEAR ? 'mb-0' : 'mb-[16px]'}`"
+        field="type"
+        :label="t('common.type')"
+      >
+        <a-radio-group v-model:model-value="selectedTagType" size="small">
+          <a-radio :value="TagUpdateTypeEnum.UPDATE"> {{ t('common.update') }}</a-radio>
+          <a-radio :value="TagUpdateTypeEnum.APPEND"> {{ t('caseManagement.featureCase.appendTag') }}</a-radio>
+          <a-radio :value="TagUpdateTypeEnum.CLEAR">{{ t('common.clear') }}</a-radio>
+        </a-radio-group>
+      </a-form-item>
+      <a-form-item
+        v-if="batchForm.attr === 'tags' && selectedTagType !== TagUpdateTypeEnum.CLEAR"
         field="values"
-        :label="t('apiTestManagement.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :validate-trigger="['blur', 'input']"
-        :rules="[{ required: true, message: t('apiTestManagement.valueRequired') }]"
+        :rules="[{ required: true, message: t('common.inputPleaseEnterTags') }]"
         asterisk-position="end"
         class="mb-0"
         required
@@ -166,13 +171,15 @@
           placeholder="common.tagsInputPlaceholder"
           allow-clear
           unique-value
+          empty-priority-highest
           retain-input-value
         />
+        <div class="text-[12px] leading-[20px] text-[var(--color-text-4)]">{{ t('ms.tagsInput.tagLimitTip') }}</div>
       </a-form-item>
       <a-form-item
-        v-else
+        v-if="batchForm.attr !== 'tags' && selectedTagType !== TagUpdateTypeEnum.CLEAR"
         field="value"
-        :label="t('apiTestManagement.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :rules="[{ required: true, message: t('apiTestManagement.valueRequired') }]"
         asterisk-position="end"
         class="mb-0"
@@ -185,32 +192,13 @@
           :disabled="batchForm.attr === ''"
         >
           <a-option v-for="item of valueOptions" :key="item.value" :value="item.value">
-            {{ t(item.name) }}
+            {{ item.name }}
           </a-option>
         </a-select>
       </a-form-item>
     </a-form>
     <template #footer>
-      <div class="flex" :class="[batchForm.attr === 'tags' ? 'justify-between' : 'justify-end']">
-        <div
-          v-if="batchForm.attr === 'tags'"
-          class="flex flex-row items-center justify-center"
-          style="padding-top: 10px"
-        >
-          <a-switch v-model="batchForm.append" class="mr-1" size="small" type="line" />
-          <span class="flex items-center">
-            <span class="mr-1">{{ t('caseManagement.featureCase.appendTag') }}</span>
-            <span class="mt-[2px]">
-              <a-tooltip>
-                <IconQuestionCircle class="h-[16px] w-[16px] text-[rgb(var(--primary-5))]" />
-                <template #content>
-                  <div>{{ t('caseManagement.featureCase.enableTags') }}</div>
-                  <div>{{ t('caseManagement.featureCase.closeTags') }}</div>
-                </template>
-              </a-tooltip>
-            </span>
-          </span>
-        </div>
+      <div class="flex justify-end">
         <div class="flex justify-end">
           <a-button type="secondary" :disabled="batchUpdateLoading" @click="cancelBatch">
             {{ t('common.cancel') }}
@@ -254,18 +242,40 @@
     </template>
     <moduleTree
       v-if="moveModalVisible"
+      ref="moveModuleTreeRef"
       :is-expand-all="true"
       :is-modal="true"
       :active-module="props.activeModule"
       @folder-node-select="folderNodeSelect"
     />
   </a-modal>
+  <ApiExportModal
+    v-model:visible="showExportModal"
+    :batch-params="batchParams"
+    :condition-params="getBatchConditionParams"
+    :sorter="propsRes.sorter || {}"
+  />
+  <CreateShareModal
+    v-model:visible="showShareModal"
+    :record="editRecord"
+    @close="cancelHandler"
+    @load-list="loadShareList"
+  />
+  <ShareListDrawer
+    ref="shareListRef"
+    v-model:visible="showShareListDrawer"
+    @edit-or-create="editHandler"
+    @load-list="shareButtonRef?.initShareList()"
+  />
 </template>
 
 <script setup lang="ts">
+  import { useRoute } from 'vue-router';
   import { FormInstance, Message } from '@arco-design/web-vue';
   import dayjs from 'dayjs';
 
+  import MsAdvanceFilter from '@/components/pure/ms-advance-filter/index.vue';
+  import { FilterFormItem, FilterResult } from '@/components/pure/ms-advance-filter/type';
   import MsButton from '@/components/pure/ms-button/index.vue';
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import type { BatchActionParams, BatchActionQueryParams, MsTableColumn } from '@/components/pure/ms-table/type';
@@ -274,9 +284,13 @@
   import { ActionsItem } from '@/components/pure/ms-table-more-action/types';
   import MsTagsInput from '@/components/pure/ms-tags-input/index.vue';
   import { MsTreeNodeData } from '@/components/business/ms-tree/types';
+  import CreateShareModal from './createShareModal.vue';
+  import ShareButton from './shareButton.vue';
+  import ShareListDrawer from './shareListDrawer.vue';
   import apiMethodName from '@/views/api-test/components/apiMethodName.vue';
   import apiMethodSelect from '@/views/api-test/components/apiMethodSelect.vue';
   import apiStatus from '@/views/api-test/components/apiStatus.vue';
+  import ApiExportModal from '@/views/api-test/management/components/management/api/apiExportModal.vue';
   import moduleTree from '@/views/api-test/management/components/moduleTree.vue';
 
   import {
@@ -288,33 +302,49 @@
     sortDefinition,
     updateDefinition,
   } from '@/api/modules/api-test/management';
+  import { NAV_NAVIGATION } from '@/config/workbench';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import useTableStore from '@/hooks/useTableStore';
   import useAppStore from '@/store/modules/app';
-  import { characterLimit } from '@/utils';
+  import useCacheStore from '@/store/modules/cache/cache';
+  import { characterLimit, operationWidth } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
+  import { ProtocolItem } from '@/models/apiTest/common';
+  import type { ShareDetail } from '@/models/apiTest/management';
   import { ApiDefinitionDetail, ApiDefinitionGetModuleParams } from '@/models/apiTest/management';
-  import { DragSortParams } from '@/models/common';
+  import { DragSortParams, ModuleTreeNode } from '@/models/common';
+  import { FilterType, ViewTypeEnum } from '@/enums/advancedFilterEnum';
   import { RequestDefinitionStatus, RequestMethods } from '@/enums/apiEnum';
+  import { CacheTabTypeEnum } from '@/enums/cacheTabEnum';
+  import { TagUpdateTypeEnum } from '@/enums/commonEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
   import { FilterRemoteMethodsEnum, FilterSlotNameEnum } from '@/enums/tableFilterEnum';
+  import { WorkNavValueEnum } from '@/enums/workbenchEnum';
+
+  import { apiStatusOptions } from '@/views/api-test/components/config';
+
+  const cacheStore = useCacheStore();
+  defineOptions({
+    name: CacheTabTypeEnum.API_TEST_API_TABLE,
+  });
 
   const props = defineProps<{
     class?: string;
     activeModule: string;
     offspringIds: string[];
-    protocol: string; // 查看的协议类型
+    selectedProtocols: string[]; // 查看的协议类型
     readOnly?: boolean; // 是否是只读模式
     refreshTimeStamp?: number;
-    memberOptions: { label: string; value: string }[];
+    moduleTreeData?: ModuleTreeNode[];
   }>();
   const emit = defineEmits<{
     (e: 'openApiTab', record: ApiDefinitionDetail, isExecute?: boolean): void;
     (e: 'openCopyApiTab', record: ApiDefinitionDetail): void;
     (e: 'addApiTab'): void;
     (e: 'import'): void;
+    (e: 'handleAdvSearch', isStartAdvance: boolean): void;
     (
       e: 'openEditApiTab',
       options: { apiInfo: ApiDefinitionDetail; isCopy: boolean; isExecute: boolean; isEdit: boolean }
@@ -325,7 +355,7 @@
   const { t } = useI18n();
   const { openModal } = useModal();
   const tableStore = useTableStore();
-
+  const route = useRoute();
   const folderTreePathMap = inject<MsTreeNodeData[]>('folderTreePathMap');
   const refreshModuleTree: (() => Promise<any>) | undefined = inject('refreshModuleTree');
   const refreshModuleTreeCount: ((data: ApiDefinitionGetModuleParams) => Promise<any>) | undefined =
@@ -341,13 +371,23 @@
     ])
   );
 
+  const protocolList = inject<Ref<ProtocolItem[]>>('protocols', ref([]));
   const requestMethodsOptions = computed(() => {
-    return Object.values(RequestMethods).map((e) => {
+    const otherMethods = protocolList.value
+      .filter((e) => e.protocol !== 'HTTP')
+      .map((item) => {
+        return {
+          value: item.protocol,
+          key: item.protocol,
+        };
+      });
+    const httpMethods = Object.values(RequestMethods).map((e) => {
       return {
         value: e,
         key: e,
       };
     });
+    return [...httpMethods, ...otherMethods];
   });
   const requestApiStatus = computed(() => {
     return Object.values(RequestDefinitionStatus).map((e) => {
@@ -358,6 +398,7 @@
     });
   });
 
+  const apiTableRef = ref();
   let columns: MsTableColumn = [
     {
       title: 'ID',
@@ -368,7 +409,6 @@
         sortDirections: ['ascend', 'descend'],
         sorter: true,
       },
-      fixed: 'left',
       width: 100,
       columnSelectorDisabled: true,
     },
@@ -384,15 +424,30 @@
       columnSelectorDisabled: true,
     },
     {
+      title: 'apiTestManagement.protocol',
+      dataIndex: 'protocol',
+      slotName: 'protocol',
+      showTooltip: true,
+      width: 80,
+      showDrag: true,
+    },
+    {
       title: 'apiTestManagement.apiType',
       dataIndex: 'method',
       slotName: 'method',
-      width: 140,
+      width: 100,
       showDrag: true,
       filterConfig: {
-        options: requestMethodsOptions.value,
+        options: [],
         filterSlotName: FilterSlotNameEnum.API_TEST_API_REQUEST_METHODS,
       },
+    },
+    {
+      title: 'apiTestManagement.path',
+      dataIndex: 'path',
+      showTooltip: true,
+      width: 200,
+      showDrag: true,
     },
     {
       title: 'apiTestManagement.apiStatus',
@@ -403,13 +458,6 @@
         filterSlotName: FilterSlotNameEnum.API_TEST_API_REQUEST_API_STATUS,
       },
       width: 130,
-      showDrag: true,
-    },
-    {
-      title: 'apiTestManagement.path',
-      dataIndex: 'path',
-      showTooltip: true,
-      width: 200,
       showDrag: true,
     },
     {
@@ -432,7 +480,6 @@
       dataIndex: 'tags',
       isTag: true,
       isStringTag: true,
-      width: 400,
       showDrag: true,
     },
     {
@@ -465,7 +512,6 @@
           projectId: appStore.currentProjectId,
         },
         remoteMethod: FilterRemoteMethodsEnum.PROJECT_PERMISSION_MEMBER,
-        placeholderText: t('caseManagement.featureCase.PleaseSelect'),
       },
       showInTable: true,
       width: 200,
@@ -476,9 +522,10 @@
       slotName: 'action',
       dataIndex: 'operation',
       fixed: 'right',
-      width: hasOperationPermission.value ? 200 : 50,
+      width: operationWidth(215, hasOperationPermission.value ? 200 : 50),
     },
   ];
+  const selectedTagType = ref<TagUpdateTypeEnum>(TagUpdateTypeEnum.UPDATE);
 
   function initFilterColumn() {
     columns = columns.map((item) => {
@@ -487,52 +534,53 @@
           ...item,
           filterConfig: {
             ...item.filterConfig,
-            options: props.protocol === 'HTTP' ? requestMethodsOptions.value : [],
+            options: requestMethodsOptions.value,
           },
         };
       }
       return item;
     });
   }
-  await initFilterColumn();
-  await tableStore.initColumn(TableKeyEnum.API_TEST, columns, 'drawer', true);
+
+  initFilterColumn();
   if (props.readOnly) {
     columns = columns.filter(
       (item) => !['version', 'createTime', 'updateTime', 'operation'].includes(item.dataIndex as string)
     );
   }
 
-  const { propsRes, propsEvent, loadList, setLoadListParams, resetSelector } = useTable(
-    getDefinitionPage,
-    {
-      columns: props.readOnly ? columns : [],
-      scroll: { x: '100%' },
-      tableKey: props.readOnly ? undefined : TableKeyEnum.API_TEST,
-      showSetting: !props.readOnly,
-      selectable: hasAnyPermission([
-        'PROJECT_API_DEFINITION:READ+DELETE',
-        'PROJECT_API_DEFINITION:READ+EXECUTE',
-        'PROJECT_API_DEFINITION:READ+UPDATE',
-      ]),
-      showSelectAll: !props.readOnly,
-      draggable: hasAnyPermission(['PROJECT_API_DEFINITION:READ+UPDATE']) ? { type: 'handle', width: 32 } : undefined,
-      heightUsed: 272,
-      paginationSize: 'mini',
-      showSubdirectory: true,
-    },
-    (item) => ({
-      ...item,
-      fullPath: folderTreePathMap?.[item.moduleId],
-      createTime: dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss'),
-      updateTime: dayjs(item.updateTime).format('YYYY-MM-DD HH:mm:ss'),
-    })
-  );
+  const { propsRes, propsEvent, viewId, advanceFilter, setAdvanceFilter, loadList, setLoadListParams, resetSelector } =
+    useTable(
+      getDefinitionPage,
+      {
+        columns: props.readOnly ? columns : [],
+        scroll: { x: '100%' },
+        tableKey: props.readOnly ? undefined : TableKeyEnum.API_TEST,
+        showSetting: !props.readOnly,
+        selectable: hasAnyPermission([
+          'PROJECT_API_DEFINITION:READ+DELETE',
+          'PROJECT_API_DEFINITION:READ+EXECUTE',
+          'PROJECT_API_DEFINITION:READ+UPDATE',
+        ]),
+        showSelectAll: !props.readOnly,
+        draggable: hasAnyPermission(['PROJECT_API_DEFINITION:READ+UPDATE']) ? { type: 'handle', width: 32 } : undefined,
+        heightUsed: 272,
+        paginationSize: 'mini',
+      },
+      (item) => ({
+        ...item,
+        fullPath: folderTreePathMap?.[item.moduleId],
+        createTime: dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss'),
+        updateTime: dayjs(item.updateTime).format('YYYY-MM-DD HH:mm:ss'),
+      })
+    );
   const batchActions = {
     baseAction: [
-      // {
-      //   label: 'common.export',
-      //   eventTag: 'export',
-      // },
+      {
+        label: 'common.export',
+        eventTag: 'export',
+        permission: ['PROJECT_API_DEFINITION:READ+EXPORT'],
+      },
       {
         label: 'common.edit',
         eventTag: 'edit',
@@ -562,9 +610,11 @@
     },
   ];
 
+  const msAdvanceFilterRef = ref<InstanceType<typeof MsAdvanceFilter>>();
+  const isAdvancedSearchMode = computed(() => msAdvanceFilterRef.value?.isAdvancedSearchMode);
   async function getModuleIds() {
     let moduleIds: string[] = [];
-    if (props.activeModule !== 'all') {
+    if (props.activeModule !== 'all' && !isAdvancedSearchMode.value) {
       moduleIds = [props.activeModule];
       const getAllChildren = await tableStore.getSubShow(TableKeyEnum.API_TEST);
       if (getAllChildren) {
@@ -576,20 +626,23 @@
 
   async function loadApiList(hasRefreshTree: boolean) {
     const moduleIds = await getModuleIds();
+
     const params = {
       keyword: keyword.value,
       projectId: appStore.currentProjectId,
       moduleIds,
-      protocol: props.protocol,
+      protocols: isAdvancedSearchMode.value ? protocolList.value.map((item) => item.protocol) : props.selectedProtocols,
       filter: propsRes.value.filter,
+      viewId: viewId.value,
+      combineSearch: advanceFilter,
     };
 
-    if (!hasRefreshTree && typeof refreshModuleTreeCount === 'function') {
+    if (!hasRefreshTree && typeof refreshModuleTreeCount === 'function' && !isAdvancedSearchMode.value) {
       refreshModuleTreeCount({
         keyword: keyword.value,
         filter: propsRes.value.filter,
         moduleIds: [],
-        protocol: props.protocol,
+        protocols: props.selectedProtocols,
         projectId: appStore.currentProjectId,
       });
     }
@@ -608,33 +661,119 @@
   );
 
   watch(
-    () => props.activeModule,
+    () => [props.activeModule, props.selectedProtocols],
     () => {
+      if (isAdvancedSearchMode.value) return;
       resetSelector();
       loadApiList(true);
     }
   );
 
-  watch(
-    () => props.protocol,
-    () => {
-      resetSelector();
-      loadApiList(true);
-    }
-  );
-
-  async function handleMethodChange(record: ApiDefinitionDetail) {
-    try {
-      await updateDefinition({
-        id: record.id,
-        method: record.method,
-      });
-      Message.success(t('common.updateSuccess'));
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.log(error);
-    }
-  }
+  const filterConfigList = computed<FilterFormItem[]>(() => [
+    {
+      title: 'caseManagement.featureCase.tableColumnID',
+      dataIndex: 'num',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'apiTestManagement.apiName',
+      dataIndex: 'name',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'common.belongModule',
+      dataIndex: 'moduleId',
+      type: FilterType.TREE_SELECT,
+      treeSelectData: props.moduleTreeData,
+      treeSelectProps: {
+        fieldNames: {
+          title: 'name',
+          key: 'id',
+          children: 'children',
+        },
+        multiple: true,
+        treeCheckable: true,
+        treeCheckStrictly: true,
+      },
+    },
+    {
+      title: 'apiTestManagement.protocol',
+      dataIndex: 'protocol',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'protocol',
+        valueKey: 'protocol',
+        options: protocolList.value,
+      },
+    },
+    {
+      title: 'apiTestManagement.apiType',
+      dataIndex: 'method',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'key',
+        options: requestMethodsOptions.value,
+      },
+    },
+    {
+      title: 'apiTestManagement.path',
+      dataIndex: 'path',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'apiTestManagement.apiStatus',
+      dataIndex: 'status',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'name',
+        options: apiStatusOptions,
+      },
+    },
+    {
+      title: 'apiTestManagement.caseTotal',
+      dataIndex: 'caseTotal',
+      type: FilterType.NUMBER,
+      numberProps: {
+        min: 0,
+        precision: 0,
+      },
+    },
+    {
+      title: 'common.tag',
+      dataIndex: 'tags',
+      type: FilterType.TAGS_INPUT,
+      numberProps: {
+        min: 0,
+        precision: 0,
+      },
+    },
+    {
+      title: 'common.creator',
+      dataIndex: 'createUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.createTime',
+      dataIndex: 'createTime',
+      type: FilterType.DATE_PICKER,
+    },
+    {
+      title: 'common.updateTime',
+      dataIndex: 'updateTime',
+      type: FilterType.DATE_PICKER,
+    },
+  ]);
+  // 高级检索
+  const handleAdvSearch = async (filter: FilterResult, id: string, isStartAdvance: boolean) => {
+    resetSelector();
+    emit('handleAdvSearch', isStartAdvance);
+    keyword.value = '';
+    setAdvanceFilter(filter, id);
+    await loadApiList(false); // 基础筛选都清空
+  };
 
   async function handleStatusChange(record: ApiDefinitionDetail) {
     try {
@@ -649,8 +788,30 @@
     }
   }
 
-  onBeforeMount(() => {
-    loadApiList(true);
+  function onMountedLoad() {
+    if (route.query.home) {
+      propsRes.value.filter = { ...NAV_NAVIGATION[route.query.home as WorkNavValueEnum] };
+    }
+
+    if (props.selectedProtocols.length > 0 || route.query.home) {
+      loadApiList(!route.query.home);
+    }
+  }
+
+  const isActivated = computed(() => cacheStore.cacheViews.includes(CacheTabTypeEnum.API_TEST_API_TABLE));
+
+  onMounted(() => {
+    cacheStore.clearCache();
+    if (!isActivated.value) {
+      onMountedLoad();
+      cacheStore.setCache(CacheTabTypeEnum.API_TEST_API_TABLE);
+    }
+  });
+
+  onActivated(() => {
+    if (isActivated.value) {
+      onMountedLoad();
+    }
   });
 
   const tableSelected = ref<(string | number)[]>([]);
@@ -660,6 +821,20 @@
     excludeIds: [],
     currentSelectCount: 0,
   });
+  async function getBatchConditionParams() {
+    const selectModules = await getModuleIds();
+    return {
+      condition: {
+        keyword: keyword.value,
+        filter: propsRes.value.filter,
+        viewId: viewId.value,
+        combineSearch: advanceFilter,
+      },
+      projectId: appStore.currentProjectId,
+      protocols: isAdvancedSearchMode.value ? protocolList.value.map((item) => item.protocol) : props.selectedProtocols,
+      moduleIds: selectModules,
+    };
+  }
 
   /**
    * 删除接口
@@ -686,18 +861,13 @@
       onBeforeOk: async () => {
         try {
           if (isBatch) {
+            const batchConditionParams = await getBatchConditionParams();
             await batchDeleteDefinition({
               selectIds,
               selectAll: !!params?.selectAll,
               excludeIds: params?.excludeIds || [],
-              condition: {
-                keyword: keyword.value,
-                filter: propsRes.value.filter,
-              },
-              projectId: appStore.currentProjectId,
-              moduleIds: await getModuleIds(),
+              ...batchConditionParams,
               deleteAll: true,
-              protocol: props.protocol,
             });
           } else {
             await deleteDefinition(record?.id as string);
@@ -761,33 +931,10 @@
       value: 'tags',
     },
   ];
-  const attrOptions = computed(() => {
-    if (props.protocol === 'HTTP') {
-      return fullAttrs;
-    }
-    return fullAttrs.filter((e) => e.value !== 'method');
-  });
   const valueOptions = computed(() => {
     switch (batchForm.value.attr) {
       case 'status':
-        return [
-          {
-            name: 'apiTestManagement.processing',
-            value: RequestDefinitionStatus.PROCESSING,
-          },
-          {
-            name: 'apiTestManagement.done',
-            value: RequestDefinitionStatus.DONE,
-          },
-          {
-            name: 'apiTestManagement.deprecate',
-            value: RequestDefinitionStatus.DEPRECATED,
-          },
-          {
-            name: 'apiTestManagement.debugging',
-            value: RequestDefinitionStatus.DEBUGGING,
-          },
-        ];
+        return apiStatusOptions;
       default:
         return [];
     }
@@ -802,6 +949,7 @@
       values: [],
       append: false,
     };
+    selectedTagType.value = TagUpdateTypeEnum.UPDATE;
   }
 
   function batchUpdate() {
@@ -809,19 +957,15 @@
       if (!errors) {
         try {
           batchUpdateLoading.value = true;
+          const batchConditionParams = await getBatchConditionParams();
           await batchUpdateDefinition({
             selectIds: batchParams.value?.selectedIds || [],
             selectAll: !!batchParams.value?.selectAll,
             excludeIds: batchParams.value?.excludeIds || [],
-            condition: {
-              keyword: keyword.value,
-              filter: propsRes.value.filter,
-            },
-            projectId: appStore.currentProjectId,
-            moduleIds: await getModuleIds(),
-            protocol: props.protocol,
+            ...batchConditionParams,
             type: batchForm.value.attr,
-            append: batchForm.value.append,
+            append: selectedTagType.value === TagUpdateTypeEnum.APPEND,
+            clear: selectedTagType.value === TagUpdateTypeEnum.CLEAR,
             [batchForm.value.attr]: batchForm.value.attr === 'tags' ? batchForm.value.values : batchForm.value.value,
           });
           Message.success(t('common.updateSuccess'));
@@ -838,6 +982,7 @@
     });
   }
 
+  const moveModuleTreeRef = ref<InstanceType<typeof moduleTree>>();
   const moveModalVisible = ref(false);
   const selectedModuleKeys = ref<(string | number)[]>([]); // 移动文件选中节点
   const isBatchMove = ref(false); // 是否批量移动文件
@@ -850,18 +995,13 @@
   async function handleApiMove() {
     try {
       batchMoveApiLoading.value = true;
+      const batchConditionParams = await getBatchConditionParams();
       await batchMoveDefinition({
         selectIds: isBatchMove.value ? batchParams.value?.selectedIds || [] : [activeApi.value?.id || ''],
         selectAll: !!batchParams.value?.selectAll,
         excludeIds: batchParams.value?.excludeIds || [],
-        condition: {
-          keyword: keyword.value,
-          filter: propsRes.value.filter,
-        },
-        projectId: appStore.currentProjectId,
-        moduleIds: await getModuleIds(),
+        ...batchConditionParams,
         moduleId: selectedModuleKeys.value[0],
-        protocol: props.protocol,
       });
       Message.success(t('common.batchMoveSuccess'));
       if (isBatchMove.value) {
@@ -896,6 +1036,8 @@
     selectedModuleKeys.value = keys;
   }
 
+  const showExportModal = ref(false);
+
   /**
    * 处理表格选中后批量操作
    * @param event 批量操作事件对象
@@ -904,6 +1046,9 @@
     tableSelected.value = params?.selectedIds || [];
     batchParams.value = params;
     switch (event.eventTag) {
+      case 'export':
+        showExportModal.value = true;
+        break;
       case 'delete':
         deleteApi(undefined, true, params);
         break;
@@ -913,6 +1058,9 @@
       case 'move':
         isBatchMove.value = true;
         moveModalVisible.value = true;
+        nextTick(() => {
+          moveModuleTreeRef.value?.refresh();
+        });
         break;
       default:
         break;
@@ -948,16 +1096,64 @@
     }
   }
 
-  const apiTableRef = ref();
+  const showShareModal = ref<boolean>(false);
+  // 创建分享
+  function createShare() {
+    showShareModal.value = true;
+  }
+  const showShareListDrawer = ref<boolean>(false);
+  // 分享列表
+  function showShareList() {
+    showShareListDrawer.value = true;
+  }
+
+  const editRecord = ref<ShareDetail>();
+  // 编辑分享
+  function editHandler(record?: ShareDetail) {
+    editRecord.value = record;
+    showShareModal.value = true;
+  }
+  const shareListRef = ref<InstanceType<typeof ShareListDrawer>>();
+  const shareButtonRef = ref<InstanceType<typeof ShareButton>>();
+
+  function cancelHandler() {
+    showShareModal.value = false;
+    editRecord.value = undefined;
+  }
+  // 创建分享后打开分享列表
+  function loadShareList() {
+    if (!showShareListDrawer.value) {
+      showShareListDrawer.value = true;
+    } else {
+      shareListRef.value?.searchList();
+    }
+    shareButtonRef.value?.initShareList();
+  }
+
+  function filterChange() {
+    if (typeof refreshModuleTreeCount === 'function' && !isAdvancedSearchMode.value) {
+      refreshModuleTreeCount({
+        keyword: keyword.value,
+        filter: propsRes.value.filter,
+        moduleIds: [],
+        protocols: props.selectedProtocols,
+        projectId: appStore.currentProjectId,
+      });
+    }
+  }
+
   watch(
-    () => props.protocol,
-    (val) => {
-      if (val) {
-        initFilterColumn();
-        apiTableRef.value.initColumn(columns);
-      }
+    () => requestMethodsOptions.value,
+    () => {
+      initFilterColumn();
     }
   );
+
+  defineExpose({
+    isAdvancedSearchMode,
+  });
+
+  await tableStore.initColumn(TableKeyEnum.API_TEST, columns, 'drawer', true);
 </script>
 
 <style lang="less" scoped>

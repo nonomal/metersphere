@@ -25,7 +25,7 @@
           @change="() => setIsSave(false)"
         ></a-input>
       </a-form-item>
-      <a-form-item :label="t('system.resourcePool.desc')" field="description" class="form-item">
+      <a-form-item :label="t('common.desc')" field="description" class="form-item">
         <a-textarea
           v-model:model-value="form.description"
           :placeholder="t('system.resourcePool.descPlaceholder')"
@@ -152,22 +152,18 @@
       <a-form-item v-if="isShowTypeItem" :label="t('system.resourcePool.type')" field="type" class="form-item">
         <a-radio-group v-model:model-value="form.type" type="button" @change="changeResourceType">
           <a-radio value="Node">Node</a-radio>
-          <!-- TODO:第一版不上 -->
-          <!-- <a-radio v-xpack value="Kubernetes">Kubernetes</a-radio> -->
+          <a-radio value="Kubernetes">Kubernetes</a-radio>
         </a-radio-group>
       </a-form-item>
       <template v-if="isShowNodeResources">
-        <a-form-item field="addType" class="form-item">
-          <template #label>
-            <div class="flex items-center">
-              {{ t('system.resourcePool.addResource') }}
-              <a-tooltip :content="t('system.resourcePool.changeAddTypeTip')" position="tl" mini>
-                <icon-question-circle class="ml-[4px] text-[var(--color-text-4)] hover:text-[rgb(var(--primary-6))]" />
-              </a-tooltip>
-            </div>
-          </template>
+        <div
+          class="mb-[8px] flex w-full items-center justify-between"
+          :class="`${licenseStore.hasLicense() ? '' : 'has-license-class'} form-item !w-full`"
+        >
+          {{ t('system.resourcePool.addResource') }}
           <a-popconfirm
             v-if="!getIsVisited()"
+            v-xpack
             class="ms-pop-confirm--hidden-cancel"
             position="bl"
             popup-container="#typeRadioGroupRef"
@@ -185,18 +181,28 @@
                 {{ t('system.resourcePool.changeAddTypeTip') }}
               </div>
             </template>
-            <div id="typeRadioGroupRef" class="relative">
+            <div id="typeRadioGroupRef" v-xpack class="relative">
               <a-radio-group v-model:model-value="form.addType" type="button" @change="handleTypeChange">
                 <a-radio value="single">{{ t('system.resourcePool.singleAdd') }}</a-radio>
-                <a-radio v-xpack value="multiple">{{ t('system.resourcePool.batchAdd') }}</a-radio>
+                <a-radio v-xpack value="multiple">
+                  <a-tooltip :content="t('system.resourcePool.changeAddTypeTip')" position="tl" mini
+                    ><div>{{ t('system.resourcePool.batchAdd') }}</div></a-tooltip
+                  ></a-radio
+                >
               </a-radio-group>
             </div>
           </a-popconfirm>
-          <a-radio-group v-else v-model:model-value="form.addType" type="button" @change="handleTypeChange">
+          <a-radio-group v-else v-model:model-value="form.addType" v-xpack type="button" @change="handleTypeChange">
             <a-radio value="single">{{ t('system.resourcePool.singleAdd') }}</a-radio>
-            <a-radio v-xpack value="multiple">{{ t('system.resourcePool.batchAdd') }}</a-radio>
+            <a-radio v-xpack value="multiple">
+              <a-tooltip :content="t('system.resourcePool.changeAddTypeTip')" position="tl" mini>
+                <span>
+                  {{ t('system.resourcePool.batchAdd') }}
+                </span>
+              </a-tooltip>
+            </a-radio>
           </a-radio-group>
-        </a-form-item>
+        </div>
         <MsBatchForm
           v-show="form.addType === 'single'"
           ref="batchFormRef"
@@ -206,6 +212,7 @@
           :default-vals="defaultVals"
           :hide-add="!isXpack"
           max-height="250px"
+          :add-tool-tip="licenseStore.hasLicense() ? '' : t('system.resourcePool.supportMultiResource')"
           @change="() => setIsSave(false)"
         ></MsBatchForm>
         <!-- TODO:代码编辑器懒加载 -->
@@ -216,19 +223,11 @@
             height="400px"
             theme="MS-text"
             :show-theme-change="false"
+            :show-full-screen="false"
             @change="() => setIsSave(false)"
           >
-            <template #leftTitle>
-              <a-form-item
-                :label="t('system.resourcePool.batchAddResource')"
-                asterisk-position="end"
-                class="hide-wrapper mb-0 w-auto"
-                required
-              >
-              </a-form-item>
-            </template>
           </MsCodeEditor>
-          <div class="mb-[24px] mt-[4px] text-[12px] leading-[16px] text-[var(--color-text-4)]">
+          <div class="mb-[24px] mt-[4px] text-[12px] leading-[16px] text-[rgb(var(--warning-6))]">
             {{ t('system.resourcePool.nodeConfigEditorTip') }}
           </div>
         </div>
@@ -324,10 +323,27 @@
           </a-tooltip>
         </a-form-item>
         <a-form-item
-          :label="t('system.resourcePool.testResourceDTO.concurrentNumber')"
           field="testResourceDTO.concurrentNumber"
+          :rules="[{ required: true, message: t('system.resourcePool.concurrentNumberRequired') }]"
           class="form-item"
+          asterisk-position="end"
         >
+          <template #label>
+            <div class="inline-flex max-w-[calc(100%-12px)] items-center gap-[4px]">
+              <div>{{ t('system.resourcePool.testResourceDTO.concurrentNumber') }}</div>
+              <a-tooltip v-if="!isXpack" position="tl" mini>
+                <icon-question-circle class="ml-[4px] text-[var(--color-text-4)] hover:text-[rgb(var(--primary-6))]" />
+                <template #content>
+                  <div>
+                    {{ t('system.resourcePool.concurrentNumberTip') }}
+                    <span class="ml-2 inline-block cursor-pointer text-[rgb(var(--primary-4))]" @click="goTry">
+                      {{ t('system.authorized.applyTrial') }}
+                    </span>
+                  </div>
+                </template>
+              </a-tooltip>
+            </div>
+          </template>
           <a-input-number
             v-model:model-value="form.testResourceDTO.concurrentNumber"
             :min="1"
@@ -336,14 +352,33 @@
             mode="button"
             class="w-[160px]"
             model-event="input"
+            :disabled="!isXpack"
             @change="() => setIsSave(false)"
           ></a-input-number>
         </a-form-item>
         <a-form-item
-          :label="t('system.resourcePool.testResourceDTO.podThreads')"
           field="testResourceDTO.podThreads"
+          :rules="[{ required: true, message: t('system.resourcePool.testResourceDTO.podThreadsRequired') }]"
           class="form-item"
+          asterisk-position="end"
         >
+          <template #label>
+            <div class="inline-flex max-w-[calc(100%-12px)] items-center gap-[4px]">
+              <div>{{ t('system.resourcePool.testResourceDTO.podThreads') }}</div>
+              <a-tooltip v-if="!isXpack" position="tl" mini>
+                <icon-question-circle class="ml-[4px] text-[var(--color-text-4)] hover:text-[rgb(var(--primary-6))]" />
+
+                <template #content>
+                  <div>
+                    {{ t('system.resourcePool.testResourceDTO.podThreadsTip') }}
+                    <span class="ml-2 inline-block cursor-pointer text-[rgb(var(--primary-4))]" @click="goTry">
+                      {{ t('system.authorized.applyTrial') }}
+                    </span>
+                  </div>
+                </template>
+              </a-tooltip>
+            </div>
+          </template>
           <a-input-number
             v-model:model-value="form.testResourceDTO.podThreads"
             :min="1"
@@ -352,21 +387,22 @@
             mode="button"
             class="w-[160px]"
             model-event="input"
+            :disabled="!isXpack"
             @change="() => setIsSave(false)"
           ></a-input-number>
         </a-form-item>
       </template>
     </a-form>
-    <template #footerLeft>
+    <!-- <template #footerLeft>
       <MsButton v-if="isShowK8SResources" @click="showJobDrawer = true">
         {{ t('system.resourcePool.customJobTemplate') }}
         <a-tooltip :content="t('system.resourcePool.jobTemplateTip')" position="tl" mini>
           <icon-question-circle class="ml-[4px] text-[var(--color-text-4)] hover:text-[rgb(var(--primary-6))]" />
         </a-tooltip>
       </MsButton>
-    </template>
+    </template> -->
   </MsCard>
-  <JobTemplateDrawer v-model:visible="showJobDrawer" v-model:value="form.testResourceDTO.jobDefinition" />
+  <!-- <JobTemplateDrawer v-model:visible="showJobDrawer" v-model:value="form.testResourceDTO.jobDefinition" /> -->
 </template>
 
 <script setup lang="ts">
@@ -377,13 +413,13 @@
   import { FormInstance, Message, SelectOptionData } from '@arco-design/web-vue';
   import { cloneDeep, isEmpty } from 'lodash-es';
 
-  import MsButton from '@/components/pure/ms-button/index.vue';
+  // import MsButton from '@/components/pure/ms-button/index.vue';
   import MsCard from '@/components/pure/ms-card/index.vue';
   import MsCodeEditor from '@/components/pure/ms-code-editor/index.vue';
   import MsBatchForm from '@/components/business/ms-batch-form/index.vue';
   import type { FormItemModel } from '@/components/business/ms-batch-form/types';
-  import JobTemplateDrawer from './components/jobTemplateDrawer.vue';
 
+  // import JobTemplateDrawer from './components/jobTemplateDrawer.vue';
   import { getSystemOrgOption } from '@/api/modules/setting/organizationAndProject';
   import { addPool, getPoolInfo, updatePoolInfo } from '@/api/modules/setting/resourcePool';
   import { useI18n } from '@/hooks/useI18n';
@@ -397,7 +433,7 @@
   import type { NodesListItem, UpdateResourcePoolParams } from '@/models/setting/resourcePool';
   import { SettingRouteEnum } from '@/enums/routeEnum';
 
-  import { getYaml, job, YamlType } from './template';
+  import { getYaml, YamlType } from './template';
 
   const licenseStore = useLicenseStore();
   const isXpack = computed(() => licenseStore.hasLicense());
@@ -422,13 +458,21 @@
     testResourceDTO: {
       uiGrid: '',
       girdConcurrentNumber: 1,
-      podThreads: 1,
-      concurrentNumber: 1,
-      nodesList: [] as NodesListItem[],
+      podThreads: 3,
+      concurrentNumber: 10,
+      singleTaskConcurrentNumber: 3,
+      nodesList: [
+        {
+          ip: '',
+          port: '',
+          concurrentNumber: 10,
+          singleTaskConcurrentNumber: 3,
+        },
+      ],
       ip: '',
       token: '',
       namespace: '',
-      jobDefinition: job,
+      // jobDefinition: job,
       deployName: '',
       orgIds: [] as string[],
     },
@@ -459,6 +503,13 @@
     return 10;
   });
 
+  const maxSingleTaskConcurrentNumber = computed(() => {
+    if (isXpack.value) {
+      return 9999999;
+    }
+    return 3;
+  });
+
   onBeforeMount(async () => {
     orgOptions.value = await getSystemOrgOption();
     if (!isXpack.value) {
@@ -474,7 +525,8 @@
       loading.value = true;
       const res = await getPoolInfo(route.query.id);
       const { testResourceReturnDTO } = res;
-      const { girdConcurrentNumber, podThreads, concurrentNumber, orgIdNameMap } = testResourceReturnDTO;
+      const { girdConcurrentNumber, podThreads, concurrentNumber, orgIdNameMap, singleTaskConcurrentNumber } =
+        testResourceReturnDTO;
       form.value = {
         ...res,
         addType: 'single',
@@ -483,8 +535,9 @@
         testResourceDTO: {
           ...testResourceReturnDTO,
           girdConcurrentNumber: girdConcurrentNumber || 1,
-          podThreads: podThreads || 1,
-          concurrentNumber: concurrentNumber || 1,
+          podThreads: podThreads || 3,
+          concurrentNumber: concurrentNumber || 10,
+          singleTaskConcurrentNumber: singleTaskConcurrentNumber || 3,
           orgIds: orgIdNameMap?.map((e) => e.id) || [],
         },
       };
@@ -552,34 +605,34 @@
     () => isFillNameSpaces.value && form.value.testResourceDTO.deployName?.trim() !== ''
   );
 
-  watch(
-    () => isShowK8SResources.value,
-    (val) => {
-      if (val && !form.value.testResourceDTO.jobDefinition) {
-        // 在编辑场景下，如果资源池非 k8s 的话，jobDefinition 会是 null，选中 k8s 资源的时候需要赋默认值
-        form.value.testResourceDTO.jobDefinition = job;
-      }
-    }
-  );
+  // watch(
+  //   () => isShowK8SResources.value,
+  //   (val) => {
+  //     if (val && !form.value.testResourceDTO.jobDefinition) {
+  //       // 在编辑场景下，如果资源池非 k8s 的话，jobDefinition 会是 null，选中 k8s 资源的时候需要赋默认值
+  //       form.value.testResourceDTO.jobDefinition = job;
+  //     }
+  //   }
+  // );
 
   const batchFormRef = ref<InstanceType<typeof MsBatchForm>>();
   const batchFormModels: Ref<FormItemModel[]> = ref([
     {
-      filed: 'ip',
+      field: 'ip',
       type: 'input',
       label: 'system.resourcePool.ip',
       rules: [{ required: true, message: t('system.resourcePool.ipRequired') }],
       placeholder: 'system.resourcePool.ipPlaceholder',
     },
     {
-      filed: 'port',
+      field: 'port',
       type: 'input',
       label: 'system.resourcePool.port',
       rules: [{ required: true, message: t('system.resourcePool.portRequired') }],
       placeholder: 'system.resourcePool.portPlaceholder',
     },
     {
-      filed: 'concurrentNumber',
+      field: 'concurrentNumber',
       type: 'inputNumber',
       label: 'system.resourcePool.concurrentNumber',
       rules: [
@@ -595,6 +648,30 @@
       placeholder: 'system.resourcePool.concurrentNumberPlaceholder',
       min: 1,
       max: maxConcurrentNumber.value,
+      tooltip: licenseStore.hasLicense() ? '' : t('system.resourcePool.concurrentNumberMinToolTip'),
+      defaultValue: 10,
+      disabled: !licenseStore.hasLicense(),
+    },
+    {
+      field: 'singleTaskConcurrentNumber',
+      type: 'inputNumber',
+      label: 'system.resourcePool.singleTaskConcurrentNumber',
+      rules: [
+        { required: true, message: t('system.resourcePool.singleConcurrentNumberRequired') },
+        {
+          validator: (val, cb) => {
+            if (val <= 0) {
+              cb(t('system.resourcePool.singleConcurrentNumberMin'));
+            }
+          },
+        },
+      ],
+      placeholder: 'system.resourcePool.singleConcurrentNumberPlaceholder',
+      min: 1,
+      max: maxSingleTaskConcurrentNumber.value,
+      tooltip: licenseStore.hasLicense() ? '' : t('system.resourcePool.singleConcurrentNumberMinToolTip'),
+      defaultValue: 3,
+      disabled: !licenseStore.hasLicense(),
     },
   ]);
 
@@ -613,11 +690,11 @@
     let res = '';
     for (let i = 0; i < nodesList?.length; i++) {
       const node = nodesList[i];
-      // 按顺序拼接：ip、port、monitor、concurrentNumber
+      // 按顺序拼接：ip、port、monitor、concurrentNumber、singleTaskConcurrentNumber
       if (!Object.values(node).every((e) => isEmpty(e))) {
         res += `${node.ip},${node.port === undefined ? '' : node.port},${
           node.concurrentNumber === undefined ? '' : node.concurrentNumber
-        }\r`;
+        },${node.singleTaskConcurrentNumber === undefined ? '' : node.singleTaskConcurrentNumber}\r`;
       }
     }
     editorContent.value = res;
@@ -648,6 +725,7 @@
             ip: line[0],
             port: line[1],
             concurrentNumber: Number(line[2]),
+            singleTaskConcurrentNumber: Number(line[3]),
           };
           if (i === 0) {
             // 第四个是concurrentNumber，需要是数字
@@ -678,6 +756,17 @@
   function changeResourceType(val: string | number | boolean) {
     if (val === 'Kubernetes') {
       setBatchFormRes();
+    } else {
+      form.value.testResourceDTO.concurrentNumber = 10;
+      form.value.testResourceDTO.singleTaskConcurrentNumber = 3;
+      form.value.testResourceDTO.nodesList = [
+        {
+          ip: '',
+          port: '',
+          concurrentNumber: 10,
+          singleTaskConcurrentNumber: 3,
+        },
+      ];
     }
     setIsSave(false);
   }
@@ -735,7 +824,7 @@
       namespace, // k8s 命名空间
       concurrentNumber, // k8s 最大并发数
       podThreads, // k8s 单pod最大线程数
-      jobDefinition, // k8s job自定义模板
+      // jobDefinition, // k8s job自定义模板
       deployName, // k8s api测试部署名称
       nodesList,
       uiGrid,
@@ -772,14 +861,14 @@
         }
       : {};
 
-    const jobDTO = isShowK8SResources ? { jobDefinition } : {};
+    // const jobDTO = isShowK8SResources.value ? { jobDefinition } : {};
     return {
       ...form.value,
       type: isShowTypeItem.value ? form.value.type : 'Node', // 默认给 Node，后台需要
       allOrg: form.value.orgType === 'allOrg',
       apiTest: form.value.use.includes('API'), // 是否支持api测试
       uiTest: form.value.use.includes('UI'), // 是否支持ui测试
-      testResourceDTO: { ...apiDTO, ...uiDTO, ...jobDTO, orgIds: form.value.testResourceDTO.orgIds },
+      testResourceDTO: { ...apiDTO, ...uiDTO, orgIds: form.value.testResourceDTO.orgIds },
     };
   }
 
@@ -857,6 +946,10 @@
   function handleBack() {
     router.replace({ name: SettingRouteEnum.SETTING_SYSTEM_RESOURCE_POOL });
   }
+
+  function goTry() {
+    window.open('https://jinshuju.net/f/CzzAOe', '_blank');
+  }
 </script>
 
 <style lang="less" scoped>
@@ -869,6 +962,18 @@
     }
     .arco-form-item-label-col {
       @apply mb-0;
+    }
+  }
+  .has-license-class {
+    @apply mb-2;
+    :deep(.arco-form-item-content-wrapper) {
+      min-height: 0;
+    }
+    :deep(.arco-form-item-wrapper-col) {
+      min-height: 0;
+    }
+    :deep(.arco-form-item-content) {
+      min-height: 0;
     }
   }
 </style>

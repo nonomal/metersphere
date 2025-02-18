@@ -1,51 +1,68 @@
 package io.metersphere.api.controller;
 
-import io.metersphere.api.constants.*;
+import io.metersphere.api.constants.ApiConstants;
+import io.metersphere.api.constants.ApiDefinitionDocType;
+import io.metersphere.api.constants.ApiDefinitionStatus;
+import io.metersphere.api.constants.ApiImportPlatform;
 import io.metersphere.api.controller.result.ApiResultCode;
 import io.metersphere.api.domain.*;
 import io.metersphere.api.dto.ApiFile;
 import io.metersphere.api.dto.ReferenceRequest;
 import io.metersphere.api.dto.definition.*;
+import io.metersphere.api.dto.export.MetersphereApiDefinitionExportResponse;
 import io.metersphere.api.dto.request.ApiEditPosRequest;
 import io.metersphere.api.dto.request.ApiTransferRequest;
 import io.metersphere.api.dto.request.ImportRequest;
 import io.metersphere.api.dto.request.http.MsHTTPElement;
+import io.metersphere.api.dto.request.http.MsHeader;
+import io.metersphere.api.dto.schema.JsonSchemaItem;
 import io.metersphere.api.mapper.*;
 import io.metersphere.api.model.CheckLogModel;
+import io.metersphere.api.parser.ImportParserFactory;
 import io.metersphere.api.service.ApiCommonService;
+import io.metersphere.api.service.ApiDefinitionImportTestService;
 import io.metersphere.api.service.ApiFileResourceService;
 import io.metersphere.api.service.BaseFileManagementTestService;
 import io.metersphere.api.service.definition.ApiDefinitionService;
 import io.metersphere.api.service.definition.ApiTestCaseService;
 import io.metersphere.api.utils.ApiDataUtils;
+import io.metersphere.api.utils.ApiDefinitionImportUtils;
+import io.metersphere.functional.domain.ExportTask;
 import io.metersphere.plugin.api.spi.AbstractMsTestElement;
+import io.metersphere.project.domain.Project;
 import io.metersphere.project.dto.filemanagement.FileInfo;
 import io.metersphere.project.mapper.ExtBaseProjectVersionMapper;
+import io.metersphere.project.mapper.ProjectMapper;
 import io.metersphere.project.service.FileAssociationService;
-import io.metersphere.sdk.constants.ApplicationNumScope;
-import io.metersphere.sdk.constants.DefaultRepositoryDir;
-import io.metersphere.sdk.constants.PermissionConstants;
-import io.metersphere.sdk.constants.SessionConstants;
+import io.metersphere.sdk.constants.*;
+import io.metersphere.sdk.dto.BaseCondition;
+import io.metersphere.sdk.dto.CombineCondition;
+import io.metersphere.sdk.dto.CombineSearch;
 import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.file.FileCenter;
 import io.metersphere.sdk.file.FileRequest;
 import io.metersphere.sdk.util.*;
 import io.metersphere.system.base.BaseTest;
+import io.metersphere.system.constants.ExportConstants;
 import io.metersphere.system.controller.handler.ResultHolder;
 import io.metersphere.system.controller.handler.result.MsHttpResultCode;
 import io.metersphere.system.domain.OperationHistory;
 import io.metersphere.system.domain.OperationHistoryExample;
+import io.metersphere.system.dto.AddProjectRequest;
 import io.metersphere.system.dto.request.OperationHistoryRequest;
 import io.metersphere.system.dto.request.OperationHistoryVersionRequest;
-import io.metersphere.system.dto.sdk.BaseCondition;
+import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
+import io.metersphere.system.manager.ExportTaskManager;
 import io.metersphere.system.mapper.OperationHistoryMapper;
+import io.metersphere.system.service.CommonProjectService;
 import io.metersphere.system.service.UserLoginService;
 import io.metersphere.system.uid.IDGenerator;
 import io.metersphere.system.uid.NumGenerator;
 import io.metersphere.system.utils.Pager;
 import jakarta.annotation.Resource;
-import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.*;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -113,7 +130,12 @@ public class ApiDefinitionControllerTests extends BaseTest {
 
     private static final String ALL_API = "api_definition_module.api.all";
     private static final String UNPLANNED_API = "api_unplanned_request";
+    private static final String JSON_SCHEMA_PREVIEW = "json-schema/preview";
+    private static final String JSON_SCHEMA_AUTO_GENERATE = "json-schema/auto-generate";
+
+    private static final String EXPORT = "/export/";
     private static ApiDefinition apiDefinition;
+    private static ApiDefinition tcpApiDefinition;
 
     @Resource
     private ApiDefinitionMapper apiDefinitionMapper;
@@ -162,6 +184,9 @@ public class ApiDefinitionControllerTests extends BaseTest {
     private ApiScenarioStepMapper apiScenarioStepMapper;
     @Resource
     private UserLoginService userLoginService;
+    @Resource
+    private ApiDefinitionImportTestService apiDefinitionImportTestService;
+
     private static String fileMetadataId;
     private static String uploadFileId;
 
@@ -219,7 +244,7 @@ public class ApiDefinitionControllerTests extends BaseTest {
         msHttpElement.setBody(ApiDebugControllerTests.addBodyLinkFile(msHttpElement.getBody(), fileMetadataId));
         request.setRequest(getMsElementParam(msHttpElement));
         List<HttpResponse> msHttpResponse = MsHTTPElementTest.getMsHttpResponse();
-        msHttpResponse.get(0).setBody(ApiDebugControllerTests.addBodyLinkFile(msHttpResponse.get(0).getBody(), fileMetadataId));
+        msHttpResponse.getFirst().setBody(ApiDebugControllerTests.addBodyLinkFile(msHttpResponse.getFirst().getBody(), fileMetadataId));
         request.setResponse(msHttpResponse);
 
         uploadFileId = doUploadTempFile(getMockMultipartFile("api-add-file_upload.JPG"));
@@ -253,7 +278,7 @@ public class ApiDefinitionControllerTests extends BaseTest {
         apiFileResourceExample.createCriteria().andResourceIdEqualTo(apiDefinition.getId());
         List<ApiFileResource> apiFileResources = apiFileResourceMapper.selectByExample(apiFileResourceExample);
         Assertions.assertFalse(apiFileResources.isEmpty());
-        apiTransferRequest.setFileId(apiFileResources.get(0).getFileId());
+        apiTransferRequest.setFileId(apiFileResources.getFirst().getFileId());
         apiTransferRequest.setFileName("test-file_upload");
         apiTransferRequest.setOriginalName("test-file_upload.JPG");
         this.requestPost("transfer", apiTransferRequest).andExpect(status().isOk());
@@ -279,7 +304,12 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setProtocol("TCP");
         request.setMethod(null);
         request.setPath(null);
-        this.requestPostWithOk(ADD, request);
+        mvcResult = this.requestPostWithOkAndReturn(ADD, request);
+        resultData = getResultData(mvcResult, ApiDefinition.class);
+        tcpApiDefinition = apiDefinitionMapper.selectByPrimaryKey(resultData.getId());
+
+        // @@TCP重名校验异常
+        assertErrorCode(this.requestPost(ADD, request), ApiResultCode.API_DEFINITION_EXIST);
 
         // @@响应名+响应码唯一校验异常
         request.setName("test123-response");
@@ -347,7 +377,8 @@ public class ApiDefinitionControllerTests extends BaseTest {
         return JSON.parseObject(ApiDataUtils.toJSONString(msHTTPElement));
     }
 
-    private ApiDefinitionAddRequest createApiDefinitionAddRequest() {
+    public static ApiDefinitionAddRequest createApiDefinitionAddRequest() {
+        ExtBaseProjectVersionMapper extBaseProjectVersionMapper = CommonBeanFactory.getBean(ExtBaseProjectVersionMapper.class);
         // 创建并返回一个 ApiDefinitionAddRequest 对象，用于测试
         String defaultVersion = extBaseProjectVersionMapper.getDefaultVersion(DEFAULT_PROJECT_ID);
         ApiDefinitionAddRequest request = new ApiDefinitionAddRequest();
@@ -366,7 +397,7 @@ public class ApiDefinitionControllerTests extends BaseTest {
         return request;
     }
 
-    private List<ApiDefinitionCustomField> createCustomFields() {
+    private static List<ApiDefinitionCustomField> createCustomFields() {
         List<ApiDefinitionCustomField> list = new ArrayList<>();
         ApiDefinitionCustomField customField = new ApiDefinitionCustomField();
         customField.setFieldId("custom-field");
@@ -440,12 +471,25 @@ public class ApiDefinitionControllerTests extends BaseTest {
         Assertions.assertEquals(msHTTPElement.getModuleId(), apiDefinition.getModuleId());
         Assertions.assertEquals(msHTTPElement.getNum(), apiDefinition.getNum());
 
+        assertionModuleName(apiDefinitionDTO);
+        copyApiDefinitionDTO.setModuleName(apiDefinitionDTO.getModuleName());
+
         Assertions.assertEquals(apiDefinitionDTO, copyApiDefinitionDTO);
 
         assertErrorCode(this.requestGet(GET + "111"), ApiResultCode.API_DEFINITION_NOT_EXIST);
 
         // @@校验权限
         requestGetPermissionTest(PermissionConstants.PROJECT_API_DEFINITION_READ, GET + apiDefinition.getId());
+    }
+
+    private void assertionModuleName(ApiDefinitionDTO apiDefinitionDTO) {
+        // 判断模块名是否正确
+        ApiDefinitionModule apiDefinitionModule = apiDefinitionModuleMapper.selectByPrimaryKey(apiDefinitionDTO.getModuleId());
+        if (apiDefinitionModule == null) {
+            Assertions.assertEquals(apiDefinitionDTO.getModuleName(), Translator.get("api_unplanned_request"));
+        } else {
+            Assertions.assertEquals(apiDefinitionDTO.getModuleName(), apiDefinitionModule.getName());
+        }
     }
 
     @Test
@@ -520,6 +564,11 @@ public class ApiDefinitionControllerTests extends BaseTest {
         apiDefinition = apiDefinitionMapper.selectByPrimaryKey(updateStatusRequest.getId());
         Assertions.assertEquals(apiDefinition.getStatus(), ApiDefinitionStatus.DONE.name());
 
+        ApiDefinitionUpdateRequest tcpRequest = new ApiDefinitionUpdateRequest();
+        tcpRequest.setId(tcpApiDefinition.getId());
+        tcpRequest.setDescription("TEST");
+        this.requestPostWithOk(UPDATE, tcpRequest);
+
         // @@重名校验异常
         ApiDefinitionUpdateRequest repeatRequest = new ApiDefinitionUpdateRequest();
         repeatRequest.setId(apiDefinition.getId());
@@ -586,7 +635,17 @@ public class ApiDefinitionControllerTests extends BaseTest {
             apiTestCaseService.addCase(testCaseAddRequest, "admin");
         }
         updateRequest.setPath("/api/test/path/method/case");
+        MsHeader msHeader = new MsHeader();
+        msHeader.setKey("111");
+        // 添加差异
+        msHttpElement.setHeaders(List.of(msHeader));
+        updateRequest.setRequest(getMsElementParam(msHttpElement));
         this.requestPostWithOk(UPDATE, updateRequest);
+        ApiTestCaseExample example = new ApiTestCaseExample();
+        example.createCriteria().andApiDefinitionIdEqualTo(apiDefinition.getId());
+        List<ApiTestCase> apiTestCases = apiTestCaseMapper.selectByExample(example);
+        // 校验差异后的变更通知
+        apiTestCases.forEach(apiTestCase -> Assertions.assertTrue(apiTestCase.getApiChange()));
 
         // @@校验权限
         request.setId(apiDefinition.getId());
@@ -686,19 +745,30 @@ public class ApiDefinitionControllerTests extends BaseTest {
         apiDefinitionBatchUpdateRequest.setSelectIds(List.of("1001", "1002", "1005"));
         apiDefinitionBatchUpdateRequest.setExcludeIds(List.of("1005"));
         apiDefinitionBatchUpdateRequest.setSelectAll(false);
+        apiDefinitionBatchUpdateRequest.setProtocols(List.of("HTTP"));
         apiDefinitionBatchUpdateRequest.setType("tags");
         // 修改标签，追加
         apiDefinitionBatchUpdateRequest.setSelectIds(List.of("1001", "1002"));
         apiDefinitionBatchUpdateRequest.setTags(new LinkedHashSet<>(List.of("tag-append", "tag-append1")));
         apiDefinitionBatchUpdateRequest.setAppend(true);
+        apiDefinitionBatchUpdateRequest.setClear(false);
         this.requestPostWithOk(BATCH_UPDATE, apiDefinitionBatchUpdateRequest);
         assertBatchUpdateApiDefinition(apiDefinitionBatchUpdateRequest, List.of("1001", "1002"));
         // 修改标签，覆盖
         apiDefinitionBatchUpdateRequest.setSelectIds(List.of("1003", "1004"));
         apiDefinitionBatchUpdateRequest.setTags(new LinkedHashSet<>(List.of("tag-append", "tag-append1")));
         apiDefinitionBatchUpdateRequest.setAppend(false);
+        apiDefinitionBatchUpdateRequest.setClear(false);
         this.requestPostWithOk(BATCH_UPDATE, apiDefinitionBatchUpdateRequest);
         assertBatchUpdateApiDefinition(apiDefinitionBatchUpdateRequest, List.of("1003", "1004"));
+        apiDefinitionBatchUpdateRequest.setClear(true);
+        this.requestPostWithOk(BATCH_UPDATE, apiDefinitionBatchUpdateRequest);
+        ApiDefinitionExample apiDefinitionExample = new ApiDefinitionExample();
+        apiDefinitionExample.createCriteria().andIdIn(List.of("1003", "1004"));
+        List<ApiDefinition> apiDefinitions = apiDefinitionMapper.selectByExample(apiDefinitionExample);
+        for (ApiDefinition definition : apiDefinitions) {
+            Assertions.assertTrue(CollectionUtils.isEmpty(definition.getTags()));
+        }
         // 自定义字段覆盖
         apiDefinitionBatchUpdateRequest.setType("customs");
         apiDefinitionBatchUpdateRequest.setSelectIds(List.of("1002", "1003", "1004"));
@@ -707,6 +777,7 @@ public class ApiDefinitionControllerTests extends BaseTest {
         field.setValue(JSON.toJSONString(List.of("test1-batch")));
         apiDefinitionBatchUpdateRequest.setCustomField(field);
         apiDefinitionBatchUpdateRequest.setAppend(false);
+        apiDefinitionBatchUpdateRequest.setClear(false);
         this.requestPostWithOk(BATCH_UPDATE, apiDefinitionBatchUpdateRequest);
         // 修改协议类型
         apiDefinitionBatchUpdateRequest.setType("method");
@@ -811,13 +882,8 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setSelectIds(List.of("1001", "1002", "1005"));
         request.setExcludeIds(List.of("1005"));
         request.setSelectAll(false);
+        request.setProtocols(List.of("HTTP"));
         this.requestPostWithOkAndReturn(BATCH_MOVE, request);
-        // @@校验日志
-
-        String[] ids = {"1001", "1002", "1005"};
-        for (String id : ids) {
-            checkLogModelList.add(new CheckLogModel(id, OperationLogType.UPDATE, BATCH_MOVE));
-        }
 
         // 移动全部 条件为关键字为st-6的数据
         request.setSelectAll(true);
@@ -826,7 +892,7 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setCondition(baseCondition);
         this.requestPostWithOkAndReturn(BATCH_MOVE, request);
         // @@校验日志
-        checkLogModelList.add(new CheckLogModel("1006", OperationLogType.UPDATE, BATCH_MOVE));
+        //checkLogModelList.add(new CheckLogModel("1006", OperationLogType.UPDATE, BATCH_MOVE));
         // @@校验权限
         requestPostPermissionTest(PermissionConstants.PROJECT_API_DEFINITION_UPDATE, BATCH_MOVE, request);
     }
@@ -887,12 +953,19 @@ public class ApiDefinitionControllerTests extends BaseTest {
         //doApiDefinitionPage("FILTER", PAGE);
         assertPateDate(doApiDefinitionPage("COMBINE", PAGE));
         assertPateDate(doApiDefinitionPage("DELETED", PAGE));
+        ApiDefinitionPageRequest request = new ApiDefinitionPageRequest();
+        request.setProjectId(DEFAULT_PROJECT_ID);
+        request.setCurrent(1);
+        request.setPageSize(10);
+        request.setDeleted(false);
+        request.setSort(Map.of("createTime", "asc"));
+        this.requestPostWithOkAndReturn(PAGE, request);
     }
 
     private void assertPateDate(Pager pageData) {
         List<ApiDefinitionDTO> apiDefinitions = ApiDataUtils.parseArray(JSON.toJSONString(pageData.getList()), ApiDefinitionDTO.class);
         if (CollectionUtils.isNotEmpty(apiDefinitions)) {
-            ApiDefinitionDTO apiDefinitionDTO = apiDefinitions.get(0);
+            ApiDefinitionDTO apiDefinitionDTO = apiDefinitions.getFirst();
             // 判断用例数是否正确
             ApiTestCaseExample example = new ApiTestCaseExample();
             example.createCriteria()
@@ -901,12 +974,7 @@ public class ApiDefinitionControllerTests extends BaseTest {
             List<ApiTestCase> apiTestCases = apiTestCaseMapper.selectByExample(example);
             Assertions.assertEquals(apiDefinitionDTO.getCaseTotal(), apiTestCases.size());
             // 判断模块名是否正确
-            ApiDefinitionModule apiDefinitionModule = apiDefinitionModuleMapper.selectByPrimaryKey(apiDefinitionDTO.getModuleId());
-            if (apiDefinitionModule == null) {
-                Assertions.assertEquals(apiDefinitionDTO.getModuleName(), Translator.get("api_unplanned_request"));
-            } else {
-                Assertions.assertEquals(apiDefinitionDTO.getModuleName(), apiDefinitionModule.getName());
-            }
+            assertionModuleName(apiDefinitionDTO);
         }
     }
 
@@ -915,6 +983,7 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setProjectId(DEFAULT_PROJECT_ID);
         request.setCurrent(1);
         request.setPageSize(10);
+        request.setProtocols(List.of("HTTP"));
         request.setDeleted(false);
         request.setSort(Map.of("createTime", "asc"));
         // "ALL", "KEYWORD", "FILTER", "COMBINE", "DELETED"
@@ -948,10 +1017,17 @@ public class ApiDefinitionControllerTests extends BaseTest {
         filters.put("version_id", List.of("1005704995741369851"));
         request.setFilter(filters);
 
-        Map<String, Object> map = new HashMap<>();
-        map.put("name", Map.of("operator", "like", "value", "test-1"));
-        map.put("method", Map.of("operator", "in", "value", Arrays.asList("GET", "POST")));
-        request.setCombine(map);
+        CombineSearch combineSearch = new CombineSearch();
+        CombineCondition condition = new CombineCondition();
+        condition.setName("name");
+        condition.setOperator(CombineCondition.CombineConditionOperator.CONTAINS.name());
+        condition.setValue("test-1");
+        CombineCondition condition2 = new CombineCondition();
+        condition2.setName("method");
+        condition2.setOperator(CombineCondition.CombineConditionOperator.IN.name());
+        condition2.setValue(List.of("GET", "POST"));
+        combineSearch.setConditions(List.of(condition, condition2));
+        request.setCombineSearch(combineSearch);
     }
 
     private void configureKeywordSearch(ApiDefinitionPageRequest request) {
@@ -971,26 +1047,30 @@ public class ApiDefinitionControllerTests extends BaseTest {
     }
 
     private void configureCombineSearch(ApiDefinitionPageRequest request) {
-        Map<String, Object> map = new HashMap<>();
-        map.put("name", Map.of("operator", "like", "value", "test"));
-        map.put("method", Map.of("operator", "in", "value", Arrays.asList("GET", "POST")));
-        map.put("createUser", Map.of("operator", "current user", "value", StringUtils.EMPTY));
-        List<Map<String, Object>> customs = new ArrayList<>();
-        Map<String, Object> custom = new HashMap<>();
-        custom.put("id", "test_field");
-        custom.put("operator", "in");
-        custom.put("type", "MULTIPLE_SELECT");
-        custom.put("value", JSON.toJSONString(List.of("test", "default")));
-        customs.add(custom);
-        Map<String, Object> currentUserCustom = new HashMap<>();
-        currentUserCustom.put("id", "test_field");
-        currentUserCustom.put("operator", "current user");
-        currentUserCustom.put("type", "MULTIPLE_MEMBER");
-        currentUserCustom.put("value", "current user");
-        customs.add(currentUserCustom);
-        map.put("customs", customs);
+        CombineSearch combineSearch = new CombineSearch();
+        CombineCondition condition = new CombineCondition();
+        condition.setName("name");
+        condition.setOperator(CombineCondition.CombineConditionOperator.CONTAINS.name());
+        condition.setValue("test");
 
-        request.setCombine(map);
+        CombineCondition condition2 = new CombineCondition();
+        condition2.setName("method");
+        condition2.setOperator(CombineCondition.CombineConditionOperator.IN.name());
+        condition2.setValue(List.of("GET", "POST"));
+
+        CombineCondition condition3 = new CombineCondition();
+        condition3.setName("createUser");
+        condition3.setOperator(CombineCondition.CombineConditionOperator.IN.name());
+        condition3.setValue(List.of("currentUser"));
+
+        CombineCondition customCondition = new CombineCondition();
+        customCondition.setCustomField(true);
+        customCondition.setName("test_field");
+        customCondition.setOperator(CombineCondition.CombineConditionOperator.CONTAINS.name());
+        customCondition.setValue("test");
+
+        combineSearch.setConditions(List.of(condition, condition2, condition3, customCondition));
+        request.setCombineSearch(combineSearch);
     }
 
     private void configureDeleteSearch(ApiDefinitionPageRequest request) {
@@ -1016,6 +1096,8 @@ public class ApiDefinitionControllerTests extends BaseTest {
         apiDefinition = apiDefinitionMapper.selectByPrimaryKey("1001");
         request.setApiId(apiDefinition.getId());
         request.setProjectId(DEFAULT_PROJECT_ID);
+        this.requestPostWithOkAndReturn(DOC, request);
+        request.setProtocols(List.of("HTTP"));
         request.setType(ApiDefinitionDocType.API.name());
         // @@请求成功
         MvcResult mvcResult = this.requestPostWithOkAndReturn(DOC, request);
@@ -1110,6 +1192,8 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setProjectId(DEFAULT_PROJECT_ID);
         request.setType(ApiDefinitionDocType.MODULE.name());
         request.setModuleIds(List.of("1001001"));
+        this.requestPostWithOkAndReturn(DOC, request);
+        request.setProtocols(List.of("HTTP"));
         MvcResult mvcResultModule = this.requestPostWithOkAndReturn(DOC, request);
         ApiDefinitionDocDTO moduleApiDefinitionDocDTO = ApiDataUtils.parseObject(JSON.toJSONString(parseResponse(mvcResultModule).get("data")), ApiDefinitionDocDTO.class);
         // 校验数据是否正确
@@ -1258,7 +1342,7 @@ public class ApiDefinitionControllerTests extends BaseTest {
         Assertions.assertEquals("admin", apiDefinitionInfo.getDeleteUser());
         Assertions.assertNotNull(apiDefinitionInfo.getDeleteTime());
 
-        this.requestGetWithOk(SINGLE_DELETE_TO_GC+"/"+apiDefinition.getId());
+        this.requestGetWithOk(SINGLE_DELETE_TO_GC + "/" + apiDefinition.getId());
 
         // @存在多个版本
         String id = "1004";
@@ -1322,6 +1406,8 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setSelectIds(List.of("1004"));
         request.setDeleteAllVersion(false);
         request.setSelectAll(false);
+        this.requestPostWithOkAndReturn(BATCH_DELETE_TO_GC, request);
+        request.setProtocols(List.of("HTTP"));
         this.requestPostWithOkAndReturn(BATCH_DELETE_TO_GC, request);
         // @@校验日志
         checkLogModelList.add(new CheckLogModel("1004", OperationLogType.DELETE, BATCH_DELETE_TO_GC));
@@ -1401,6 +1487,9 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setExcludeIds(List.of("1005"));
         request.setSelectAll(false);
         this.requestPostWithOk(BATCH_RESTORE, request);
+        request.setProtocols(List.of("HTTP"));
+        this.requestPostWithOk(BATCH_RESTORE, request);
+
 
         // 效验数据结果
         ApiDefinitionExample apiDefinitionExample = new ApiDefinitionExample();
@@ -1482,6 +1571,8 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setSelectIds(List.of("1003"));
         request.setSelectAll(false);
         this.requestPostWithOk(BATCH_DELETE, request);
+        request.setProtocols(List.of("HTTP"));
+        this.requestPostWithOk(BATCH_DELETE, request);
         // 效验数据结果
         ApiDefinitionExample apiDefinitionExample = new ApiDefinitionExample();
         apiDefinitionExample.createCriteria().andIdIn(request.getSelectIds());
@@ -1539,6 +1630,18 @@ public class ApiDefinitionControllerTests extends BaseTest {
     @Test
     @Order(102)
     public void testImport() throws Exception {
+        // 测试 getUniqueName 方法
+        List<String> uniqueNameTestList = new ArrayList<>() {{
+            this.add("用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例-1");
+            this.add("用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录666");
+        }};
+        Assertions.assertEquals("用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例-2",
+                ApiDefinitionImportUtils.getUniqueName(
+                        "用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录66成功用例登录666",
+                        uniqueNameTestList
+                ));
+
+
         LogUtils.info("import api test");
         ApiDefinitionModule apiDefinitionModule = new ApiDefinitionModule();
         apiDefinitionModule.setId("test-import");
@@ -1582,9 +1685,9 @@ public class ApiDefinitionControllerTests extends BaseTest {
         paramMap.add("request", JSON.toJSONString(request));
         this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
         paramMap.clear();
-        inputStream = new FileInputStream(new File(
+        inputStream = new FileInputStream(
                 this.getClass().getClassLoader().getResource("file/openapi2.json")
-                        .getPath()));
+                        .getPath());
         file = new MockMultipartFile("file", "openapi2.json", MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
         paramMap.add("file", file);
         request.setCoverModule(false);
@@ -1593,10 +1696,20 @@ public class ApiDefinitionControllerTests extends BaseTest {
         this.requestMultipart(IMPORT, paramMap, status().is5xxServerError());
 
         paramMap.clear();
-        inputStream = new FileInputStream(new File(
+        inputStream = new FileInputStream(
                 this.getClass().getClassLoader().getResource("file/openapi3.json")
-                        .getPath()));
+                        .getPath());
         file = new MockMultipartFile("file", "openapi3.json", MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+        paramMap.add("file", file);
+        request.setCoverModule(false);
+        request.setCoverData(false);
+        paramMap.add("request", JSON.toJSONString(request));
+        this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+        paramMap.clear();
+        inputStream = new FileInputStream(
+                this.getClass().getClassLoader().getResource("file/openapi4.json")
+                        .getPath());
+        file = new MockMultipartFile("file", "openapi4.json", MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
         paramMap.add("file", file);
         request.setCoverModule(false);
         request.setCoverData(false);
@@ -1615,9 +1728,9 @@ public class ApiDefinitionControllerTests extends BaseTest {
         request.setCoverModule(true);
         request.setCoverData(true);
         paramMap.clear();
-        inputStream = new FileInputStream(new File(
+        inputStream = new FileInputStream(
                 Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/postman.json"))
-                        .getPath()));
+                        .getPath());
         file = new MockMultipartFile("file", "postman.json", MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
         paramMap.add("file", file);
         paramMap.add("request", JSON.toJSONString(request));
@@ -1625,15 +1738,412 @@ public class ApiDefinitionControllerTests extends BaseTest {
         paramMap.clear();
         request.setCoverModule(true);
         request.setCoverData(true);
-        inputStream = new FileInputStream(new File(
+        inputStream = new FileInputStream(
                 Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/postman2.json"))
-                        .getPath()));
+                        .getPath());
         file = new MockMultipartFile("file", "postman2.json", MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
         paramMap.add("file", file);
         paramMap.add("request", JSON.toJSONString(request));
         this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
 
+        this.importTest();
+    }
 
+    @Resource
+    private CommonProjectService commonProjectService;
+    @Resource
+    private ProjectMapper projectMapper;
+    @Resource
+    private ApiDefinitionMockMapper apiDefinitionMockMapper;
+
+    private void importTest() throws Exception {
+        //测试ImportParserFactory不按规定获取会返回null
+        Assertions.assertNull(ImportParserFactory.getApiDefinitionImportParser("test"));
+        // 创建用于导入的项目
+        //测试计划专用项目
+        AddProjectRequest initProject = new AddProjectRequest();
+        initProject.setOrganizationId("100001");
+        initProject.setName("接口测试导入专用项目");
+        initProject.setDescription("建国创建的接口测试专用项目");
+        initProject.setEnable(true);
+        initProject.setUserIds(List.of("admin"));
+        Project importProject = commonProjectService.add(initProject, "admin", "/organization-project/add", OperationLogModule.SETTING_ORGANIZATION_PROJECT);
+        ArrayList<String> moduleList = new ArrayList<>(List.of("workstation", "testPlan", "bugManagement", "caseManagement", "apiTest", "uiTest", "loadTest"));
+        Project updateProject = new Project();
+        updateProject.setId(importProject.getId());
+        updateProject.setModuleSetting(JSON.toJSONString(moduleList));
+        projectMapper.updateByPrimaryKeySelective(updateProject);
+
+        initProject.setName("接口测试导出专用项目");
+        Project exportProject = commonProjectService.add(initProject, "admin", "/organization-project/add", OperationLogModule.SETTING_ORGANIZATION_PROJECT);
+        updateProject.setId(exportProject.getId());
+        projectMapper.updateByPrimaryKeySelective(updateProject);
+
+        /*
+
+            导入测试。 不同类型的文件，要按照如下指定的文件类型，走同样的导入逻辑判断。确保数据的高可用和对代码的高覆盖
+            以下是对导入文件的要求：
+                    file/import/{importType}/single: 1个接口，无用例。
+                    file/import/{importType}/simple: 4个接口(（其中2个url重复，合法数据只有3条,并且都在同一个模块下）)；
+                                                        2个路径重复的接口下都有2个用例。 （用于校验路径相同的接口下，用例要合并起来导入）  (Metersphere的还要有15个Mock，其中有名字一样的)
+                    file/import/{importType}/repeatFileDiffApi: 和simple一样路径的4个接口（其中2个路径重复，合法数据只有3条），但是参数不一样;
+                                                        每个接口下都有2个用例，一共4个。 simple中的4个用例相比，有1个用例名字一样、对应的接口路径也一样。剩下的用例名称全部一样。（用于校验相同路径的接口下、相同名称的用例处理方式）
+                    file/import/{importType}/repeatFileDiffModule: 和repeatFileDiffApi一样的4个接口（其中2个路径重复，合法数据只有3条），参数也一样，但是所属模块不一样;
+                                                        没有用例。（用于校验覆盖模块时，接口的变更）
+
+            以下是导入操作：
+
+                导入不存在的接口
+                    · 不指定导入模块   导入 {importType}/simple， 同步导入用例。校验有新增的模块，下面一共有3个API。其中有个API包含4个case
+                    · 指定导入模块     导入 {importType}/single，校验模块新增了1个并有api
+                导入存在的接口
+                    · 不覆盖接口   导入 {importType}/repeatFileDiffApi，校验模块没有变化，api数量没有变化，case数量没有变化
+                    · 覆盖接口
+                        · 不覆盖模块
+                            导入 {importType}/repeatFileDiffApi，不导入用例，校验模块没有变化，api更新时间变了，case数量没有变化
+                            再导入 {importType}/repeatFileDiffApi，导入用例，校验模块没有变化，api更新时间没变，case数量增加，应该是4+3+3 -1（名称重复的）
+                        · 覆盖模块
+                            接口一样，模块不一样：     导入 {importType}/repeatFileDiffModule， (测试指定导入模块，测试一下会不会创建多个模块）   判断接口对应的模块有更新， api内容没更新；
+                            接口不一样，模块不一样：   重新导入{importType}/simple，          (测试测试不指定导入模块，测试一下会不会回到原模块）   判断接口对应的模块有更新， api内容有更新
+                            接口不一样，模块一样：     重新导入{importType}/repeatFileDiffApi，     判断接口对应的模块没更新， api内容有更新
+                            接口一样，模块一样： 再导入{importType}/repeatFileDiffApi，     判断接口对应的模块没更新， api内容没更新
+         */
+
+        //导入类型以及文件后缀
+        Map<String, String> importTypeAndSuffix = new LinkedHashMap<>();
+        importTypeAndSuffix.put("metersphere", "json");
+        importTypeAndSuffix.put("postman", "json");
+        importTypeAndSuffix.put("har", "har");
+        List<String> importCaseType = Arrays.asList("postman", "metersphere");
+        List<String> importModulesType = Arrays.asList("postman", "metersphere");
+
+        ApiDefinitionModuleExample moduleExample = new ApiDefinitionModuleExample();
+        moduleExample.createCriteria().andProjectIdEqualTo(importProject.getId());
+        ApiTestCaseExample apiTestCaseExample = new ApiTestCaseExample();
+        apiTestCaseExample.createCriteria().andProjectIdEqualTo(importProject.getId());
+
+        for (Map.Entry<String, String> entry : importTypeAndSuffix.entrySet()) {
+            ImportRequest request = new ImportRequest();
+            request.setProjectId(importProject.getId());
+            request.setProtocol(ApiConstants.HTTP_PROTOCOL);
+            request.setUserId("admin");
+            
+            List<ApiDefinitionModule> apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+            List<ApiDefinitionBlob> apiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+            List<ApiTestCase> apiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+            Assertions.assertEquals(apiDefinitionModuleList.size(), 0);
+            Assertions.assertEquals(apiBlobList.size(), 0);
+            Assertions.assertEquals(apiTestCaseList.size(), 0);
+            boolean checkTestCase = importCaseType.contains(entry.getKey());
+            boolean checkModules = importModulesType.contains(entry.getKey());
+
+            String importType = entry.getKey();
+            String fileSuffix = entry.getValue();
+            request.setPlatform(importType);
+            request.setSyncCase(true);
+            FileInputStream inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/simple." + fileSuffix)).getPath()));
+            MockMultipartFile file = new MockMultipartFile("file", "simple." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+            MultiValueMap<String, Object> paramMap = new LinkedMultiValueMap<>();
+            paramMap.add("request", JSON.toJSONString(request));
+            paramMap.add("file", file);
+            this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+            request.setSyncCase(false);
+            apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+            apiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+            Assertions.assertEquals(apiDefinitionModuleList.size(), checkModules ? 1 : 0);
+            Assertions.assertEquals(apiBlobList.size(), 3);
+            if (checkTestCase) {
+                apiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+                Assertions.assertEquals(apiTestCaseList.size(), 4);
+            }
+
+            if (StringUtils.equalsIgnoreCase(importType, "metersphere")) {
+                request.setSyncMock(true);
+                request.setCoverData(true);
+                List<String> apiString = apiBlobList.stream().map(ApiDefinitionBlob::getId).toList();
+                ApiDefinitionMockExample apiDefinitionMockExample = new ApiDefinitionMockExample();
+                apiDefinitionMockExample.createCriteria().andApiDefinitionIdIn(apiString).andProjectIdEqualTo(importProject.getId());
+                List<ApiDefinitionMock> mockList = apiDefinitionMockMapper.selectByExample(apiDefinitionMockExample);
+                Assertions.assertEquals(mockList.size(), 0);
+                paramMap = new LinkedMultiValueMap<>();
+                paramMap.add("file", file);
+                paramMap.add("request", JSON.toJSONString(request));
+                this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+                mockList = apiDefinitionMockMapper.selectByExample(apiDefinitionMockExample);
+                Assertions.assertEquals(mockList.size(), 15);
+
+                this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+                mockList = apiDefinitionMockMapper.selectByExample(apiDefinitionMockExample);
+                Assertions.assertEquals(mockList.size(), 15);
+                request.setSyncMock(false);
+                request.setCoverData(false);
+            }
+
+            if (CollectionUtils.isEmpty(apiDefinitionModuleList)) {
+                request.setModuleId(ModuleConstants.DEFAULT_NODE_ID);
+            } else {
+                request.setModuleId(apiDefinitionModuleList.getFirst().getId());
+            }
+            inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/single." + fileSuffix)).getPath()));
+            file = new MockMultipartFile("file", "single." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+            paramMap = new LinkedMultiValueMap<>();
+            paramMap.add("request", JSON.toJSONString(request));
+            paramMap.add("file", file);
+            this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+            request.setModuleId(null);
+            apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+            apiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+            Assertions.assertEquals(apiDefinitionModuleList.size(), checkModules ? 2 : 0);
+            Assertions.assertEquals(apiBlobList.size(), 4);
+            if (checkTestCase) {
+                apiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+                Assertions.assertEquals(apiTestCaseList.size(), 4);
+            }
+
+            if (StringUtils.equalsIgnoreCase(importType, "metersphere")) {
+                //恰逢ms格式的导入，可以顺便测试导出
+                this.testExportAndImport(importProject.getId(), apiBlobList);
+            }
+
+
+            //            · 不覆盖接口   导入 {importType}/repeatFileDiffApi，校验模块没有变化，api无变化，case数量没有变化
+            inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/repeatFileDiffApi." + fileSuffix)).getPath()));
+            file = new MockMultipartFile("file", "repeatFileDiffApi." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+            paramMap = new LinkedMultiValueMap<>();
+            paramMap.add("request", JSON.toJSONString(request));
+            paramMap.add("file", file);
+            this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+            request.setModuleId(null);
+            apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+            Assertions.assertEquals(apiDefinitionModuleList.size(), checkModules ? 2 : 0);
+            List<ApiDefinitionBlob> newApiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+            apiDefinitionImportTestService.compareApiBlobList(apiBlobList, newApiBlobList, 0);
+            apiBlobList = newApiBlobList;
+            if (checkTestCase) {
+                List<ApiTestCase> newApiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+                apiDefinitionImportTestService.compareApiTestCaseList(apiTestCaseList, newApiTestCaseList, 0, 0);
+                apiTestCaseList = newApiTestCaseList;
+            }
+
+            //· 覆盖接口
+            request.setCoverData(true);
+            //    · 不覆盖模块
+            //            导入 {importType}/repeatFileDiffApi，不导入用例，校验模块没有变化，api有3个变了，case数量没有变化
+            inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/repeatFileDiffApi." + fileSuffix)).getPath()));
+            file = new MockMultipartFile("file", "repeatFileDiffApi." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+            paramMap = new LinkedMultiValueMap<>();
+            paramMap.add("request", JSON.toJSONString(request));
+            paramMap.add("file", file);
+            this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+            apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+            Assertions.assertEquals(apiDefinitionModuleList.size(), checkModules ? 2 : 0);
+            newApiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+            apiDefinitionImportTestService.compareApiBlobList(apiBlobList, newApiBlobList, 3);
+            apiBlobList = newApiBlobList;
+            if (checkTestCase) {
+                List<ApiTestCase> newApiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+                apiDefinitionImportTestService.compareApiTestCaseList(apiTestCaseList, newApiTestCaseList, 0, 0);
+                apiTestCaseList = newApiTestCaseList;
+            }
+
+            //            再导入 {importType}/repeatFileDiffApi，导入用例，校验模块没有变化，api无更新，case数量增加，应该是4+3+3 -1（名称重复的）、
+            request.setSyncCase(true);
+            inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/repeatFileDiffApi." + fileSuffix)).getPath()));
+            file = new MockMultipartFile("file", "repeatFileDiffApi." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+            paramMap = new LinkedMultiValueMap<>();
+            paramMap.add("request", JSON.toJSONString(request));
+            paramMap.add("file", file);
+            this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+            request.setSyncCase(false);
+            apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+            Assertions.assertEquals(apiDefinitionModuleList.size(), checkModules ? 2 : 0);
+            newApiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+            apiDefinitionImportTestService.compareApiBlobList(apiBlobList, newApiBlobList, 0);
+            apiBlobList = newApiBlobList;
+            if (checkTestCase) {
+                List<ApiTestCase> newApiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+                apiDefinitionImportTestService.compareApiTestCaseList(apiTestCaseList, newApiTestCaseList, 1, 3);
+                apiTestCaseList = newApiTestCaseList;
+            }
+
+            //                · 覆盖模块
+            request.setCoverModule(true);
+            List<ApiDefinition> newApiDefinition = new ArrayList<>();
+            List<ApiDefinition> oldApiDefinition = new ArrayList<>();
+            if (checkModules) {
+                // 以下只针对需要检查模块的导入文件方式。  部分比如har文件，由于导入接口没有模块数据，故不需要检查模块
+                //            接口一样，模块不一样：     导入 {importType}/repeatFileDiffModule， (测试测试指定导入模块，测试一下会不会创建多个模块）   判断接口对应的模块有更新， api内容没更新；
+                inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/repeatFileDiffModule." + fileSuffix)).getPath()));
+                file = new MockMultipartFile("file", "repeatFileDiffModule." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+                paramMap = new LinkedMultiValueMap<>();
+                paramMap.add("request", JSON.toJSONString(request));
+                paramMap.add("file", file);
+                this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+                apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+                Assertions.assertTrue(apiDefinitionModuleList.size() > 2);
+                newApiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+                apiDefinitionImportTestService.compareApiBlobList(apiBlobList, newApiBlobList, 0);
+                apiBlobList = newApiBlobList;
+                if (checkTestCase) {
+                    List<ApiTestCase> newApiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+                    apiDefinitionImportTestService.compareApiTestCaseList(apiTestCaseList, newApiTestCaseList, 0, 0);
+                }
+
+                //            接口不一样，模块不一样：   重新导入{importType}/simple，          (测试测试不指定导入模块，测试一下会不会回到原模块）   判断接口对应的模块有更新， api内容有更新
+                oldApiDefinition = apiDefinitionImportTestService.selectApiDefinitionByProjectId(importProject.getId());
+                inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/simple." + fileSuffix)).getPath()));
+                file = new MockMultipartFile("file", "simple." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+                paramMap = new LinkedMultiValueMap<>();
+                paramMap.add("request", JSON.toJSONString(request));
+                paramMap.add("file", file);
+                this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+                apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+                Assertions.assertTrue(apiDefinitionModuleList.size() > 2);
+                newApiDefinition = apiDefinitionImportTestService.selectApiDefinitionByProjectId(importProject.getId());
+                apiDefinitionImportTestService.checkApiModuleChange(oldApiDefinition, newApiDefinition, 3);
+                newApiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+                apiDefinitionImportTestService.compareApiBlobList(apiBlobList, newApiBlobList, 3);
+                apiBlobList = newApiBlobList;
+                oldApiDefinition = newApiDefinition;
+
+                //            接口不一样，模块一样：     重新导入{importType}/repeatFileDiffApi，     判断接口对应的模块没更新， api内容有更新
+                inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/repeatFileDiffApi." + fileSuffix)).getPath()));
+                file = new MockMultipartFile("file", "repeatFileDiffApi." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+                paramMap = new LinkedMultiValueMap<>();
+                paramMap.add("request", JSON.toJSONString(request));
+                paramMap.add("file", file);
+                this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+                newApiDefinition = apiDefinitionImportTestService.selectApiDefinitionByProjectId(importProject.getId());
+                apiDefinitionImportTestService.checkApiModuleChange(oldApiDefinition, newApiDefinition, 0);
+                newApiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+                apiDefinitionImportTestService.compareApiBlobList(apiBlobList, newApiBlobList, 3);
+                apiBlobList = newApiBlobList;
+            }
+
+
+            //            接口一样，模块一样： 再导入{importType}/repeatFileDiffApi，     判断接口对应的模块没更新， api内容没更新
+            oldApiDefinition = newApiDefinition;
+            inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/" + importType + "/repeatFileDiffApi." + fileSuffix)).getPath()));
+            file = new MockMultipartFile("file", "repeatFileDiffApi." + fileSuffix, MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+            paramMap = new LinkedMultiValueMap<>();
+            paramMap.add("request", JSON.toJSONString(request));
+            paramMap.add("file", file);
+            this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+            newApiDefinition = apiDefinitionImportTestService.selectApiDefinitionByProjectId(importProject.getId());
+            apiDefinitionImportTestService.checkApiModuleChange(oldApiDefinition, newApiDefinition, 0);
+            newApiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+            apiDefinitionImportTestService.compareApiBlobList(apiBlobList, newApiBlobList, 0);
+
+            //删除本次导入的数据
+            List<String> apiIds = newApiDefinition.stream().map(ApiDefinition::getId).collect(Collectors.toList());
+            apiDefinitionService.handleDeleteApiDefinition(apiIds, true, request.getProjectId(), "admin", true);
+            apiDefinitionService.handleTrashDelApiDefinition(apiIds, "admin", importProject.getId(), true);
+            newApiDefinition = apiDefinitionImportTestService.selectApiDefinitionByProjectId(importProject.getId());
+            newApiBlobList = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+            List<ApiTestCase> newApiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+            ApiDefinitionModuleExample deleteModuleExample = new ApiDefinitionModuleExample();
+            deleteModuleExample.createCriteria().andProjectIdEqualTo(importProject.getId());
+            apiDefinitionModuleMapper.deleteByExample(deleteModuleExample);
+            apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+            Assertions.assertEquals(apiDefinitionModuleList.size(), 0);
+            Assertions.assertEquals(newApiDefinition.size(), 0);
+            Assertions.assertEquals(newApiBlobList.size(), 0);
+            Assertions.assertEquals(newApiTestCaseList.size(), 0);
+
+        }
+
+        // 最后测试一把JMeter。  5个请求，其中有4个重复的。 导入之后应该是2个请求5个用例，其中1个请求有4个用例
+        File httpJmx = new File(
+                this.getClass().getClassLoader().getResource("file/import/jmeter/post-page.jmx")
+                        .getPath()
+        );
+
+        FileInputStream inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/jmeter/post-page.jmx")).getPath()));
+        MockMultipartFile file = new MockMultipartFile("file", "post-page.jmx", MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+        ImportRequest request = new ImportRequest();
+        request.setProjectId(importProject.getId());
+        request.setUserId("admin");
+        request.setPlatform("Jmeter");
+        request.setSyncCase(true);
+        MultiValueMap<String, Object> paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file);
+        this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+        List<ApiDefinitionModule> apiDefinitionModuleList = apiDefinitionModuleMapper.selectByExample(moduleExample);
+        Assertions.assertEquals(1, apiDefinitionModuleList.size());
+        List<ApiDefinitionBlob> apiDefinitionBlobs = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+        Assertions.assertEquals(2, apiDefinitionBlobs.size());
+
+        List<ApiTestCase> newApiTestCaseList = apiTestCaseMapper.selectByExample(apiTestCaseExample);
+        Assertions.assertEquals(5, newApiTestCaseList.size());
+        //去重处理
+        List<String> apiDefinitionIdList = newApiTestCaseList.stream().map(ApiTestCase::getApiDefinitionId).distinct().collect(Collectors.toList());
+        Assertions.assertEquals(2, apiDefinitionIdList.size());
+
+        // 导入额外的har文件
+        inputStream = new FileInputStream(new File(Objects.requireNonNull(this.getClass().getClassLoader().getResource("file/import/har/testjsandcss.har")).getPath()));
+        file = new MockMultipartFile("file", "post-page.har", MediaType.APPLICATION_OCTET_STREAM_VALUE, inputStream);
+        request.setPlatform("har");
+        paramMap = new LinkedMultiValueMap<>();
+        paramMap.add("request", JSON.toJSONString(request));
+        paramMap.add("file", file);
+        this.requestMultipartWithOkAndReturn(IMPORT, paramMap);
+        apiDefinitionBlobs = apiDefinitionImportTestService.selectBlobByProjectId(importProject.getId());
+        Assertions.assertTrue(apiDefinitionBlobs.size() > 2);
+    }
+
+    @Resource
+    private ExportTaskManager exportTaskManager;
+
+    private void testExportAndImport(String exportProjectId, List<ApiDefinitionBlob> exportApiBlobs) throws Exception {
+        ApiDefinitionBatchExportRequest exportRequest = new ApiDefinitionBatchExportRequest();
+        String fileId = IDGenerator.nextStr();
+        exportRequest.setProjectId(exportProjectId);
+        exportRequest.setFileId(fileId);
+        exportRequest.setSelectAll(true);
+        exportRequest.setExportApiCase(true);
+        exportRequest.setExportApiMock(true);
+        MvcResult mvcResult = this.requestPostWithOkAndReturn(EXPORT + "metersphere", exportRequest);
+        String returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String taskId = JSON.parseObject(returnData, ResultHolder.class).getData().toString();
+        Assertions.assertTrue(StringUtils.isNotBlank(fileId));
+        List<ExportTask> taskList = exportTaskManager.getExportTasks(exportProjectId, null, null, "admin", fileId);
+        while (CollectionUtils.isEmpty(taskList)) {
+            Thread.sleep(1000);
+            taskList = exportTaskManager.getExportTasks(exportProjectId, null, null, "admin", fileId);
+        }
+        ExportTask task = taskList.getFirst();
+        while (!StringUtils.equalsIgnoreCase(task.getState(), ExportConstants.ExportState.SUCCESS.name())) {
+            Thread.sleep(1000);
+            task = exportTaskManager.getExportTasks(exportProjectId, null, null, "admin", fileId).getFirst();
+        }
+
+        mvcResult = this.download(exportProjectId, fileId);
+
+        byte[] fileBytes = mvcResult.getResponse().getContentAsByteArray();
+
+        File zipFile = new File("/tmp/api-export/downloadFiles.zip");
+        FileUtils.writeByteArrayToFile(zipFile, fileBytes);
+
+        File[] files = MsFileUtils.unZipFile(zipFile, "/tmp/api-export/unzip/");
+        assert files != null;
+        Assertions.assertEquals(files.length, 1);
+        String fileContent = FileUtils.readFileToString(files[0], StandardCharsets.UTF_8);
+
+        MetersphereApiDefinitionExportResponse exportResponse = ApiDataUtils.parseObject(fileContent, MetersphereApiDefinitionExportResponse.class);
+
+        apiDefinitionImportTestService.compareApiExport(exportResponse, exportApiBlobs);
+
+        MsFileUtils.deleteDir("/tmp/api-export/");
+
+        //测试stop
+        this.requestGetWithOk("/stop/" + taskId);
+    }
+
+    private MvcResult download(String projectId, String fileId) throws Exception {
+        return mockMvc.perform(MockMvcRequestBuilders.get("/api/definition/download/file/" + projectId + "/" + fileId)
+                .header(SessionConstants.HEADER_TOKEN, sessionId)
+                .header(SessionConstants.CSRF_TOKEN, csrfToken)).andReturn();
     }
 
     protected MvcResult requestMultipart(String url, MultiValueMap<String, Object> paramMap, ResultMatcher resultMatcher) throws Exception {
@@ -1683,541 +2193,102 @@ public class ApiDefinitionControllerTests extends BaseTest {
     @Order(103)
     public void testPreview() throws Exception {
         String jsonString = """
-                {
-                          "example":  null,
-                          "id":  null,
-                          "title":  null,
-                          "type":  "object",
-                          "description":  null,
-                          "items":  null,
-                          "properties":  {
-                                    "id":  {
-                                              "example":  10,
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "integer",
-                                              "description":  "",
-                                              "items":  null,
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  "int64",
-                                              "enumString":  null,
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "name":  {
-                                              "example":  "@string",
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "string",
-                                              "description":  "",
-                                              "items":  null,
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  "",
-                                              "enumString":  null,
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "category":  {
-                                              "example":  null,
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "object",
-                                              "description":  null,
-                                              "items":  null,
-                                              "properties":  {
-                                                        "id":  {
-                                                                  "example":  "@integer",
-                                                                  "id":  null,
-                                                                  "title":  null,
-                                                                  "type":  "integer",
-                                                                  "description":  "",
-                                                                  "items":  null,
-                                                                  "properties":  null,
-                                                                  "additionalProperties":  null,
-                                                                  "required":  null,
-                                                                  "pattern":  null,
-                                                                  "maxLength":  null,
-                                                                  "minLength":  null,
-                                                                  "minimum":  null,
-                                                                  "maximum":  null,
-                                                                  "schema":  null,
-                                                                  "format":  "int64",
-                                                                  "enumString":  null,
-                                                                  "enumInteger":  null,
-                                                                  "enumNumber":  null,
-                                                                  "extensions":  null
-                                                        },
-                                                        "name":  {
-                                                                  "example":  "Dogs",
-                                                                  "id":  null,
-                                                                  "title":  null,
-                                                                  "type":  "string",
-                                                                  "description":  "",
-                                                                  "items":  null,
-                                                                  "properties":  null,
-                                                                  "additionalProperties":  null,
-                                                                  "required":  null,
-                                                                  "pattern":  null,
-                                                                  "maxLength":  null,
-                                                                  "minLength":  null,
-                                                                  "minimum":  null,
-                                                                  "maximum":  null,
-                                                                  "schema":  null,
-                                                                  "format":  "",
-                                                                  "enumString":  null,
-                                                                  "enumInteger":  null,
-                                                                  "enumNumber":  null,
-                                                                  "extensions":  null
-                                                        }
-                                              },
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  null,
-                                              "enumString":  null,
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "photoUrls":  {
-                                              "example":  null,
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "array",
-                                              "description":  null,
-                                              "items":  {
-                                                        "example":  null,
-                                                        "id":  null,
-                                                        "title":  null,
-                                                        "type":  "string",
-                                                        "description":  "",
-                                                        "items":  null,
-                                                        "properties":  null,
-                                                        "additionalProperties":  null,
-                                                        "required":  null,
-                                                        "pattern":  null,
-                                                        "maxLength":  null,
-                                                        "minLength":  null,
-                                                        "minimum":  null,
-                                                        "maximum":  null,
-                                                        "schema":  null,
-                                                        "format":  "",
-                                                        "enumString":  null,
-                                                        "enumInteger":  null,
-                                                        "enumNumber":  null,
-                                                        "extensions":  null
-                                              },
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  null,
-                                              "enumString":  null,
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "tags":  {
-                                              "example":  null,
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "array",
-                                              "description":  null,
-                                              "items":  {
-                                                        "example":  null,
-                                                        "id":  null,
-                                                        "title":  null,
-                                                        "type":  "object",
-                                                        "description":  null,
-                                                        "items":  null,
-                                                        "properties":  {
-                                                                  "id":  {
-                                                                            "example":  null,
-                                                                            "id":  null,
-                                                                            "title":  null,
-                                                                            "type":  "integer",
-                                                                            "description":  "",
-                                                                            "items":  null,
-                                                                            "properties":  null,
-                                                                            "additionalProperties":  null,
-                                                                            "required":  null,
-                                                                            "pattern":  null,
-                                                                            "maxLength":  null,
-                                                                            "minLength":  null,
-                                                                            "minimum":  null,
-                                                                            "maximum":  null,
-                                                                            "schema":  null,
-                                                                            "format":  "int64",
-                                                                            "enumString":  null,
-                                                                            "enumInteger":  null,
-                                                                            "enumNumber":  null,
-                                                                            "extensions":  null
-                                                                  },
-                                                                  "name":  {
-                                                                            "example":  null,
-                                                                            "id":  null,
-                                                                            "title":  null,
-                                                                            "type":  "string",
-                                                                            "description":  "",
-                                                                            "items":  null,
-                                                                            "properties":  null,
-                                                                            "additionalProperties":  null,
-                                                                            "required":  null,
-                                                                            "pattern":  null,
-                                                                            "maxLength":  null,
-                                                                            "minLength":  null,
-                                                                            "mainimum":  null,
-                                                                            "maximum":  null,
-                                                                            "schema":  null,
-                                                                            "format":  "",
-                                                                            "enumString":  null,
-                                                                            "enumInteger":  null,
-                                                                            "enumNumber":  null,
-                                                                            "extensions":  null
-                                                                  }
-                                                        },
-                                                        "additionalProperties":  null,
-                                                        "required":  null,
-                                                        "pattern":  null,
-                                                        "maxLength":  null,
-                                                        "minLength":  null,
-                                                        "minimum":  null,
-                                                        "maximum":  null,
-                                                        "schema":  null,
-                                                        "format":  null,
-                                                        "enumString":  null,
-                                                        "enumInteger":  null,
-                                                        "enumNumber":  null,
-                                                        "extensions":  null
-                                              },
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  null,
-                                              "enumString":  null,
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "status":  {
-                                              "example":  "available",
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "string",
-                                              "description":  "pet status in the store",
-                                              "items":  null,
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  "",
-                                              "enumString":  [
-                                                        "available",
-                                                        "pending",
-                                                        "sold"
-                                              ],
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "testnumber":  {
-                                              "example":  1.23139183198000000283719387,
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "number",
-                                              "description":  "pet status in the store",
-                                              "items":  null,
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  "",
-                                              "enumString":  [
-                                                        "available",
-                                                        "pending",
-                                                        "sold"
-                                              ],
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "testnumber11":  {
-                                              "example":  "@number",
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "number",
-                                              "description":  "pet status in the store",
-                                              "items":  null,
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  "",
-                                              "enumString":  [
-                                                        "available",
-                                                        "pending",
-                                                        "sold"
-                                              ],
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "testfalse":  {
-                                              "example":  "@boolean",
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "boolean",
-                                              "description":  "pet status in the store",
-                                              "items":  null,
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  "",
-                                              "enumString":  [
-                                                        "available",
-                                                        "pending",
-                                                        "sold"
-                                              ],
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "testfalse":  {
-                                              "example":  false,
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  "boolean",
-                                              "description":  "pet status in the store",
-                                              "items":  null,
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  "",
-                                              "enumString":  [
-                                                        "available",
-                                                        "pending",
-                                                        "sold"
-                                              ],
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "testnull":  {
-                                              "example":  null,
-                                              "id":  null,
-                                              "title":  null,
-                                              "type":  null,
-                                              "description":  "pet status in the store",
-                                              "items":  null,
-                                              "properties":  null,
-                                              "additionalProperties":  null,
-                                              "required":  null,
-                                              "pattern":  null,
-                                              "maxLength":  null,
-                                              "minLength":  null,
-                                              "minimum":  null,
-                                              "maximum":  null,
-                                              "schema":  null,
-                                              "format":  "",
-                                              "enumInteger":  null,
-                                              "enumNumber":  null,
-                                              "extensions":  null
-                                    },
-                                    "testass": null
-                          },
-                          "additionalProperties":  null,
-                          "required":  [
-                                    "name",
-                                    "photoUrls"
-                          ],
-                          "pattern":  null,
-                          "maxLength":  null,
-                          "minLength":  null,
-                          "minimum":  null,
-                          "maximum":  null,
-                          "schema":  null,
-                          "format":  null,
-                          "enumString":  null,
-                          "enumInteger":  null,
-                          "enumNumber":  null,
-                          "extensions":  null
-                }
-                """;
+                {"example":null,"id":null,"title":null,"type":"object","description":null,"items":null,"properties":{"id":{"example":10,"id":null,"title":null,"type":"integer","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"int64","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"name":{"example":"@string","id":null,"title":null,"type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"category":{"example":null,"id":null,"title":null,"type":"object","description":null,"items":null,"properties":{"id":{"example":"@integer","id":null,"title":null,"type":"integer","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"int64","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"name":{"example":"Dogs","id":null,"title":null,"type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null}},"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":null,"enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"photoUrls":{"example":null,"id":null,"title":null,"type":"array","description":null,"items":[{"example":null,"id":null,"title":null,"type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null}],"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":null,"enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"tags":{"example":null,"id":null,"title":null,"type":"array","description":null,"items":[{"example":null,"id":null,"title":null,"type":"object","description":null,"items":null,"properties":{"id":{"example":null,"id":null,"title":null,"type":"integer","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"int64","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"name":{"example":null,"id":null,"title":null,"type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"mainimum":null,"maximum":null,"schema":null,"format":"","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null}},"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":null,"enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null}],"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":null,"enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"status":{"example":"available","id":null,"title":null,"type":"string","description":"pet status in the store","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumString":["available","pending","sold"],"enumInteger":null,"enumNumber":null,"extensions":null},"testnumber":{"example":1.23139183198000000283719387,"id":null,"title":null,"type":"number","description":"pet status in the store","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumString":["available","pending","sold"],"enumInteger":null,"enumNumber":null,"extensions":null},"testnumber11":{"example":"@number","id":null,"title":null,"type":"number","description":"pet status in the store","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumString":["available","pending","sold"],"enumInteger":null,"enumNumber":null,"extensions":null},"testfalse":{"example":"@boolean","id":null,"title":null,"type":"boolean","description":"pet status in the store","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumString":["available","pending","sold"],"enumInteger":null,"enumNumber":null,"extensions":null},"testfalse":{"example":false,"id":null,"title":null,"type":"boolean","description":"pet status in the store","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumString":["available","pending","sold"],"enumInteger":null,"enumNumber":null,"extensions":null},"testnull":{"example":null,"id":null,"title":null,"type":"null","description":"pet status in the store","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"","enumInteger":null,"enumNumber":null,"extensions":null},"testass": null},"additionalProperties":null,"required":["name","photoUrls"],"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":null,"enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null}
+               """;
         //正常数据;
-        requestPost("preview", jsonString).andExpect(status().isOk());
-        //非正常json数据    会走try catch
-        String abnormalString = """
-                    {
-                      "id" : 10,
-                      "name" : @string,
-                      "category" : {
-                        "id" : "@integer",
-                        "name" : "Dogs"
-                      },
-                      "photoUrls" : [ "string" ],
-                      "tags" : [ {
-                        "id" : 0,
-                        "name" : "string"
-                      } ],
-                      "status" : "available",
-                      "testnumber" : 1.23139183198000000283719387,
-                      "testfalse" : false
-                    }            
-                """;
-        requestPost("preview", abnormalString).andExpect(status().isOk());
+        requestPostWithOk(JSON_SCHEMA_PREVIEW, JSON.parseObject(jsonString, JsonSchemaItem.class));
         //正常array数据
         String jsonArray = """
-                    {
-                                                  "example":  null,
-                                                  "id":  null,
-                                                  "title":  null,
-                                                  "type":  "array",
-                                                  "description":  null,
-                                                  "items":  {
-                                                            "example":  null,
-                                                            "id":  null,
-                                                            "title":  null,
-                                                            "type":  "object",
-                                                            "description":  null,
-                                                            "items":  null,
-                                                            "properties":  {
-                                                                      "id":  {
-                                                                                "example":  "@integer",
-                                                                                "id":  null,
-                                                                                "title":  null,
-                                                                                "type":  "integer",
-                                                                                "description":  "",
-                                                                                "items":  null,
-                                                                                "properties":  null,
-                                                                                "additionalProperties":  null,
-                                                                                "required":  null,
-                                                                                "pattern":  null,
-                                                                                "maxLength":  null,
-                                                                                "minLength":  null,
-                                                                                "minimum":  null,
-                                                                                "maximum":  null,
-                                                                                "schema":  null,
-                                                                                "format":  "int64",
-                                                                                "enumString":  null,
-                                                                                "enumInteger":  null,
-                                                                                "enumNumber":  null,
-                                                                                "extensions":  null
-                                                                      },
-                                                                      "name":  {
-                                                                                "example":  null,
-                                                                                "id":  null,
-                                                                                "title":  null,
-                                                                                "type":  "string",
-                                                                                "description":  "",
-                                                                                "items":  null,
-                                                                                "properties":  null,
-                                                                                "additionalProperties":  null,
-                                                                                "required":  null,
-                                                                                "pattern":  null,
-                                                                                "maxLength":  null,
-                                                                                "minLength":  null,
-                                                                                "mainimum":  null,
-                                                                                "maximum":  null,
-                                                                                "schema":  null,
-                                                                                "format":  "",
-                                                                                "enumString":  null,
-                                                                                "enumInteger":  null,
-                                                                                "enumNumber":  null,
-                                                                                "extensions":  null
-                                                                      }
-                                                            },
-                                                            "additionalProperties":  null,
-                                                            "required":  null,
-                                                            "pattern":  null,
-                                                            "maxLength":  null,
-                                                            "minLength":  null,
-                                                            "minimum":  null,
-                                                            "maximum":  null,
-                                                            "schema":  null,
-                                                            "format":  null,
-                                                            "enumString":  null,
-                                                            "enumInteger":  null,
-                                                            "enumNumber":  null,
-                                                            "extensions":  null
-                                                  },
-                                                  "properties":  null,
-                                                  "additionalProperties":  null,
-                                                  "required":  null,
-                                                  "pattern":  null,
-                                                  "maxLength":  null,
-                                                  "minLength":  null,
-                                                  "minimum":  null,
-                                                  "maximum":  null,
-                                                  "schema":  null,
-                                                  "format":  null,
-                                                  "enumString":  null,
-                                                  "enumInteger":  null,
-                                                  "enumNumber":  null,
-                                                  "extensions":  null
-                                        }            
+                {"example":null,"id":null,"title":null,"type":"array","description":null,"items":{"example":null,"id":null,"title":null,"type":"object","description":null,"items":null,"properties":{"id":{"example":"@integer","id":null,"title":null,"type":"integer","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":"int64","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"name":{"example":null,"id":null,"title":null,"type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"mainimum":null,"maximum":null,"schema":null,"format":"","enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null}},"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":null,"enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null},"properties":null,"additionalProperties":null,"required":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"schema":null,"format":null,"enumString":null,"enumInteger":null,"enumNumber":null,"extensions":null}
                 """;
-        requestPost("preview", jsonArray).andExpect(status().isOk());
+        requestPostWithOk(JSON_SCHEMA_PREVIEW, JSON.parseObject(jsonArray, JsonSchemaItem.class));
+
+        // 校验转换是否正确
+        String schema = """
+                {"type":"object","enable":true,"properties":{"array":{"type":"array","enable":true,"items":[{"type":"string","example":"1","enable":true},{"type":"number","example":"2","enable":true}]},"string":{"type":"string","example":"stringValue","enable":true},"int":{"type":"integer","example":"1","enable":true},"num":{"type":"number","example":"1.00","enable":true},"boolean":{"type":"boolean","example":"booleanValue","enable":true},"null":{"type":"null","enable":true},"":{"type":"string","enable":true}}}
+                """;
+        String jsonResult = """
+                {
+                  "array" : [ "1", 2 ],
+                  "string" : "stringValue",
+                  "int" : 1,
+                  "num" : 1.00,
+                  "boolean" : false,
+                  "null" : null
+                }
+                """;
+        MvcResult mvcResult = requestPostWithOkAndReturn(JSON_SCHEMA_PREVIEW, JSON.parseObject(schema, JsonSchemaItem.class));
+        String resultData = getResultData(mvcResult, String.class);
+        Assertions.assertEquals(JSON.parseObject(jsonResult), JSON.parseObject(resultData));
+
+        // 校验根节点数组是否正确
+        schema = """
+                {"type":"array","enable":true,"items":[{"type":"array","enable":true,"items":[{"type":"string","example":"1","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},{"type":"number","example":"2","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true}]},{"type":"string","example":"stringValue","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},{"type":"integer","example":"intValue","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},{"type":"number","example":"1.00","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},{"type":"boolean","example":"booleanValue","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},{"type":"null","enable":true}]}
+                """;
+        jsonResult = """
+                [
+                   [
+                     "1",
+                     2
+                   ],
+                   "stringValue",
+                   0,
+                   1.00,
+                   false,
+                   null
+                ]
+                """;
+        mvcResult = requestPostWithOkAndReturn(JSON_SCHEMA_PREVIEW, JSON.parseObject(schema, JsonSchemaItem.class));
+        resultData = getResultData(mvcResult, String.class);
+        Assertions.assertEquals(JSON.parseObject(jsonResult), JSON.parseObject(resultData));
+
+        // 校验禁用
+        schema = """
+                {"type":"object","enable":false}
+                """;
+        mvcResult = requestPostWithOkAndReturn(JSON_SCHEMA_PREVIEW, JSON.parseObject(schema, JsonSchemaItem.class));
+        Assertions.assertEquals(getResultData(mvcResult, String.class), "{}");
+
+        // 校验禁用
+        schema = """
+                {"type":"object","enable":true,"properties":{"array":{"type":"array","enable":false,"items":[{"type":"string","example":"1","enable":false},{"type":"number","example":"2","enable":false}]},"string":{"type":"string","example":"stringValue","enable":false},"int":{"type":"integer","example":"1","enable":false},"num":{"type":"number","example":"1.00","enable":false},"boolean":{"type":"boolean","example":"booleanValue","enable":false},"null":{"type":"null","enable":false}}}
+                """;
+        mvcResult = requestPostWithOkAndReturn(JSON_SCHEMA_PREVIEW, JSON.parseObject(schema, JsonSchemaItem.class));
+        resultData = getResultData(mvcResult, String.class);
+        Assertions.assertEquals(JSON.parseObject("{}"), JSON.parseObject(resultData));
+    }
+
+    @Test
+    @Order(104)
+    public void testJsonSchemaAutoGenerate() throws Exception {
+        String jsonString = """
+                {"id":null,"title":null,"example":null,"type":"object","description":null,"items":null,"properties":{"array":{"id":null,"title":null,"example":null,"type":"array","description":null,"items":[{"id":null,"title":null,"example":"","type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},{"id":null,"title":null,"example":"","type":"number","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true}],"properties":null,"additionalProperties":null,"required":null,"defaultValue":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"string":{"id":null,"title":null,"example":"","type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"int":{"id":null,"title":null,"example":"","type":"integer","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"num":{"id":null,"title":null,"example":"","type":"number","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"boolean":{"id":null,"title":null,"example":"","type":"boolean","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"null":{"id":null,"title":null,"example":null,"type":"null","description":null,"items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true}},"additionalProperties":null,"required":null,"defaultValue":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true}
+                """;
+        // 默认生成
+        requestPost(JSON_SCHEMA_AUTO_GENERATE, JSON.parseObject(jsonString, JsonSchemaItem.class));
+        // 带枚举值
+        jsonString = """
+                {"type":"object","enable":true,"properties":{"array":{"type":"array","enable":true,"items":[{"type":"string","example":"","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":4,"minLength":0,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true,"regex":"^[A-Z]"},{"type":"number","example":"","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true}]},"string":{"type":"string","example":"","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":5,"minLength":1,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":["11111","22222"],"enable":true},"int":{"type":"integer","example":"","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":0,"maximum":4,"maxItems":null,"minItems":null,"format":null,"enumValues":["111","2333","444"],"enable":true},"num":{"type":"number","example":"","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":0,"maximum":5,"maxItems":null,"minItems":null,"format":null,"enumValues":["111","222","3333"],"enable":true},"boolean":{"type":"boolean","example":"","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},"null":{"type":"null","enable":true}}}
+                """;
+        requestPostWithOk(JSON_SCHEMA_AUTO_GENERATE, JSON.parseObject(jsonString, JsonSchemaItem.class));
+
+        // 默认值和正则
+        jsonString = """
+                {"id":null,"title":null,"example":null,"type":"object","description":null,"items":null,"properties":{"array":{"id":null,"title":null,"example":null,"type":"array","description":null,"items":[{"id":null,"title":null,"example":"","type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"默认值","pattern":null,"maxLength":4,"minLength":0,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},{"id":null,"title":null,"example":"","type":"number","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true}],"properties":null,"additionalProperties":null,"required":null,"defaultValue":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"string":{"id":null,"title":null,"example":"","type":"string","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"","pattern":"[A-Z0-9_]+","maxLength":5,"minLength":1,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"int":{"id":null,"title":null,"example":"","type":"integer","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":3,"pattern":null,"maxLength":null,"minLength":null,"minimum":0,"maximum":4,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"num":{"id":null,"title":null,"example":"","type":"number","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":2,"pattern":null,"maxLength":null,"minLength":null,"minimum":0,"maximum":5,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"boolean":{"id":null,"title":null,"example":"","type":"boolean","description":"","items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":"true","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true},"null":{"id":null,"title":null,"example":null,"type":"null","description":null,"items":null,"properties":null,"additionalProperties":null,"required":null,"defaultValue":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true}},"additionalProperties":null,"required":null,"defaultValue":null,"pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enumValues":null,"enable":true}
+                """;
+        requestPostWithOk(JSON_SCHEMA_AUTO_GENERATE, JSON.parseObject(jsonString, JsonSchemaItem.class));
+
+        // 长度截取
+        jsonString = """
+                {"type":"object","enable":true,"properties":{"arraywww":{"type":"array","enable":true,"items":[{"type":"string","example":"1","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},{"type":"number","example":"2","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true}],"minItems":null,"maxItems":null},"string":{"type":"string","example":"@natural(1,100)","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},"int":{"type":"integer","example":"intValue","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},"num":{"type":"number","example":"","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},"boolean":{"type":"boolean","example":"booleanValue","description":"","additionalProperties":null,"defaultValue":"","pattern":null,"maxLength":null,"minLength":null,"minimum":null,"maximum":null,"maxItems":null,"minItems":null,"format":null,"enable":true},"null":{"type":"null","enable":true},"默认值大于最大长度":{"type":"string","example":"","description":"","enable":true,"defaultValue":"sdfdsd","maxLength":1,"minLength":0},"默认值小于最小长度":{"type":"string","example":"","description":"","enable":true,"defaultValue":"1","maxLength":3,"minLength":2},"数组项小于最小项":{"type":"array","enable":true,"items":[],"minItems":2,"maxItems":3},"数组项大于最大项":{"type":"array","enable":true,"items":[null,null],"minItems":0,"maxItems":1},"正则大于最大长度":{"type":"string","example":"","description":"","enable":true,"defaultValue":"","maxLength":2,"minLength":0,"pattern":"[A-Z]{4}"}}}
+                """;
+        requestPostWithOk(JSON_SCHEMA_AUTO_GENERATE, JSON.parseObject(jsonString, JsonSchemaItem.class));
+
+        // 字符串自动生成
+        jsonString = """
+                {"type":"object","enable":true,"properties":{"默认8位":{"type":"string","example":"","description":"","enable":true,"defaultValue":"","format":"date-time"},"最小2位":{"type":"string","example":"","description":"","enable":true,"defaultValue":"","minLength":2},"最大4":{"type":"string","example":"","description":"","enable":true,"defaultValue":"","maxLength":4},"最小2位，最大4":{"type":"string","example":"","description":"","enable":true,"defaultValue":"","maxLength":4,"minLength":2}}}
+                """;
+        requestPostWithOk(JSON_SCHEMA_AUTO_GENERATE, JSON.parseObject(jsonString, JsonSchemaItem.class));
     }
 
     @Test
@@ -2294,6 +2365,17 @@ public class ApiDefinitionControllerTests extends BaseTest {
         Assertions.assertNotNull(resultHolder);
         Pager<?> pageData = JSON.parseObject(JSON.toJSONString(resultHolder.getData()), Pager.class);
         Assertions.assertNotNull(pageData);
+    }
+
+    @Test
+    @Order(104)
+    public void testExport() throws Exception {
+        ApiDefinitionBatchRequest request = new ApiDefinitionBatchRequest();
+        request.setProjectId(DEFAULT_PROJECT_ID);
+        request.setProtocols(List.of("HTTP"));
+        request.setSelectAll(false);
+        request.setSelectIds(List.of("1002"));
+        this.requestPost(EXPORT + "swagger", request);
     }
 
 }

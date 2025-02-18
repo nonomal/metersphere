@@ -48,8 +48,9 @@
           <template v-if="scenario.executeTime">
             <div class="action-group">
               <div class="text-[var(--color-text-4)]">{{ t('apiScenario.executeTime') }}</div>
-              <div class="text-[var(--color-text-4)]">{{ scenario.executeTime }}</div>
+              <div class="text-[var(--color-text-1)]">{{ scenario.executeTime }}</div>
             </div>
+            <a-divider direction="vertical" :margin="8"></a-divider>
             <div class="action-group">
               <div class="text-[var(--color-text-4)]">{{ t('apiScenario.executeResult') }}</div>
               <div class="flex items-center gap-[4px]">
@@ -61,14 +62,21 @@
                 <div class="text-[rgb(var(--danger-6))]">{{ scenario.executeFailCount }}</div>
               </div>
               <div class="flex items-center gap-[4px]">
-                <div class="text-[var(--color-text-1)]">{{ t('report.fake.error') }}</div>
+                <div class="text-[var(--color-text-1)]">{{ t('common.fakeError') }}</div>
                 <div class="text-[rgb(var(--warning-5))]">{{ scenario.executeFakeErrorCount }}</div>
               </div>
               <MsButton
-                v-if="scenario.isDebug === false && !scenario.executeLoading && !scenario.isNew"
+                v-if="
+                  scenario.executeType !== 'localExec' &&
+                  scenario.isDebug === false &&
+                  !scenario.executeLoading &&
+                  !scenario.isNew
+                "
                 type="text"
+                class="ml-[8px]"
                 @click="checkReport"
               >
+                <icon-eye class="mr-[4px] text-[rgb(var(--primary-5))]" />
                 {{ t('apiScenario.checkReport') }}
               </MsButton>
             </div>
@@ -282,10 +290,14 @@
           scenario.value.steps,
           checkedKeys.value,
           (node) => !node.isQuoteScenarioStep,
+          (node) => {
+            delete scenario.value.stepDetails[node.id];
+          },
           'uniqueId'
         );
         if (deleteResult) {
           Message.success(t('common.deleteSuccess'));
+          checkedKeys.value = [];
           if (scenario.value.steps.length === 0) {
             checkedAll.value = false;
             indeterminate.value = false;

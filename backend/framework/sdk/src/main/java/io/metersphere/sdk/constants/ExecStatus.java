@@ -1,7 +1,7 @@
 package io.metersphere.sdk.constants;
 
 /**
- * 报告执行状态
+ * 执行状态
  */
 public enum ExecStatus {
     /**
@@ -13,7 +13,7 @@ public enum ExecStatus {
      */
     RUNNING,
     /**
-     * 重新执行
+     * 重新执行中
      */
     RERUNNING,
     /**
@@ -21,7 +21,7 @@ public enum ExecStatus {
      */
     STOPPED,
     /**
-     * 已完成
+     * 完成
      */
     COMPLETED
 }

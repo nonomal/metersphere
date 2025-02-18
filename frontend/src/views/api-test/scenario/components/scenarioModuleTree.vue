@@ -1,24 +1,37 @@
 <template>
-  <div>
+  <div class="h-full">
     <div class="mb-[8px] flex items-center gap-[8px]">
-      <a-input
-        v-model:model-value="moduleKeyword"
-        :placeholder="t('apiScenario.tree.selectorPlaceholder')"
-        allow-clear
-      />
       <a-button
         v-permission="['PROJECT_API_SCENARIO:READ+ADD']"
         type="primary"
-        value="newScenario"
+        long
         @click="
           () => {
             emit('newScenario');
           }
         "
       >
-        {{ t('common.newCreate') }}</a-button
+        {{ t('apiScenario.createScenario') }}
+      </a-button>
+      <a-button
+        v-permission="['PROJECT_API_SCENARIO:READ+IMPORT']"
+        type="outline"
+        long
+        @click="
+          () => {
+            emit('import');
+          }
+        "
       >
+        {{ t('apiScenario.importScenario') }}
+      </a-button>
     </div>
+    <a-input
+      v-model:model-value="moduleKeyword"
+      :placeholder="t('apiScenario.tree.selectorPlaceholder')"
+      class="mb-[8px]"
+      allow-clear
+    />
     <div class="folder" @click="setActiveFolder('all')">
       <div :class="allFolderClass">
         <MsIcon type="icon-icon_folder_filled1" class="folder-icon" />
@@ -49,9 +62,7 @@
         </popConfirm>
       </div>
     </div>
-    <a-divider class="my-[8px]" />
-
-    <a-spin class="w-full" :style="{ height: `calc(100vh - 300px)` }" :loading="loading">
+    <a-spin class="w-full" :style="{ height: `calc(100vh - 273px)` }" :loading="loading">
       <MsTree
         v-model:focus-node-key="focusNodeKey"
         v-model:selected-keys="selectedKeys"
@@ -110,7 +121,7 @@
             :parent-id="nodeData.id"
             :node-id="nodeData.id"
             :field-config="{ field: renameFolderTitle }"
-            :all-names="(nodeData.parent? nodeData.parent.children || [] : folderTree).map((e: ModuleTreeNode) => e.name || '')"
+            :all-names="(nodeData.parent? nodeData.parent.children || [] : folderTree).filter((e:ModuleTreeNode) => e.id !== nodeData.id).map((e: ModuleTreeNode) => e.name || '')"
             :update-module-api="updateModule"
             @close="resetFocusNodeKey"
             @rename-finish="initModules"
@@ -145,7 +156,7 @@
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import useAppStore from '@/store/modules/app';
-  import { mapTree } from '@/utils';
+  import { characterLimit, mapTree } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { ApiScenarioGetModuleParams } from '@/models/apiTest/scenario';
@@ -171,6 +182,7 @@
     'import',
     'folderNodeSelect',
     'changeProtocol',
+    'change',
   ]);
 
   const appStore = useAppStore();
@@ -178,16 +190,8 @@
   const { openModal } = useModal();
 
   const virtualListProps = computed(() => {
-    if (props.readOnly) {
-      return {
-        height: 'calc(60vh - 325px)',
-        threshold: 200,
-        fixedSize: true,
-        buffer: 15, // 缓冲区默认 10 的时候，虚拟滚动的底部 padding 计算有问题
-      };
-    }
     return {
-      height: 'calc(100vh - 300px)',
+      height: '100%',
       threshold: 200,
       fixedSize: true,
       buffer: 15, // 缓冲区默认 10 的时候，虚拟滚动的底部 padding 计算有问题
@@ -348,7 +352,7 @@
   function deleteFolder(node: MsTreeNodeData) {
     openModal({
       type: 'error',
-      title: t('apiScenario.module.deleteTipTitle', { name: node.name }),
+      title: t('apiScenario.module.deleteTipTitle', { name: characterLimit(node.name) }),
       content: t('apiScenario.module.deleteTipContent'),
       okText: t('apiScenario.deleteConfirm'),
       okButtonProps: {
@@ -359,6 +363,7 @@
         try {
           await deleteModule(node.id);
           Message.success(t('apiScenario.deleteSuccess'));
+          emit('change');
           await initModules();
           emit('countRecycleScenario');
         } catch (error) {
@@ -425,6 +430,7 @@
         dropPosition,
       });
       Message.success(t('apiScenario.moveSuccess'));
+      emit('change');
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -449,11 +455,11 @@
     lastModuleCountParam.value = {
       projectId: appStore.currentProjectId,
     };
-
     await initModules();
   });
   defineExpose({
     refresh,
+    setActiveFolder,
     initModuleCount,
   });
 </script>

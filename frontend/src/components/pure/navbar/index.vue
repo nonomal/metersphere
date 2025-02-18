@@ -1,6 +1,6 @@
 <template>
   <div class="navbar">
-    <div class="flex items-center px-[16px]">
+    <div class="flex w-[200px] items-center px-[16px]">
       <a-space>
         <div class="one-line-text flex max-w-[145px] items-center">
           <img :src="props.logo" class="mr-[4px] h-[34px] w-[32px]" />
@@ -16,7 +16,7 @@
       <template v-if="showProjectSelect">
         <a-select
           v-model:model-value="appStore.currentProjectId"
-          class="w-[200px] focus-within:!bg-[var(--color-text-n8)] hover:!bg-[var(--color-text-n8)]"
+          class="mr-[8px] w-[200px] focus-within:!bg-[var(--color-text-n8)] hover:!bg-[var(--color-text-n8)]"
           :bordered="false"
           :fallback-option="false"
           allow-search
@@ -24,6 +24,18 @@
         >
           <template #arrow-icon>
             <icon-caret-down />
+          </template>
+          <template v-if="hasAnyPermission(['ORGANIZATION_PROJECT:READ+ADD'])" #header>
+            <a-button
+              class="select-header-button mb-[4px] h-[28px] w-full justify-start pl-[7px] pr-0"
+              type="text"
+              @click="projectVisible = true"
+            >
+              <template #icon>
+                <MsIcon type="icon-icon_add_outlined" />
+              </template>
+              {{ t('settings.navbar.createProject') }}
+            </a-button>
           </template>
           <a-tooltip
             v-for="project of appStore.projectList"
@@ -81,7 +93,7 @@
           </template>
         </a-popover>
       </li>
-      <li>
+      <li v-if="hasAnyPermission(['PROJECT_CASE_TASK_CENTER:READ', 'PROJECT_SCHEDULE_TASK_CENTER:READ'])">
         <a-tooltip :content="t('settings.navbar.task')">
           <a-button type="secondary" @click="goTaskCenter">
             <template #icon>
@@ -101,7 +113,7 @@
           </a-tooltip>
           <template #content>
             <a-doption v-if="appStore.pageConfig.helpDoc" value="doc">
-              <component :is="IconQuestionCircle"></component>
+              <MsIcon type="icon-icon-maybe_outlined" />
               {{ t('settings.help.doc') }}
             </a-doption>
             <a-popover position="left">
@@ -119,12 +131,36 @@
                 </div>
               </template>
             </a-popover>
+            <a-doption value="forumHelp">
+              <MsIcon type="icon-icon_forum" />
+              {{ t('settings.help.forumHelp') }}
+            </a-doption>
+            <a-doption value="github">
+              <MsIcon type="icon-icon_github" />
+              {{ t('settings.help.gitHubProject') }}
+            </a-doption>
+            <a-doption value="enterprise">
+              <MsIcon type="icon-icon_vip" />
+              {{ t('settings.help.enterpriseVersionTrial') }}
+            </a-doption>
           </template>
         </a-dropdown>
       </li>
       <li>
-        <a-dropdown trigger="click" position="br" @select="changeLocale as any">
-          <a-tooltip :content="t('settings.language')">
+        <a-tooltip :content="t('settings.themeColor')" position="br">
+          <a-switch v-model:model-value="isSun" size="small" @change="handleSunChange">
+            <template #checked-icon>
+              <icon-sun-fill />
+            </template>
+            <template #unchecked-icon>
+              <icon-moon-fill />
+            </template>
+          </a-switch>
+        </a-tooltip>
+      </li>
+      <li>
+        <a-dropdown trigger="click" position="br" @select="changeLanguage as any">
+          <a-tooltip :content="t('settings.language')" position="br">
             <a-button type="secondary">
               <template #icon>
                 <icon-translate />
@@ -143,8 +179,9 @@
       </li>
     </ul>
   </div>
-  <TaskCenterModal v-model:visible="taskCenterVisible" />
-  <MessageCenterDrawer v-model:visible="messageCenterVisible" />
+  <TaskCenterDrawer v-if="taskCenterVisible" v-model:visible="taskCenterVisible" />
+  <MessageCenterDrawer v-if="messageCenterVisible" v-model:visible="messageCenterVisible" />
+  <AddProjectModal :visible="projectVisible" @cancel="projectVisible = false" />
 </template>
 
 <script lang="ts" setup>
@@ -154,21 +191,32 @@
   import { Message } from '@arco-design/web-vue';
 
   import MessageBox from '@/components/pure/message-box/index.vue';
-  import MessageCenterDrawer from '@/components/business/ms-message/MessageCenterDrawer.vue';
   import TopMenu from '@/components/business/ms-top-menu/index.vue';
-  import TaskCenterModal from './taskCenterModal.vue';
+  import AddProjectModal from '@/views/setting/organization/project/components/addProjectModal.vue';
 
   import { getMessageUnReadCount } from '@/api/modules/message';
   import { switchProject } from '@/api/modules/project-management/project';
+  import { updateLanguage } from '@/api/modules/user';
   import { MENU_LEVEL, type PathMapRoute } from '@/config/pathMap';
   import { useI18n } from '@/hooks/useI18n';
   import usePathMap from '@/hooks/usePathMap';
   import { LOCALE_OPTIONS } from '@/locale';
   import useLocale from '@/locale/useLocale';
   import useAppStore from '@/store/modules/app';
+  import useGlobalStore from '@/store/modules/global';
   import useUserStore from '@/store/modules/user';
+  import { getFirstRouteNameByPermission, hasAnyPermission } from '@/utils/permission';
+  import { setDarkTheme, watchStyle, watchTheme } from '@/utils/theme';
 
-  import { IconInfoCircle, IconQuestionCircle } from '@arco-design/web-vue/es/icon';
+  import { GlobalEventNameEnum } from '@/enums/commonEnum';
+
+  import { IconInfoCircle } from '@arco-design/web-vue/es/icon';
+  import type { LocaleType } from '#/global';
+
+  const TaskCenterDrawer = defineAsyncComponent(() => import('@/components/business/ms-task-center-drawer/index.vue'));
+  const MessageCenterDrawer = defineAsyncComponent(
+    () => import('@/components/business/ms-message/MessageCenterDrawer.vue')
+  );
 
   const props = defineProps<{
     isPreview?: boolean;
@@ -179,13 +227,16 @@
 
   const appStore = useAppStore();
   const userStore = useUserStore();
+  const globalStore = useGlobalStore();
   const route = useRoute();
   const router = useRouter();
   const { t } = useI18n();
   const unReadCount = ref<number>(0);
 
   async function checkMessageRead() {
-    unReadCount.value = await getMessageUnReadCount(appStore.currentProjectId);
+    if (appStore.currentProjectId && appStore.currentProjectId !== 'no_such_project') {
+      unReadCount.value = await getMessageUnReadCount(appStore.currentProjectId);
+    }
   }
   watch(
     () => appStore.currentOrgId,
@@ -207,6 +258,7 @@
     }
   );
 
+  const projectVisible = ref(false);
   const showProjectSelect = computed(() => {
     const { getRouteLevelByKey } = usePathMap();
     // 非项目级别页面不需要展示项目选择器
@@ -217,26 +269,25 @@
   async function selectProject(
     value: string | number | boolean | Record<string, any> | (string | number | boolean | Record<string, any>)[]
   ) {
-    appStore.setCurrentProjectId(value as string);
     try {
       appStore.showLoading();
       await switchProject({
         projectId: value as string,
         userId: userStore.id || '',
       });
+      await userStore.checkIsLogin(true);
+      router.replace({
+        name: getFirstRouteNameByPermission(router.getRoutes()),
+        query: {
+          orgId: appStore.currentOrgId,
+          pId: value as string,
+        },
+      });
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       appStore.hideLoading();
-      router.replace({
-        path: route.path,
-        query: {
-          ...route.query,
-          orgId: appStore.currentOrgId,
-          pId: appStore.currentProjectId,
-        },
-      });
     }
   }
 
@@ -260,13 +311,63 @@
   function goTaskCenter() {
     taskCenterVisible.value = true;
   }
+  watch(
+    () => globalStore.getGlobalEvent,
+    (event) => {
+      if (event && event.id && event.name === GlobalEventNameEnum.OPEN_TASK_CENTER) {
+        goTaskCenter();
+      }
+    }
+  );
+
   function goMessageCenter() {
     messageCenterVisible.value = true;
   }
 
+  const isSun = ref(!appStore.isDarkTheme);
+
+  watch(
+    () => appStore.isDarkTheme,
+    (val) => {
+      if (val) {
+        // 暗黑模式
+        setDarkTheme();
+      } else {
+        // 初始化平台风格和主题色
+        watchStyle(appStore.pageConfig.style, appStore.pageConfig);
+        watchTheme(appStore.pageConfig.theme, appStore.pageConfig);
+      }
+    },
+    {
+      immediate: true,
+    }
+  );
+
+  function handleSunChange(val: string | number | boolean) {
+    appStore.setDarkTheme(!val);
+  }
+
+  function changeLanguage(locale: LocaleType) {
+    // 修改当前用户的语言
+    updateLanguage({ language: locale });
+    changeLocale(locale);
+  }
   function handleHelpSelect(val: string | number | Record<string, any> | undefined) {
-    if (val === 'doc') {
-      window.open(appStore.pageConfig.helpDoc, '_blank');
+    switch (val) {
+      case 'doc':
+        window.open(appStore.pageConfig.helpDoc, '_blank');
+        break;
+      case 'forumHelp':
+        window.open('https://bbs.fit2cloud.com/c/ms/8', '_blank');
+        break;
+      case 'github':
+        window.open('https://github.com/metersphere/metersphere', '_blank');
+        break;
+      case 'enterprise':
+        window.open('https://jinshuju.net/f/CzzAOe', '_blank');
+        break;
+      default:
+        break;
     }
   }
 
@@ -280,6 +381,9 @@
 <style scoped lang="less">
   .navbar {
     @apply flex h-full justify-between bg-transparent;
+  }
+  .select-header-button.arco-btn-text:not(:disabled):hover {
+    background-color: rgb(var(--primary-1)) !important;
   }
   .center-side {
     @apply flex flex-1 items-center;

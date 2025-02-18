@@ -1,11 +1,13 @@
 package io.metersphere.functional.excel.domain;
 
 import com.alibaba.excel.annotation.ExcelIgnore;
+import com.alibaba.excel.metadata.data.WriteCellData;
 import io.metersphere.functional.excel.constants.FunctionalCaseImportFiled;
 import io.metersphere.system.dto.sdk.TemplateCustomFieldDTO;
 import lombok.Getter;
 import lombok.Setter;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.*;
 
@@ -40,6 +42,9 @@ public class FunctionalCaseExcelData {
     @ExcelIgnore
     Map<String, String> otherFields;
 
+    @ExcelIgnore
+    private WriteCellData<String> hyperLinkName;
+
     /**
      * 合并文本描述
      */
@@ -60,7 +65,9 @@ public class FunctionalCaseExcelData {
         List<List<String>> heads = new ArrayList<>();
         FunctionalCaseImportFiled[] fields = FunctionalCaseImportFiled.values();
         for (FunctionalCaseImportFiled field : fields) {
-            heads.add(Arrays.asList(field.getFiledLangMap().get(lang)));
+            if (!StringUtils.equalsIgnoreCase(field.name(), "ID")) {
+                heads.add(Arrays.asList(field.getFiledLangMap().get(lang)));
+            }
         }
 
         if (CollectionUtils.isNotEmpty(customFields)) {

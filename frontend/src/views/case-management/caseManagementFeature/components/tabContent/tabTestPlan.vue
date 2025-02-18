@@ -17,11 +17,11 @@
         <a-button type="text" class="px-0" @click="goToPlan(record)">{{ record.testPlanNum }}</a-button>
       </template>
       <template #planStatus="{ record }">
-        <MsStatusTag :status="record.planStatus" />
+        <MsStatusTag v-if="getStatus(record.testPlanId)" :status="getStatus(record.testPlanId)" />
+        <span v-else>-</span>
       </template>
       <template #lastExecResult="{ record }">
-        <ExecuteResult v-if="record.lastExecResult" :execute-result="record.lastExecResult" />
-        <span v-else>-</span>
+        <ExecuteResult :execute-result="record.lastExecResult || 'PENDING'" />
       </template>
       <template #[FilterSlotNameEnum.CASE_MANAGEMENT_EXECUTE_RESULT]="{ filterContent }">
         <ExecuteResult :execute-result="filterContent.value" />
@@ -46,9 +46,10 @@
   import MsStatusTag from '@/components/business/ms-status-tag/index.vue';
 
   import { getLinkedCaseTestPlanList } from '@/api/modules/case-management/featureCase';
+  import { getPlanPassRate } from '@/api/modules/test-plan/testPlan';
   import { useI18n } from '@/hooks/useI18n';
 
-  import { AssociateFunctionalCaseItem, planStatusType } from '@/models/testPlan/testPlan';
+  import { AssociateFunctionalCaseItem, PassRateCountDetail, planStatusType } from '@/models/testPlan/testPlan';
   import { TestPlanRouteEnum } from '@/enums/routeEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
   import { FilterSlotNameEnum } from '@/enums/tableFilterEnum';
@@ -108,10 +109,11 @@
       title: 'caseManagement.featureCase.planStatus',
       slotName: 'planStatus',
       dataIndex: 'planStatus',
-      filterConfig: {
-        options: planStatusOptions.value,
-        filterSlotName: FilterSlotNameEnum.TEST_PLAN_STATUS_FILTER,
-      },
+      // TODO : 这个版本先不上过滤后台没有做
+      // filterConfig: {
+      //   options: planStatusOptions.value,
+      //   filterSlotName: FilterSlotNameEnum.TEST_PLAN_STATUS_FILTER,
+      // },
       width: 200,
     },
     {
@@ -145,7 +147,6 @@
       tableKey: TableKeyEnum.CASE_MANAGEMENT_TAB_TEST_PLAN,
       scroll: { x: '100%' },
       heightUsed: 340,
-      enableDrag: false,
     },
     (item) => {
       return {
@@ -187,6 +188,40 @@
       if (val) {
         initData();
       }
+    }
+  );
+
+  const defaultCountDetailMap = ref<Record<string, PassRateCountDetail>>({});
+
+  function getStatus(id: string) {
+    return defaultCountDetailMap.value[id]?.status;
+  }
+
+  // 获取状态统计
+  async function getStatistics(selectedPlanIds: (string | undefined)[]) {
+    try {
+      const result = await getPlanPassRate(selectedPlanIds);
+      result.forEach((item: PassRateCountDetail) => {
+        defaultCountDetailMap.value[item.id] = item;
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  }
+
+  watch(
+    () => propsRes.value.data,
+    (val) => {
+      if (val) {
+        const selectedPlanIds: (string | undefined)[] = propsRes.value.data.map((e) => e.testPlanId) || [];
+        if (selectedPlanIds && selectedPlanIds.length > 0) {
+          getStatistics(selectedPlanIds);
+        }
+      }
+    },
+    {
+      deep: true,
     }
   );
 

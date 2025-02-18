@@ -6,9 +6,14 @@ import io.metersphere.functional.dto.DemandDTO;
 import io.metersphere.functional.dto.FunctionalDemandDTO;
 import io.metersphere.functional.mapper.FunctionalCaseDemandMapper;
 import io.metersphere.functional.request.*;
+import io.metersphere.functional.service.DemandSyncService;
 import io.metersphere.functional.service.FunctionalCaseDemandService;
 import io.metersphere.plugin.platform.dto.response.PlatformDemandDTO;
 import io.metersphere.plugin.platform.utils.PluginPager;
+import io.metersphere.project.domain.ProjectApplication;
+import io.metersphere.project.mapper.ProjectApplicationMapper;
+import io.metersphere.project.service.ProjectApplicationService;
+import io.metersphere.sdk.constants.ProjectApplicationType;
 import io.metersphere.sdk.constants.SessionConstants;
 import io.metersphere.sdk.domain.OperationLog;
 import io.metersphere.sdk.domain.OperationLogExample;
@@ -40,6 +45,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.mockserver.model.HttpRequest.request;
 import static org.mockserver.model.HttpResponse.response;
@@ -61,11 +67,18 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
     @Resource
     private BasePluginTestService basePluginTestService;
     @Resource
+    private DemandSyncService demandSyncService;
+    @Resource
     private MockServerClient mockServerClient;
     @Value("${embedded.mockserver.host}")
     private String mockServerHost;
     @Value("${embedded.mockserver.port}")
     private int mockServerHostPort;
+    @Resource
+    private ProjectApplicationMapper projectApplicationMapper;
+    @Resource
+    private ProjectApplicationService projectApplicationService;
+
 
 
     private static final String URL_DEMAND_PAGE = "/functional/case/demand/page";
@@ -93,7 +106,7 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
                                 .withHeaders(
                                         new Header("Content-Type", "application/json; charset=utf-8"),
                                         new Header("Cache-Control", "public, max-age=86400"))
-                                .withBody("{\"id\":\"123456\",\"name\":\"test\"}")
+                                .withBody("{\"id\":\"123456\",\"name\":\"test\", \"issues\": [{\"key\": \"TES-1\",\"fields\": {\"summary\": \"Test\"}}], \"total\": 1}")
 
                 );
         FunctionalDemandBatchRequest functionalDemandBatchRequest = new FunctionalDemandBatchRequest();
@@ -119,6 +132,7 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
         demandList = new ArrayList<>();
         demandDTO = new DemandDTO();
         demandDTO.setDemandName("手动加入孩子");
+        demandDTO.setDemandId("001001");
         demandDTO.setParent("001");
         demandList.add(demandDTO);
         functionalCaseDemandRequest.setDemandList(demandList);
@@ -273,7 +287,7 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
         functionalCaseDemandExample = new FunctionalCaseDemandExample();
         functionalCaseDemandExample.createCriteria().andCaseIdEqualTo("DEMAND_TEST_FUNCTIONAL_CASE_ID");
         functionalCaseDemands = functionalCaseDemandMapper.selectByExample(functionalCaseDemandExample);
-        Assertions.assertTrue(StringUtils.equals(functionalCaseDemands.get(0).getDemandName(), "手动加入2"));
+        Assertions.assertTrue(StringUtils.equals(functionalCaseDemands.getFirst().getDemandName(), "手动加入2"));
     }
 
     @Test
@@ -292,7 +306,7 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
         functionalCaseDemandExample = new FunctionalCaseDemandExample();
         functionalCaseDemandExample.createCriteria().andCaseIdEqualTo("DEMAND_TEST_FUNCTIONAL_CASE_ID");
         functionalCaseDemands = functionalCaseDemandMapper.selectByExample(functionalCaseDemandExample);
-        Assertions.assertTrue(StringUtils.equals(functionalCaseDemands.get(0).getDemandName(), "手动加入2"));
+        Assertions.assertTrue(StringUtils.equals(functionalCaseDemands.getFirst().getDemandName(), "手动加入2"));
     }
 
     @Test
@@ -314,7 +328,7 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
         functionalCaseDemandExample = new FunctionalCaseDemandExample();
         functionalCaseDemandExample.createCriteria().andCaseIdEqualTo("DEMAND_TEST_FUNCTIONAL_CASE_ID");
         functionalCaseDemands = functionalCaseDemandMapper.selectByExample(functionalCaseDemandExample);
-        Assertions.assertNotNull(functionalCaseDemands.get(0).getDemandId());
+        Assertions.assertNotNull(functionalCaseDemands.getFirst().getDemandId());
 
         functionalCaseDemandRequest = new FunctionalCaseDemandRequest();
         functionalCaseDemandRequest.setId("hehe");
@@ -344,7 +358,7 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
         FunctionalCaseDemandExample functionalCaseDemandExample = new FunctionalCaseDemandExample();
         functionalCaseDemandExample.createCriteria().andCaseIdEqualTo(caseId);
         List<FunctionalCaseDemand> functionalCaseDemands = functionalCaseDemandMapper.selectByExample(functionalCaseDemandExample);
-        return functionalCaseDemands.get(0).getId();
+        return functionalCaseDemands.getFirst().getId();
     }
 
     @Test
@@ -396,8 +410,23 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
     public void cancelDemand() throws Exception {
         FunctionalCaseDemandExample functionalCaseDemandExample = new FunctionalCaseDemandExample();
         functionalCaseDemandExample.createCriteria().andCaseIdEqualTo("DEMAND_TEST_FUNCTIONAL_CASE_ID");
-        List<FunctionalCaseDemand> beforeList = functionalCaseDemandMapper.selectByExample(functionalCaseDemandExample);
         String id = getId("DEMAND_TEST_FUNCTIONAL_CASE_ID");
+        FunctionalCaseDemand functionalCaseDemandInDb = functionalCaseDemandMapper.selectByPrimaryKey(id);
+        FunctionalCaseDemand functionalCaseDemand = new FunctionalCaseDemand();
+        functionalCaseDemand.setCaseId("DEMAND_TEST_FUNCTIONAL_CASE_ID");
+        functionalCaseDemand.setParent(functionalCaseDemandInDb.getDemandId());
+        functionalCaseDemand.setDemandId("qwerr");
+        functionalCaseDemand.setDemandUrl("dddd");
+        functionalCaseDemand.setDemandPlatform("Metersphere");
+        functionalCaseDemand.setId(UUID.randomUUID().toString());
+        functionalCaseDemand.setWithParent(false);
+        functionalCaseDemand.setDemandName("加一下副需求");
+        functionalCaseDemand.setUpdateTime(System.currentTimeMillis());
+        functionalCaseDemand.setCreateTime(System.currentTimeMillis());
+        functionalCaseDemand.setCreateUser("admin");
+        functionalCaseDemand.setUpdateUser("admin");
+        functionalCaseDemandMapper.insert(functionalCaseDemand);
+        List<FunctionalCaseDemand> beforeList = functionalCaseDemandMapper.selectByExample(functionalCaseDemandExample);
         mockMvc.perform(MockMvcRequestBuilders.get(URL_DEMAND_CANCEL+id).header(SessionConstants.HEADER_TOKEN, sessionId)
                         .header(SessionConstants.CSRF_TOKEN, csrfToken)
                         .contentType(MediaType.APPLICATION_JSON))
@@ -407,6 +436,11 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
         List<FunctionalCaseDemand> after = functionalCaseDemandMapper.selectByExample(functionalCaseDemandExample);
         Assertions.assertTrue(beforeList.size()>after.size());
         checkLog("DEMAND_TEST_FUNCTIONAL_CASE_ID", OperationLogType.DISASSOCIATE);
+        id = getId("DEMAND_TEST_FUNCTIONAL_CASE_ID");
+        mockMvc.perform(MockMvcRequestBuilders.get(URL_DEMAND_CANCEL+id).header(SessionConstants.HEADER_TOKEN, sessionId)
+                        .header(SessionConstants.CSRF_TOKEN, csrfToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -654,12 +688,46 @@ public class FunctionalCaseDemandControllerTests extends BaseTest {
         functionalThirdDemandPageRequest.setProjectId("gyq_project-case-demand-test");
         functionalThirdDemandPageRequest.setPageSize(10);
         functionalThirdDemandPageRequest.setCurrent(1);
+        functionalThirdDemandPageRequest.setCaseId("DEMAND_TEST_FUNCTIONAL_CASE_ID");
         MvcResult mvcResultDemand= this.requestPostWithOkAndReturn(URL_DEMAND_PAGE_DEMAND, functionalThirdDemandPageRequest);
         PluginPager<PlatformDemandDTO> tableData = JSON.parseObject(JSON.toJSONString(
                         JSON.parseObject(mvcResultDemand.getResponse().getContentAsString(StandardCharsets.UTF_8), ResultHolder.class).getData()),
                 PluginPager.class);
+        FunctionalCaseDemand functionalCaseDemand = new FunctionalCaseDemand();
+        functionalCaseDemand.setId("测试过滤ID");
+        functionalCaseDemand.setDemandName("Test");
+        functionalCaseDemand.setCaseId("DEMAND_TEST_FUNCTIONAL_CASE_ID");
+        functionalCaseDemand.setDemandId("TES-1");
+        functionalCaseDemand.setDemandUrl("http://localhost:57767/jira/software/projects/TES/issues/TES-1");
+        functionalCaseDemand.setDemandPlatform("Metersphere");
+        functionalCaseDemand.setUpdateUser("admin");
+        functionalCaseDemand.setUpdateTime(System.currentTimeMillis());
+        functionalCaseDemand.setWithParent(false);
+        functionalCaseDemand.setCreateUser("admin");
+        functionalCaseDemand.setCreateTime(System.currentTimeMillis());
+        functionalCaseDemand.setParent("NONE");
+        functionalCaseDemandMapper.insert(functionalCaseDemand);
+        mvcResultDemand= this.requestPostWithOkAndReturn(URL_DEMAND_PAGE_DEMAND, functionalThirdDemandPageRequest);
+        tableData = JSON.parseObject(JSON.toJSONString(
+                        JSON.parseObject(mvcResultDemand.getResponse().getContentAsString(StandardCharsets.UTF_8), ResultHolder.class).getData()),
+                PluginPager.class);
 
-        System.out.println(JSON.toJSONString(tableData));
+    }
+
+    @Test
+    @Order(16)
+    public void syncDemandSuccess() {
+        List<ProjectApplication> relatedConfigs = new ArrayList<>();
+        ProjectApplication projectApplication1 = new ProjectApplication("gyq_project-case-demand-test", ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED + "_cron_expression", "0 0 0 * * ?");
+        ProjectApplication projectApplication4 = new ProjectApplication("gyq_project-case-demand-test", ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED + "_sync_enable", "true");
+        relatedConfigs.add(projectApplication1);
+        relatedConfigs.add(projectApplication4);
+        projectApplicationMapper.batchInsert(relatedConfigs);
+
+        demandSyncService.syncPlatformDemandBySchedule("gyq_project-case-demand-test", "admin");
+
+        String demandPlatformId = projectApplicationService.getDemandPlatformId("gyq_project-case-demand-test");
+        Assertions.assertTrue(StringUtils.isNotBlank(demandPlatformId));
     }
 
 }

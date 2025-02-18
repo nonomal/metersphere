@@ -21,10 +21,9 @@
         v-model:file-list="fileList"
         class="w-full"
         accept="json"
-        :max-size="50"
         size-unit="MB"
         main-text="system.user.importModalDragText"
-        :sub-text="t('project.environmental.supportFormat')"
+        :sub-text="t('project.environmental.supportFormat', { size: appStore.getFileMaxSize })"
         :show-file-list="false"
         :auto-upload="false"
         :multiple="false"
@@ -67,13 +66,13 @@
 </template>
 
 <script lang="ts" setup>
-  import { defineModel, ref } from 'vue';
   import { type FileItem, Message } from '@arco-design/web-vue';
 
   import MsUpload from '@/components/pure/ms-upload/index.vue';
 
   import { importEnv, importGlobalParam } from '@/api/modules/project-management/envManagement';
   import { useI18n } from '@/hooks/useI18n';
+  import useAppStore from '@/store/modules/app';
 
   import { EnvAuthTypeEnum } from '@/enums/envEnum';
 
@@ -88,6 +87,7 @@
   }>();
 
   const { t } = useI18n();
+  const appStore = useAppStore();
   const visible = defineModel<boolean>('visible', { required: true, default: false });
 
   const fileList = ref<FileItem[]>([]);

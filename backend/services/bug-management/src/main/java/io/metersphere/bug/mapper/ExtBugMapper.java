@@ -1,15 +1,21 @@
 package io.metersphere.bug.mapper;
 
+import io.metersphere.bug.domain.Bug;
 import io.metersphere.bug.dto.request.BugBatchUpdateRequest;
 import io.metersphere.bug.dto.request.BugPageRequest;
 import io.metersphere.bug.dto.response.BugDTO;
 import io.metersphere.bug.dto.response.BugTagEditDTO;
 import io.metersphere.dto.BugProviderDTO;
+import io.metersphere.project.dto.ProjectCountDTO;
+import io.metersphere.project.dto.ProjectUserCreateCount;
+import io.metersphere.project.dto.ProjectUserStatusCountDTO;
 import io.metersphere.request.AssociateBugRequest;
 import io.metersphere.request.BugPageProviderRequest;
+import io.metersphere.system.interceptor.BaseConditionFilter;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Set;
 
 public interface ExtBugMapper {
 
@@ -20,7 +26,15 @@ public interface ExtBugMapper {
      * @param sort    排序参数
      * @return 缺陷列表
      */
+    @BaseConditionFilter
     List<BugDTO> list(@Param("request") BugPageRequest request, @Param("sort") String sort);
+
+    /**
+     * 获取项目状态流结束标识
+     * @param projectId 项目ID
+     * @return 结束标识集合
+     */
+    List<String> getLocalLastStepStatusIds(@Param("projectId") String projectId);
 
     /**
      * 缺陷列表查询
@@ -28,6 +42,7 @@ public interface ExtBugMapper {
      * @param request 请求查询参数
      * @return 缺陷列表
      */
+    @BaseConditionFilter
     List<String> getIdsByPageRequest(@Param("request") BugPageRequest request);
 
     /**
@@ -95,6 +110,7 @@ public interface ExtBugMapper {
      * @param deleted 是否删除
      * @return 缺陷集合
      */
+    @BaseConditionFilter
     List<BugProviderDTO> listByProviderRequest(@Param("table") String sourceType, @Param("sourceName") String sourceName, @Param("bugColumnName") String bugColumnName, @Param("request") BugPageProviderRequest bugPageProviderRequest, @Param("deleted") boolean deleted);
 
     /**
@@ -103,5 +119,27 @@ public interface ExtBugMapper {
      * @param deleted 是否删除
      * @return 缺陷ID集合
      */
+    @BaseConditionFilter
     List<String> getIdsByProvider(@Param("request") AssociateBugRequest request, @Param("deleted") boolean deleted);
+
+    List<ProjectCountDTO> projectBugCount(@Param("projectIds") Set<String> projectIds, @Param("startTime") Long startTime, @Param("endTime") Long endTime, @Param("userId") String userId);
+    List<ProjectUserCreateCount> userCreateBugCount(@Param("projectId") String projectId, @Param("startTime") Long startTime, @Param("endTime") Long endTime, @Param("userIds") Set<String> userIds);
+
+    /**
+     * 根据处理人排序的处理人状态统计
+     * @param projectId 项目ID
+     * @param startTime 时间筛选条件
+     * @param endTime 时间筛选条件
+     * @param userIds 处理人筛选
+     * @param platforms 平台筛选
+     * @return 项目用户状态数量DTO
+     */
+    List<ProjectUserStatusCountDTO> projectUserBugStatusCount(@Param("projectId") String projectId, @Param("startTime") Long startTime, @Param("endTime") Long endTime, @Param("userIds") List<String> userIds, @Param("platforms") Set<String> platforms);
+
+    List<Bug>getSimpleList(@Param("projectId") String projectId, @Param("startTime") Long startTime, @Param("endTime") Long endTime,@Param("handleUsers") Set<String> handleUsers,@Param("createUser") String createUser, @Param("platforms") Set<String> platforms);
+
+    List<Bug>getByHandleUser(@Param("projectId") String projectId, @Param("startTime") Long startTime, @Param("endTime") Long endTime,@Param("localHandleUser") String localHandleUser,@Param("createUser") String createUser,@Param("thirdHandleUser") String thirdHandleUser, @Param("thirdPlatform") String thirdPlatform);
+
+    long localBugCount(@Param("projectId") String projectId);
+
 }

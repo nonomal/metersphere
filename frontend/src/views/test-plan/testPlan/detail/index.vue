@@ -7,62 +7,54 @@
     hide-footer
     no-content-padding
     hide-divider
+    hide-back
   >
     <template #headerLeft>
-      <MsStatusTag :status="detail.status || 'PREPARED'" />
+      <MsStatusTag :status="countDetail.status" />
       <a-tooltip :content="`[${detail.num}]${detail.name}`">
-        <div class="one-line-text ml-[4px] max-w-[360px] gap-[4px] font-medium text-[var(--color-text-1)]">
+        <div class="one-line-text ml-[8px] max-w-[360px] gap-[4px] font-medium text-[var(--color-text-1)]">
           <span>[{{ detail.num }}]</span>
           {{ detail.name }}
         </div>
       </a-tooltip>
     </template>
     <template #headerRight>
-      <MsButton v-permission="['PROJECT_TEST_PLAN:READ+ASSOCIATION']" type="button" status="default" @click="linkCase">
-        <MsIcon type="icon-icon_link-record_outlined1" class="mr-[8px]" />
-        {{ t('ms.case.associate.title') }}
-      </MsButton>
-      <MsButton
-        v-permission="['PROJECT_TEST_PLAN:READ+UPDATE']"
-        type="button"
-        status="default"
-        @click="editorCopyHandler(false)"
-      >
+      <MsButton v-if="isEnableEdit" type="button" status="default" @click="editorCopyHandler(false)">
         <MsIcon type="icon-icon_edit_outlined" class="mr-[8px]" />
         {{ t('common.edit') }}
       </MsButton>
-      <MsButton
-        v-permission="['PROJECT_TEST_PLAN:READ+EXECUTE']"
-        type="button"
-        status="default"
-        @click="handleGenerateReport"
+      <MsTableMoreAction
+        v-if="countDetail.status !== 'ARCHIVED'"
+        :list="reportMoreAction"
+        @select="handleMoreReportSelect"
       >
-        <MsIcon type="icon-icon_generate_report" class="mr-[8px]" />
-        {{ t('testPlan.testPlanDetail.generateReport') }}
-      </MsButton>
+        <MsButton v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+EXECUTE'])" type="button" status="default">
+          <MsIcon type="icon-icon_generate_report" class="mr-[8px]" />
+          {{ t('testPlan.testPlanDetail.generateReport') }}
+        </MsButton>
+      </MsTableMoreAction>
       <MsButton
-        v-permission="['PROJECT_TEST_PLAN:READ+ADD']"
+        v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+ADD']) && countDetail.status !== 'ARCHIVED'"
         type="button"
         status="default"
-        @click="editorCopyHandler(true)"
+        :loading="copyLoading"
+        @click="copyHandler"
       >
         <MsIcon type="icon-icon_copy_outlined" class="mr-[8px]" />
         {{ t('common.copy') }}
       </MsButton>
-      <MsButton
-        v-permission="['PROJECT_TEST_PLAN:READ+UPDATE']"
-        type="button"
-        status="default"
-        :loading="followLoading"
-        @click="followHandler"
-      >
+      <MsButton v-if="isEnableEdit" type="button" status="default" :loading="followLoading" @click="followHandler">
         <MsIcon
           :type="detail.followFlag ? 'icon-icon_collect_filled' : 'icon-icon_collection_outlined'"
           :class="`mr-[8px] ${detail.followFlag ? 'text-[rgb(var(--warning-6))]' : ''}`"
         />
         {{ t(detail.followFlag ? 'common.forked' : 'common.fork') }}
       </MsButton>
-      <MsTableMoreAction :list="moreAction" @select="handleMoreSelect">
+      <MsButton v-if="countDetail.status === 'ARCHIVED'" status="danger" type="button" @click="deleteHandler">
+        <MsIcon type="icon-icon_delete-trash_outlined1" class="mr-[8px] text-[rgb(var(--danger-6))]" />
+        <span class="text-[rgb(var(--danger-6))]"> {{ t('common.delete') }}</span>
+      </MsButton>
+      <MsTableMoreAction v-else :list="moreAction" @select="handleMoreSelect">
         <MsButton v-permission="['PROJECT_TEST_PLAN:READ+DELETE']" type="button" status="default">
           <MsIcon type="icon-icon_more_outlined" class="mr-[8px]" />
           {{ t('common.more') }}
@@ -88,43 +80,60 @@
             </span>
           </div>
         </div>
-        <StatusProgress :status-detail="countDetail" height="8px" radius="var(--border-radius-mini)" />
+        <StatusProgress
+          :type="testPlanTypeEnum.TEST_PLAN"
+          :status-detail="countDetail"
+          height="8px"
+          radius="var(--border-radius-mini)"
+        />
       </div>
     </template>
     <MsTab
       v-model:active-key="activeTab"
       :get-text-func="getTabBadge"
       :content-tab-list="tabList"
+      :change-interceptor="changeTabInterceptor"
       no-content
-      class="relative mx-[16px] border-b"
+      class="relative mx-[16px]"
     />
   </MsCard>
-  <!-- special-height的174: 上面卡片高度158 + mt的16 -->
-  <MsCard class="mt-[16px]" :special-height="174" simple has-breadcrumb no-content-padding>
+  <MsCard class="mt-[16px]" simple has-breadcrumb no-content-padding>
+    <Plan
+      v-if="activeTab === 'plan'"
+      :plan-id="planId"
+      :status="countDetail.status || 'PREPARED'"
+      @refresh="initDetail"
+    />
     <FeatureCase
-      v-if="activeTab === 'featureCase'"
-      ref="featureCaseRef"
-      :repeat-case="detail.repeatCase"
-      @refresh="getStatistics"
+      v-else-if="activeTab === 'featureCase'"
+      :can-edit="countDetail.status !== 'ARCHIVED'"
+      @refresh="initDetail"
     />
-    <!-- TODO 先不上 -->
-    <!-- <BugManagement v-if="activeTab === 'defectList'" :plan-id="detail.id" /> -->
+    <BugManagement
+      v-else-if="activeTab === 'defectList'"
+      :can-edit="countDetail.status !== 'ARCHIVED'"
+      @refresh="initDetail"
+    />
+    <ApiCase v-else-if="activeTab === 'apiCase'" :can-edit="countDetail.status !== 'ARCHIVED'" @refresh="initDetail" />
+    <ApiScenario
+      v-else-if="activeTab === 'apiScenario'"
+      :can-edit="countDetail.status !== 'ARCHIVED'"
+      @refresh="initDetail"
+    />
+    <ExecuteHistory v-else-if="activeTab === 'executeHistory'" />
   </MsCard>
-  <AssociateDrawer
-    v-model:visible="caseAssociateVisible"
-    :associated-ids="detail.repeatCase ? hasSelectedIds : []"
-    :save-api="associationCaseToPlan"
-    :test-plan-id="planId"
-    @success="handleSuccess"
-  />
   <CreateAndEditPlanDrawer
     v-model:visible="showPlanDrawer"
     :plan-id="planId"
-    :is-copy="isCopy"
     :module-tree="testPlanTree"
     @load-plan-list="successHandler"
   />
-  <ActionModal v-model:visible="showStatusDeleteModal" :record="activeRecord" @success="okHandler" />
+  <ActionModal
+    v-model:visible="showStatusDeleteModal"
+    :schedule-config="countDetail.scheduleConfig"
+    :record="activeRecord"
+    @success="okHandler"
+  />
 </template>
 
 <script setup lang="ts">
@@ -141,37 +150,56 @@
   import { ActionsItem } from '@/components/pure/ms-table-more-action/types';
   import MsStatusTag from '@/components/business/ms-status-tag/index.vue';
   import ActionModal from '../components/actionModal.vue';
-  import AssociateDrawer from '../components/associateDrawer.vue';
   import StatusProgress from '../components/statusProgress.vue';
+  import ApiCase from './apiCase/index.vue';
+  import ApiScenario from './apiScenario/index.vue';
   import BugManagement from './bugManagement/index.vue';
+  import ExecuteHistory from './executeHistory/index.vue';
   import FeatureCase from './featureCase/index.vue';
+  import Plan from './plan/index.vue';
   import CreateAndEditPlanDrawer from '@/views/test-plan/testPlan/createAndEditPlanDrawer.vue';
 
+  import { getBugList } from '@/api/modules/bug-management';
   import {
     archivedPlan,
-    associationCaseToPlan,
     followPlanRequest,
     generateReport,
     getPlanPassRate,
     getTestPlanDetail,
     getTestPlanModule,
+    testPlanAndGroupCopy,
   } from '@/api/modules/test-plan/testPlan';
   import { defaultDetailCount, testPlanDefaultDetail } from '@/config/testPlan';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
+  import useOpenNewPage from '@/hooks/useOpenNewPage';
   import useAppStore from '@/store/modules/app';
+  import useCacheStore from '@/store/modules/cache/cache';
+  import useMinderStore from '@/store/modules/components/minder-editor';
   import useUserStore from '@/store/modules/user';
   import { characterLimit } from '@/utils';
+  import { hasAnyPermission } from '@/utils/permission';
 
   import { ModuleTreeNode } from '@/models/common';
   import type { PassRateCountDetail, TestPlanDetail, TestPlanItem } from '@/models/testPlan/testPlan';
+  import { TestPlanRouteEnum } from '@/enums/routeEnum';
+  import { testPlanTypeEnum } from '@/enums/testPlanEnum';
+
+  defineOptions({
+    name: TestPlanRouteEnum.TEST_PLAN_INDEX_DETAIL,
+  });
+  const cacheStore = useCacheStore();
 
   const userStore = useUserStore();
   const appStore = useAppStore();
   const { openModal } = useModal();
   const { t } = useI18n();
+  const { openNewPage } = useOpenNewPage();
+
   const route = useRoute();
   const router = useRouter();
+  const minderStore = useMinderStore();
+
   const loading = ref(false);
   const planId = ref(route.query.id as string);
   const detail = ref<TestPlanDetail>({
@@ -191,14 +219,37 @@
       // eslint-disable-next-line prefer-destructuring
       countDetail.value = result[0];
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     }
   }
+
+  const createdBugCount = ref<number>(0);
+
+  async function initBugList() {
+    if (!hasAnyPermission(['PROJECT_BUG:READ'])) {
+      return;
+    }
+    const res = await getBugList({
+      current: 1,
+      pageSize: 10,
+      sort: {},
+      filter: {},
+      keyword: '',
+      combine: {},
+      searchMode: 'AND',
+      projectId: appStore.currentProjectId,
+    });
+    createdBugCount.value = res.total || 0;
+  }
+  provide('existedDefect', createdBugCount);
+
   async function initDetail() {
     try {
       loading.value = true;
       detail.value = await getTestPlanDetail(planId.value);
       getStatistics();
+      initBugList();
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -224,21 +275,15 @@
     },
   ];
   const moreAction = computed(() => {
-    if (detail.value.status === 'COMPLETED') {
+    if (countDetail.value.status === 'COMPLETED') {
       return [...fullActions];
     }
     return fullActions.filter((e) => e.eventTag !== 'archive');
   });
 
-  function getTabBadge(tabKey: string) {
-    switch (tabKey) {
-      case 'featureCase':
-        const count = detail.value.functionalCaseCount ?? 0;
-        return `${count > 0 ? count : ''}`;
-      default:
-        return '';
-    }
-  }
+  const isEnableEdit = computed(() => {
+    return hasAnyPermission(['PROJECT_TEST_PLAN:READ+UPDATE']) && countDetail.value.status !== 'ARCHIVED';
+  });
 
   function archiveHandler() {
     openModal({
@@ -256,6 +301,7 @@
           Message.success(t('common.batchArchiveSuccess'));
           initDetail();
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.log(error);
         }
       },
@@ -267,13 +313,16 @@
   // 删除
   function deleteHandler() {
     activeRecord.value = cloneDeep(detail.value);
+    activeRecord.value.status = countDetail.value.status;
     showStatusDeleteModal.value = true;
   }
 
   // 删除或者删除弹窗归档成功
   function okHandler(isDelete: boolean) {
     if (isDelete) {
-      router.back();
+      router.push({
+        name: TestPlanRouteEnum.TEST_PLAN_INDEX,
+      });
     } else {
       initDetail();
     }
@@ -292,37 +341,135 @@
     }
   }
 
-  const activeTab = ref('featureCase');
-  const tabList = ref([
-    {
-      value: 'featureCase',
-      label: t('menu.caseManagement.featureCase'),
-    },
-    // TODO 先不上
-    // {
-    //   key: 'defectList',
-    //   title: t('caseManagement.featureCase.defectList'),
-    // },
-  ]);
-  const hasSelectedIds = ref<string[]>([]);
-  const caseAssociateVisible = ref(false);
-  // 关联用例
-  function linkCase() {
-    caseAssociateVisible.value = true;
+  const activeTab = ref('plan');
+  watch(
+    () => detail.value,
+    () => {
+      const { functionalCaseCount, apiCaseCount, apiScenarioCount } = detail.value || {};
+      if (
+        (!functionalCaseCount && activeTab.value === 'featureCase') ||
+        (!apiCaseCount && activeTab.value === 'apiCase') ||
+        (!apiScenarioCount && activeTab.value === 'apiScenario')
+      ) {
+        activeTab.value = 'plan';
+      }
+    }
+  );
+  const tabList = computed(() => {
+    return [
+      {
+        value: 'plan',
+        label: t('testPlan.plan'), // 测试规划
+        show: true,
+      },
+      {
+        value: 'featureCase',
+        label: t('menu.caseManagement.featureCase'), // 功能用例
+        show: detail.value.functionalCaseCount,
+      },
+      {
+        value: 'apiCase',
+        label: t('testPlan.testPlanIndex.apiCase'),
+        show: detail.value?.apiCaseCount,
+      },
+      {
+        value: 'apiScenario',
+        label: t('caseManagement.featureCase.sceneCase'),
+        show: detail.value?.apiScenarioCount,
+      },
+      {
+        value: 'defectList',
+        label: t('caseManagement.featureCase.defectList'), // 缺陷列表
+        show: true,
+      },
+      {
+        value: 'executeHistory',
+        label: t('testPlan.featureCase.executionHistory'), // 执行历史
+        show: true,
+      },
+    ].filter((tab) => tab.show); // 过滤掉不显示的 tab
+  });
+  function getTabBadge(tabKey: string) {
+    switch (tabKey) {
+      case 'featureCase':
+        const count = detail.value.functionalCaseCount ?? 0;
+        return `${count > 0 ? count : ''}`;
+      case 'defectList':
+        const bugCount = detail.value.bugCount ?? 0;
+        return `${bugCount > 0 ? bugCount : ''}`;
+      case 'apiCase':
+        const apiCaseCount = detail.value?.apiCaseCount ?? 0;
+        return `${apiCaseCount > 0 ? apiCaseCount : ''}`;
+      case 'apiScenario':
+        const apiScenarioCount = detail.value?.apiScenarioCount ?? 0;
+        return `${apiScenarioCount > 0 ? apiScenarioCount : ''}`;
+      default:
+        return '';
+    }
   }
+
   const showPlanDrawer = ref(false);
 
   // 生成报告
   async function handleGenerateReport() {
     try {
-      await generateReport({
+      loading.value = true;
+      const reportId = await generateReport({
         projectId: appStore.currentProjectId,
         testPlanId: detail.value.id as string,
+        triggerMode: 'MANUAL',
+      });
+      openNewPage(TestPlanRouteEnum.TEST_PLAN_REPORT_DETAIL, {
+        id: reportId,
+        type: testPlanTypeEnum.TEST_PLAN,
       });
       Message.success(t('testPlan.testPlanDetail.successfullyGenerated'));
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
+    } finally {
+      loading.value = false;
+    }
+  }
+  // 自定义报告
+  function configReportHandler() {
+    try {
+      router.push({
+        name: TestPlanRouteEnum.TEST_PLAN_INDEX_CONFIG,
+        query: {
+          id: detail.value.id,
+          type: detail.value.type === testPlanTypeEnum.GROUP ? 'GROUP' : 'TEST_PLAN',
+        },
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  }
+
+  const reportMoreAction: ActionsItem[] = [
+    {
+      label: t('testPlan.planAutomaticGeneration'),
+      eventTag: 'autoGeneration',
+      permission: ['PROJECT_TEST_PLAN:READ+EXECUTE'],
+    },
+    {
+      label: t('testPlan.planConfigReport'),
+      eventTag: 'configReport',
+      permission: ['PROJECT_TEST_PLAN:READ+EXECUTE'],
+    },
+  ];
+
+  function handleMoreReportSelect(item: ActionsItem) {
+    switch (item.eventTag) {
+      case 'autoGeneration':
+        handleGenerateReport();
+        break;
+      case 'configReport':
+        configReportHandler();
+        break;
+      default:
+        break;
     }
   }
 
@@ -365,24 +512,100 @@
     try {
       testPlanTree.value = await getTestPlanModule({ projectId: appStore.currentProjectId });
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     }
   }
 
-  const featureCaseRef = ref<InstanceType<typeof FeatureCase>>();
-  function handleSuccess() {
-    initDetail();
-    featureCaseRef.value?.getCaseTableList();
+  function changeTabInterceptor(newVal: string | number, oldVal: string | number, done: () => void) {
+    if (oldVal === 'plan' && minderStore.minderUnsaved) {
+      openModal({
+        type: 'warning',
+        title: t('common.tip'),
+        content: t('ms.minders.leaveUnsavedTip'),
+        okText: t('common.confirm'),
+        cancelText: t('common.cancel'),
+        okButtonProps: {
+          status: 'normal',
+        },
+        onBeforeOk: async () => {
+          done();
+        },
+        hideCancel: false,
+      });
+      return;
+    }
+    done();
   }
 
+  // 复制
+  const copyLoading = ref<boolean>(false);
+  async function copyHandler() {
+    copyLoading.value = true;
+    try {
+      const res = await testPlanAndGroupCopy(route.query.id as string);
+      Message.success(t('common.copySuccess'));
+      router.push({
+        name: TestPlanRouteEnum.TEST_PLAN_INDEX_DETAIL,
+        query: {
+          id: res.operationId,
+        },
+      });
+      initDetail();
+      initPlanTree();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    } finally {
+      copyLoading.value = false;
+    }
+  }
+
+  watch(
+    () => activeTab.value,
+    (val) => {
+      if (val) {
+        initDetail();
+      }
+    }
+  );
+  const isActivated = computed(() => cacheStore.cacheViews.includes(TestPlanRouteEnum.TEST_PLAN_INDEX_DETAIL));
+
+  provide('isActivated', isActivated);
+
   onBeforeMount(() => {
-    initDetail();
-    initPlanTree();
+    if (!isActivated.value) {
+      if (route.query.type === 'featureCase') {
+        activeTab.value = 'featureCase';
+      }
+      initDetail();
+      initPlanTree();
+    }
+  });
+
+  onActivated(() => {
+    if (isActivated.value) {
+      if (route.query.type === 'featureCase') {
+        activeTab.value = 'featureCase';
+      }
+      initDetail();
+      initPlanTree();
+    }
   });
 </script>
 
 <style lang="less" scoped>
   :deep(.arco-tabs-content) {
     @apply hidden;
+  }
+  :deep(.arco-table-tr) {
+    .operation-button {
+      opacity: 0;
+    }
+    &:hover {
+      .operation-button {
+        opacity: 1;
+      }
+    }
   }
 </style>

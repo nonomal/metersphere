@@ -1,38 +1,31 @@
 <template>
   <div :class="['p-[16px]', props.class]">
-    <div class="mb-[16px] flex items-center justify-between">
-      <div class="flex items-center"> </div>
-      <div class="items-right flex gap-[8px]">
-        <a-input-search
-          v-model:model-value="keyword"
-          :placeholder="t('api_scenario.table.searchPlaceholder')"
-          allow-clear
-          class="mr-[8px] w-[240px]"
-          @clear="loadScenarioList(true)"
-          @search="loadScenarioList(true)"
-          @press-enter="loadScenarioList"
-        />
-        <a-button type="outline" class="arco-btn-outline--secondary !p-[8px]" @click="loadScenarioList(true)">
-          <template #icon>
-            <icon-refresh class="text-[var(--color-text-4)]" />
-          </template>
-        </a-button>
-      </div>
-    </div>
+    <MsAdvanceFilter
+      ref="msAdvanceFilterRef"
+      v-model:keyword="keyword"
+      :view-type="ViewTypeEnum.API_SCENARIO"
+      :filter-config-list="filterConfigList"
+      :search-placeholder="t('api_scenario.table.searchPlaceholder')"
+      :view-name="viewName"
+      @keyword-search="loadScenarioList(true)"
+      @adv-search="handleAdvSearch"
+      @refresh="loadScenarioList(true)"
+    />
     <ms-base-table
+      class="mt-[16px]"
       v-bind="propsRes"
       :action-config="batchActions"
       :first-column-width="44"
       no-disable
       filter-icon-align-left
+      :not-show-table-filter="isAdvancedSearchMode"
       v-on="propsEvent"
       @selected-change="handleTableSelect"
       @batch-action="handleTableBatch"
       @drag-change="changeHandler"
-      @module-change="loadScenarioList(false)"
     >
       <template #num="{ record }">
-        <div>
+        <div class="flex items-center">
           <MsButton type="text" class="float-left" style="margin-right: 4px" @click="openScenarioTab(record)">
             {{ record.num }}
           </MsButton>
@@ -52,21 +45,21 @@
                 </span>
               </template>
               <a-tag
-                style="border-color: #00c261; color: #00c261; background-color: transparent"
+                style="border-color: rgb(var(--success-6)); color: rgb(var(--success-6)); background-color: transparent"
                 bordered
                 @click="openScheduleModal(record)"
-                >{{ t('apiScenario.schedule.abbreviation') }}</a-tag
-              >
+                >{{ t('apiScenario.schedule.abbreviation') }}
+              </a-tag>
             </a-tooltip>
           </div>
           <div v-if="record.scheduleConfig && !record.scheduleConfig.enable" class="float-right">
             <a-tooltip :content="t('apiScenario.schedule.table.tooltip.disable')" position="top">
               <a-tag
-                style="border-color: #d4d4d8; color: #323233; background-color: transparent"
+                style="border-color: var(--color-text-n8); color: var(--color-text-1); background-color: transparent"
                 bordered
                 @click="openScheduleModal(record)"
-                >{{ t('apiScenario.schedule.abbreviation') }}</a-tag
-              >
+                >{{ t('apiScenario.schedule.abbreviation') }}
+              </a-tag>
             </a-tooltip>
           </div>
         </div>
@@ -76,6 +69,7 @@
           v-if="hasAnyPermission(['PROJECT_API_SCENARIO:READ+UPDATE'])"
           v-model:model-value="record.priority"
           :placeholder="t('common.pleaseSelect')"
+          size="small"
           class="param-input w-full"
           @change="() => handlePriorityStatusChange(record)"
         >
@@ -113,18 +107,19 @@
         </a-select>
         <apiStatus v-else :status="record.status" />
       </template>
-      <template #createUserName="{ record }">
-        <a-tooltip :content="`${record.createName}`" position="tl">
-          <div class="one-line-text">{{ characterLimit(record.createUserName) }}</div>
-        </a-tooltip>
-      </template>
-      <template #updateUserName="{ record }">
-        <a-tooltip :content="`${record.createName}`" position="tl">
-          <div class="one-line-text">{{ characterLimit(record.updateUserName) }}</div>
-        </a-tooltip>
+      <template #requestPassRateColumn>
+        <div class="flex items-center text-[var(--color-text-3)]">
+          {{ t('apiScenario.table.columns.passRate') }}
+          <a-tooltip :content="t('apiScenario.executeRateTip')" position="right">
+            <icon-question-circle
+              class="ml-[4px] text-[var(--color-text-4)] hover:text-[rgb(var(--primary-5))]"
+              size="16"
+            />
+          </a-tooltip>
+        </div>
       </template>
       <!-- 报告结果筛选 -->
-      <template #[FilterSlotNameEnum.API_TEST_CASE_API_REPORT_EXECUTE_RESULT]="{ filterContent }">
+      <template #[FilterSlotNameEnum.API_TEST_CASE_API_REPORT_STATUS]="{ filterContent }">
         <ExecutionStatus :module-type="ReportEnum.API_REPORT" :status="filterContent.value" />
       </template>
       <template #lastReportStatus="{ record }">
@@ -132,6 +127,8 @@
           :module-type="ReportEnum.API_SCENARIO_REPORT"
           :status="record.lastReportStatus ? record.lastReportStatus : 'PENDING'"
           :script-identifier="record.scriptIdentifier"
+          :class="record.lastReportId ? 'cursor-pointer' : ''"
+          @click="openScenarioReportDrawer(record)"
         />
       </template>
       <template #stepTotal="{ record }">
@@ -190,7 +187,10 @@
     <template #title>
       <div class="float-left">
         {{ scheduleModalTitle }}
-        <a-tooltip v-if="translateTextToPX(tableRecord?.name) > 300">
+        <div v-if="isBatch" class="float-right flex text-[var(--color-text-4)]">
+          {{ t('common.selectedCount', { count: batchParams.currentSelectCount || batchParams.selectedIds?.length }) }}
+        </div>
+        <a-tooltip v-else-if="translateTextToPX(tableRecord?.name) > 300">
           <template #content>
             <span>
               {{ tableRecord?.name }}
@@ -210,20 +210,7 @@
     <a-form ref="scheduleConfigRef" class="rounded-[4px]" :model="scheduleConfig" layout="vertical">
       <!--      触发时间-->
       <a-form-item :label="t('apiScenario.schedule.task.schedule')">
-        <a-select v-model:model-value="scheduleConfig.cron">
-          <template #label="{ data }">
-            <div class="flex items-center">
-              {{ data.value }}
-              <div class="ml-[4px] text-[var(--color-text-4)]">{{ data.label.split('?')[1] }}</div>
-            </div>
-          </template>
-          <a-option v-for="item of syncFrequencyOptions" :key="item.value" :value="item.value" class="block">
-            <div class="flex w-full items-center justify-between">
-              {{ item.value }}
-              <div class="ml-[4px] text-[var(--color-text-4)]">{{ item.label }}</div>
-            </div>
-          </a-option>
-        </a-select>
+        <MsCronSelect v-model:model-value="scheduleConfig.cron" />
       </a-form-item>
       <!--      环境选择-->
       <a-form-item :label="t('case.execute.selectEnv')">
@@ -346,10 +333,22 @@
       </a-form-item>
       <a-form-item
         v-if="batchForm.attr === 'Tags'"
+        :class="`${selectedTagType === TagUpdateTypeEnum.CLEAR ? 'mb-0' : 'mb-[16px]'}`"
+        field="type"
+        :label="t('common.type')"
+      >
+        <a-radio-group v-model:model-value="selectedTagType" size="small">
+          <a-radio :value="TagUpdateTypeEnum.UPDATE"> {{ t('common.update') }}</a-radio>
+          <a-radio :value="TagUpdateTypeEnum.APPEND"> {{ t('caseManagement.featureCase.appendTag') }}</a-radio>
+          <a-radio :value="TagUpdateTypeEnum.CLEAR">{{ t('common.clear') }}</a-radio>
+        </a-radio-group>
+      </a-form-item>
+      <a-form-item
+        v-if="batchForm.attr === 'Tags' && selectedTagType !== TagUpdateTypeEnum.CLEAR"
         field="values"
-        :label="t('api_scenario.table.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :validate-trigger="['blur', 'input']"
-        :rules="[{ required: true, message: t('api_scenario.table.valueRequired') }]"
+        :rules="[{ required: true, message: t('common.inputPleaseEnterTags') }]"
         asterisk-position="end"
         class="mb-0"
         required
@@ -359,13 +358,15 @@
           placeholder="common.tagsInputPlaceholder"
           allow-clear
           unique-value
+          empty-priority-highest
           retain-input-value
         />
+        <div class="text-[12px] leading-[20px] text-[var(--color-text-4)]">{{ t('ms.tagsInput.tagLimitTip') }}</div>
       </a-form-item>
       <a-form-item
         v-else-if="batchForm.attr === 'Priority'"
         field="value"
-        :label="t('api_scenario.table.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :rules="[{ required: true, message: t('api_scenario.table.valueRequired') }]"
         asterisk-position="end"
         class="mb-0"
@@ -379,7 +380,7 @@
       <a-form-item
         v-else-if="batchForm.attr === 'Environment'"
         field="value"
-        :label="t('api_scenario.table.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :rules="[{ required: true, message: t('api_scenario.table.valueRequired') }]"
         asterisk-position="end"
         class="mb-0"
@@ -391,9 +392,9 @@
         </a-select>
       </a-form-item>
       <a-form-item
-        v-else
+        v-else-if="batchForm.attr !== 'Tags'"
         field="value"
-        :label="t('api_scenario.table.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :rules="[{ required: true, message: t('api_scenario.table.valueRequired') }]"
         asterisk-position="end"
         class="mb-0"
@@ -406,26 +407,7 @@
       </a-form-item>
     </a-form>
     <template #footer>
-      <div class="flex" :class="[batchForm.attr === 'Tags' ? 'justify-between' : 'justify-end']">
-        <div
-          v-if="batchForm.attr === 'Tags'"
-          class="flex flex-row items-center justify-center"
-          style="padding-top: 10px"
-        >
-          <a-switch v-model="batchForm.append" class="mr-1" size="small" type="line" />
-          <span class="flex items-center">
-            <span class="mr-1">{{ t('caseManagement.featureCase.appendTag') }}</span>
-            <span class="mt-[2px]">
-              <a-tooltip>
-                <IconQuestionCircle class="h-[16px] w-[16px] text-[rgb(var(--primary-5))]" />
-                <template #content>
-                  <div>{{ t('caseManagement.featureCase.enableTags') }}</div>
-                  <div>{{ t('caseManagement.featureCase.closeTags') }}</div>
-                </template>
-              </a-tooltip>
-            </span>
-          </span>
-        </div>
+      <div class="flex justify-end">
         <div class="flex justify-end">
           <a-button type="secondary" :disabled="batchUpdateLoading" @click="cancelBatch">
             {{ t('common.cancel') }}
@@ -437,7 +419,6 @@
       </div>
     </template>
   </a-modal>
-  <!--  </MsDialog>-->
   <a-modal
     v-model:visible="moveModalVisible"
     title-align="start"
@@ -483,15 +464,35 @@
     :batch-run-func="batchRunScenario"
     @finished="loadScenarioList"
   />
+  <!-- 场景报告抽屉 -->
+  <caseAndScenarioReportDrawer
+    v-model:visible="showScenarioReportVisible"
+    is-scenario
+    is-filter-step
+    :case-name="tableRecord?.name || ''"
+    :case-id="tableRecord?.id || ''"
+    :report-id="tableRecord?.lastReportId || ''"
+  />
+  <!--  场景导出-->
+  <ScenarioExportModal
+    v-model:visible="showExportModal"
+    :batch-params="batchParams"
+    :condition-params="getBatchConditionParams"
+    :sorter="propsRes.sorter || {}"
+  />
 </template>
 
 <script setup lang="ts">
   import { computed, ref } from 'vue';
+  import { useRoute } from 'vue-router';
   import { FormInstance, Message } from '@arco-design/web-vue';
   import { cloneDeep } from 'lodash-es';
   import dayjs from 'dayjs';
 
+  import MsAdvanceFilter from '@/components/pure/ms-advance-filter/index.vue';
+  import { FilterFormItem, FilterResult } from '@/components/pure/ms-advance-filter/type';
   import MsButton from '@/components/pure/ms-button/index.vue';
+  import MsCronSelect from '@/components/pure/ms-cron-select/index.vue';
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import type { BatchActionParams, BatchActionQueryParams, MsTableColumn } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
@@ -502,11 +503,14 @@
   import type { CaseLevel } from '@/components/business/ms-case-associate/types';
   import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
   import apiStatus from '@/views/api-test/components/apiStatus.vue';
+  import caseAndScenarioReportDrawer from '@/views/api-test/components/caseAndScenarioReportDrawer.vue';
   import ExecutionStatus from '@/views/api-test/report/component/reportStatus.vue';
   import BatchRunModal from '@/views/api-test/scenario/components/batchRunModal.vue';
+  import ScenarioExportModal from '@/views/api-test/scenario/components/common/exportScenario/scenarioExportModal.vue';
   import operationScenarioModuleTree from '@/views/api-test/scenario/components/operationScenarioModuleTree.vue';
 
-  import { getEnvList, getPoolId, getPoolOption } from '@/api/modules/api-test/management';
+  import { getEnvList } from '@/api/modules/api-test/common';
+  import { getPoolId, getPoolOption } from '@/api/modules/api-test/management';
   import {
     batchEditScenario,
     batchOptionScenario,
@@ -515,59 +519,61 @@
     deleteScheduleConfig,
     dragSort,
     getScenarioPage,
+    getScenarioStatistics,
     recycleScenario,
+    scenarioBatchEditSchedule,
     scenarioScheduleConfig,
     updateScenarioPro,
     updateScenarioStatus,
   } from '@/api/modules/api-test/scenario';
-  import { getProjectOptions } from '@/api/modules/project-management/projectMember';
+  import { NAV_NAVIGATION } from '@/config/workbench';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import useTableStore from '@/hooks/useTableStore';
   import useAppStore from '@/store/modules/app';
-  import { characterLimit } from '@/utils';
+  import useCacheStore from '@/store/modules/cache/cache';
+  import { characterLimit, operationWidth } from '@/utils';
   import { translateTextToPX } from '@/utils/css';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { Environment } from '@/models/apiTest/management';
-  import {
-    ApiScenarioBatchParam,
-    ApiScenarioBatchParams,
-    ApiScenarioScheduleConfig,
-    ApiScenarioTableItem,
-    ApiScenarioUpdateDTO,
-  } from '@/models/apiTest/scenario';
-  import { DragSortParams } from '@/models/common';
+  import { ApiScenarioScheduleConfig, ApiScenarioTableItem, ApiScenarioUpdateDTO } from '@/models/apiTest/scenario';
+  import { DragSortParams, ModuleTreeNode } from '@/models/common';
   import { ResourcePoolItem } from '@/models/setting/resourcePool';
+  import { FilterType, ViewTypeEnum } from '@/enums/advancedFilterEnum';
   import { ApiScenarioStatus } from '@/enums/apiEnum';
+  import { CacheTabTypeEnum } from '@/enums/cacheTabEnum';
+  import { TagUpdateTypeEnum } from '@/enums/commonEnum';
   import { ReportEnum, ReportStatus } from '@/enums/reportEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
   import { FilterRemoteMethodsEnum, FilterSlotNameEnum } from '@/enums/tableFilterEnum';
+  import { WorkNavValueEnum } from '@/enums/workbenchEnum';
 
   import { casePriorityOptions } from '@/views/api-test/components/config';
+  import { scenarioStatusOptions } from '@/views/api-test/scenario/components/config';
 
   const props = defineProps<{
     class?: string;
     activeModule: string;
     offspringIds: string[];
+    moduleTree: ModuleTreeNode[]; // 模块树
     readOnly?: boolean; // 是否是只读模式
   }>();
   const emit = defineEmits<{
     (e: 'openScenario', record: ApiScenarioTableItem, action?: 'copy' | 'execute'): void;
     (e: 'refreshModuleTree', params: any): void;
     (e: 'createScenario'): void;
+    (e: 'handleAdvSearch', isStartAdvance: boolean): void;
   }>();
 
-  const lastReportStatusListFilters = ref<string[]>([]);
-  const createUserFilters = ref<string[]>([]);
-  const updateUserFilters = ref<string[]>([]);
-  const memberOptions = ref<{ label: string; value: string }[]>([]);
+  const route = useRoute();
   const appStore = useAppStore();
+  const cacheStore = useCacheStore();
+  const showExportModal = ref(false);
   const { t } = useI18n();
   const { openModal } = useModal();
   const tableRecord = ref<ApiScenarioTableItem>();
   const scheduleModalTitle = ref('');
-  const priorityFilters = ref<string[]>([]);
   const scheduleConfig = ref<ApiScenarioScheduleConfig>({
     scenarioId: '',
     enable: true,
@@ -588,6 +594,7 @@
   async function initEnvList() {
     environmentList.value = await getEnvList(appStore.currentProjectId);
   }
+
   // 初始化资源池
   async function initResourcePool() {
     try {
@@ -633,10 +640,10 @@
   });
 
   const statusList = computed(() => {
-    return Object.keys(ReportStatus[ReportEnum.API_REPORT]).map((key) => {
+    return Object.keys(ReportStatus).map((key) => {
       return {
         value: key,
-        label: t(ReportStatus[ReportEnum.API_REPORT][key].label),
+        label: t(ReportStatus[key].label),
       };
     });
   });
@@ -651,8 +658,7 @@
         sortDirections: ['ascend', 'descend'],
         sorter: true,
       },
-      fixed: 'left',
-      width: 140,
+      width: operationWidth(160, 140),
       showTooltip: false,
       columnSelectorDisabled: true,
     },
@@ -695,6 +701,7 @@
       filterConfig: {
         options: requestApiScenarioStatusOptions.value,
         filterSlotName: FilterSlotNameEnum.API_TEST_CASE_API_STATUS,
+        disabledTooltip: true,
       },
       showDrag: true,
       width: 140,
@@ -707,7 +714,7 @@
       showDrag: true,
       filterConfig: {
         options: statusList.value,
-        filterSlotName: FilterSlotNameEnum.API_TEST_CASE_API_REPORT_EXECUTE_RESULT,
+        filterSlotName: FilterSlotNameEnum.API_TEST_CASE_API_REPORT_STATUS,
       },
       width: 200,
     },
@@ -735,7 +742,9 @@
     },
     {
       title: 'apiScenario.table.columns.passRate',
-      dataIndex: 'requestPassRate',
+      dataIndex: 'execPassRate',
+      slotName: 'execPassRate',
+      titleSlotName: 'requestPassRateColumn',
       showDrag: true,
       showInTable: false,
       width: 100,
@@ -772,9 +781,7 @@
     },
     {
       title: 'apiScenario.table.columns.createUser',
-      dataIndex: 'createUser',
-      slotName: 'createUserName',
-      showInTable: false,
+      dataIndex: 'createUserName',
       showTooltip: true,
       showDrag: true,
       width: 109,
@@ -784,14 +791,11 @@
           projectId: appStore.currentProjectId,
         },
         remoteMethod: FilterRemoteMethodsEnum.PROJECT_PERMISSION_MEMBER,
-        placeholderText: t('caseManagement.featureCase.PleaseSelect'),
       },
     },
     {
       title: 'apiScenario.table.columns.updateUser',
-      dataIndex: 'updateUser',
-      slotName: 'updateUserName',
-      showInTable: false,
+      dataIndex: 'updateUserName',
       showTooltip: true,
       showDrag: true,
       width: 109,
@@ -801,7 +805,6 @@
           projectId: appStore.currentProjectId,
         },
         remoteMethod: FilterRemoteMethodsEnum.PROJECT_PERMISSION_MEMBER,
-        placeholderText: t('caseManagement.featureCase.PleaseSelect'),
       },
     },
     {
@@ -809,35 +812,41 @@
       slotName: 'operation',
       dataIndex: 'operation',
       fixed: 'right',
-      width: 200,
+      width: operationWidth(215, 200),
     },
   ];
-  const { propsRes, propsEvent, loadList, setLoadListParams, resetSelector } = useTable(
-    getScenarioPage,
-    {
-      columns: props.readOnly ? columns : [],
-      scroll: { x: '100%' },
-      tableKey: TableKeyEnum.API_SCENARIO,
-      showSetting: !props.readOnly,
-      selectable: hasAnyPermission([
-        'PROJECT_API_SCENARIO:READ+UPDATE',
-        'PROJECT_API_SCENARIO:READ+EXECUTE',
-        'PROJECT_API_SCENARIO:READ+DELETE',
-      ]),
-      showSelectAll: !props.readOnly,
-      draggable: hasAnyPermission(['PROJECT_API_SCENARIO:READ+UPDATE']) ? { type: 'handle', width: 32 } : undefined,
-      heightUsed: 282,
-      showSubdirectory: true,
-      paginationSize: 'mini',
-    },
-    (item) => ({
-      ...item,
-      createTime: dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss'),
-      updateTime: dayjs(item.updateTime).format('YYYY-MM-DD HH:mm:ss'),
-    })
-  );
+  const { propsRes, propsEvent, viewId, advanceFilter, setAdvanceFilter, loadList, setLoadListParams, resetSelector } =
+    useTable(
+      getScenarioPage,
+      {
+        columns: props.readOnly ? columns : [],
+        scroll: { x: '100%' },
+        tableKey: TableKeyEnum.API_SCENARIO,
+        showSetting: !props.readOnly,
+        selectable: hasAnyPermission([
+          'PROJECT_API_SCENARIO:READ+UPDATE',
+          'PROJECT_API_SCENARIO:READ+EXECUTE',
+          'PROJECT_API_SCENARIO:READ+DELETE',
+        ]),
+        showSelectAll: !props.readOnly,
+        draggable: hasAnyPermission(['PROJECT_API_SCENARIO:READ+UPDATE']) ? { type: 'handle', width: 32 } : undefined,
+        heightUsed: 282,
+        paginationSize: 'mini',
+      },
+      (item) => ({
+        ...item,
+        execPassRate: item.execPassRate ? `${item.execPassRate}%` : '-',
+        createTime: dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss'),
+        updateTime: dayjs(item.updateTime).format('YYYY-MM-DD HH:mm:ss'),
+      })
+    );
   const batchActions = {
     baseAction: [
+      {
+        label: 'common.export',
+        eventTag: 'export',
+        permission: ['PROJECT_API_SCENARIO:READ+EXPORT'],
+      },
       {
         label: 'common.edit',
         eventTag: 'edit',
@@ -860,6 +869,21 @@
       },
     ],
     moreAction: [
+      {
+        label: 'testPlan.testPlanIndex.openTimingTask',
+        eventTag: 'openTimingTask',
+        permission: ['PROJECT_API_SCENARIO:READ+EXECUTE'],
+      },
+      {
+        label: 'testPlan.testPlanIndex.closeTimingTask',
+        eventTag: 'closeTimingTask',
+        permission: ['PROJECT_API_SCENARIO:READ+EXECUTE'],
+      },
+      {
+        label: 'testPlan.testPlanIndex.editTimingTask',
+        eventTag: 'editTimingTask',
+        permission: ['PROJECT_API_SCENARIO:READ+EXECUTE'],
+      },
       {
         label: 'common.delete',
         eventTag: 'delete',
@@ -908,31 +932,178 @@
       },
     ];
   }
-  const statusFilters = ref<string[]>([]);
+
   const tableStore = useTableStore();
 
-  async function loadScenarioList(refreshTreeCount?: boolean) {
+  const msAdvanceFilterRef = ref<InstanceType<typeof MsAdvanceFilter>>();
+  const isAdvancedSearchMode = computed(() => msAdvanceFilterRef.value?.isAdvancedSearchMode);
+  async function getModuleIds() {
     let moduleIds: string[] = [];
-    if (props.activeModule && props.activeModule !== 'all') {
+    if (props.activeModule !== 'all' && !isAdvancedSearchMode.value) {
       moduleIds = [props.activeModule];
       const getAllChildren = await tableStore.getSubShow(TableKeyEnum.API_SCENARIO);
       if (getAllChildren) {
         moduleIds = [props.activeModule, ...props.offspringIds];
       }
     }
-    memberOptions.value = await getProjectOptions(appStore.currentProjectId, keyword.value);
-    memberOptions.value = memberOptions.value.map((e: any) => ({ label: e.name, value: e.id }));
+    return moduleIds;
+  }
+
+  async function initStatistics() {
+    try {
+      const res = await getScenarioStatistics(propsRes.value.data.map((item) => item.id));
+      propsRes.value.data.forEach((e) => {
+        const item = res.find((i: any) => i.id === e.id);
+        if (item) {
+          e.execPassRate = item.execPassRate;
+        }
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  }
+
+  watch(
+    () => propsRes.value.data,
+    (arr) => {
+      if (arr.length > 0) {
+        initStatistics();
+      }
+    }
+  );
+
+  async function loadScenarioList(refreshTreeCount?: boolean) {
+    const moduleIds = await getModuleIds();
+
     const params = {
       keyword: keyword.value,
       projectId: appStore.currentProjectId,
       moduleIds,
+      filter: propsRes.value.filter,
     };
-    setLoadListParams(params);
+    setLoadListParams({ ...params, viewId: viewId.value, combineSearch: advanceFilter });
     await loadList();
-    if (refreshTreeCount) {
+    if (refreshTreeCount && !isAdvancedSearchMode.value) {
       emit('refreshModuleTree', params);
     }
   }
+
+  const filterConfigList = computed<FilterFormItem[]>(() => [
+    {
+      title: 'caseManagement.featureCase.tableColumnID',
+      dataIndex: 'num',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'apiScenario.table.columns.name',
+      dataIndex: 'name',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'common.belongModule',
+      dataIndex: 'moduleId',
+      type: FilterType.TREE_SELECT,
+      treeSelectData: props.moduleTree,
+      treeSelectProps: {
+        fieldNames: {
+          title: 'name',
+          key: 'id',
+          children: 'children',
+        },
+        multiple: true,
+        treeCheckable: true,
+        treeCheckStrictly: true,
+      },
+    },
+    {
+      title: 'apiScenario.table.columns.level',
+      dataIndex: 'priority',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        options: casePriorityOptions,
+      },
+    },
+    {
+      title: 'apiScenario.table.columns.status',
+      dataIndex: 'status',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        options: scenarioStatusOptions,
+      },
+    },
+    {
+      title: 'apiScenario.table.columns.runResult',
+      dataIndex: 'lastReportStatus',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        options: statusList.value,
+      },
+    },
+    {
+      title: 'common.tag',
+      dataIndex: 'tags',
+      type: FilterType.TAGS_INPUT,
+      numberProps: {
+        min: 0,
+        precision: 0,
+      },
+    },
+    {
+      title: 'apiScenario.table.columns.scenarioEnv',
+      dataIndex: 'environmentName',
+      type: FilterType.SELECT,
+      selectProps: {
+        labelKey: 'name',
+        valueKey: 'id',
+        multiple: true,
+        options: appStore.envList,
+      },
+    },
+    {
+      title: 'apiScenario.table.columns.steps',
+      dataIndex: 'stepTotal',
+      type: FilterType.NUMBER,
+      numberProps: {
+        min: 0,
+        precision: 0,
+      },
+    },
+    {
+      title: 'common.creator',
+      dataIndex: 'createUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.createTime',
+      dataIndex: 'createTime',
+      type: FilterType.DATE_PICKER,
+    },
+    {
+      title: 'apiScenario.table.columns.updateUser',
+      dataIndex: 'updateUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.updateTime',
+      dataIndex: 'updateTime',
+      type: FilterType.DATE_PICKER,
+    },
+  ]);
+
+  const viewName = ref('');
+
+  // 高级检索
+  const handleAdvSearch = async (filter: FilterResult, id: string, isStartAdvance: boolean) => {
+    resetSelector();
+    emit('handleAdvSearch', isStartAdvance);
+    keyword.value = '';
+    setAdvanceFilter(filter, id);
+    await loadScenarioList(false); // 基础筛选都清空
+  };
 
   async function handleStatusChange(record: ApiScenarioUpdateDTO) {
     try {
@@ -956,20 +1127,27 @@
 
   const tableSelected = ref<(string | number)[]>([]);
 
-  const batchParams = ref<ApiScenarioBatchParam>();
-
-  const batchOptionParams = ref<ApiScenarioBatchParams>({
-    projectId: appStore.currentProjectId,
-    selectIds: [],
-    selectAll: false,
-    condition: {},
-  });
+  const batchParams = ref<BatchActionQueryParams>({ selectAll: false });
+  const batchOptionParams = ref<any>();
+  async function getBatchConditionParams() {
+    const selectModules = await getModuleIds();
+    return {
+      condition: {
+        keyword: keyword.value,
+        filter: propsRes.value.filter,
+        viewId: viewId.value,
+        combineSearch: advanceFilter,
+      },
+      projectId: appStore.currentProjectId,
+      moduleIds: selectModules,
+    };
+  }
 
   /**
    * 删除接口
    */
-  function deleteScenario(record?: ApiScenarioTableItem, isBatch?: boolean, params?: ApiScenarioBatchParam) {
-    let title = t('api_scenario.table.deleteScenarioTipTitle', { name: record?.name });
+  function deleteScenario(record?: ApiScenarioTableItem, isBatch?: boolean, params?: BatchActionQueryParams) {
+    let title = t('api_scenario.table.deleteScenarioTipTitle', { name: characterLimit(record?.name) });
     let selectIds = [record?.id || ''];
     if (isBatch) {
       title = t('api_scenario.table.batchDeleteScenarioTip', {
@@ -1000,15 +1178,15 @@
       maskClosable: false,
       onBeforeOk: async () => {
         try {
+          appStore.showLoading();
           if (isBatch) {
+            const batchConditionParams = await getBatchConditionParams();
             await batchRecycleScenario({
               selectIds,
               selectAll: !!params?.selectAll,
               excludeIds: params?.excludeIds || [],
-              condition: { ...params?.condition, keyword: keyword.value, filter: propsRes.value.filter },
-              projectId: appStore.currentProjectId,
-              moduleIds: params?.moduleIds || [],
               deleteAll: true,
+              ...batchConditionParams,
             });
           } else {
             await recycleScenario(record?.id as string);
@@ -1019,19 +1197,16 @@
         } catch (error) {
           // eslint-disable-next-line no-console
           console.log(error);
+        } finally {
+          appStore.hideLoading();
         }
       },
       hideCancel: false,
     });
   }
 
+  const isBatch = ref(false);
   const showScheduleModal = ref(false);
-  const syncFrequencyOptions = [
-    { label: t('apiTestManagement.timeTaskHour'), value: '0 0 0/1 * * ?' },
-    { label: t('apiTestManagement.timeTaskSixHour'), value: '0 0 0/6 * * ?' },
-    { label: t('apiTestManagement.timeTaskTwelveHour'), value: '0 0 0/12 * * ?' },
-    { label: t('apiTestManagement.timeTaskDay'), value: '0 0 0 * * ?' },
-  ];
 
   async function resetScheduleConfig(record: ApiScenarioTableItem) {
     // 初始化资源池
@@ -1046,7 +1221,7 @@
       scheduleConfig.value = {
         scenarioId: record.id,
         enable: true,
-        cron: '0 0 0/1 * * ?',
+        cron: '',
         config: {
           poolId: defaultPoolId?.value,
           grouped: false,
@@ -1066,6 +1241,7 @@
   }
 
   async function openScheduleModal(record: ApiScenarioTableItem) {
+    isBatch.value = false;
     await resetScheduleConfig(record);
     showScheduleModal.value = true;
   }
@@ -1110,6 +1286,7 @@
   function cancelScheduleModal() {
     showScheduleModal.value = false;
   }
+
   function saveScheduleModal() {
     scheduleConfigRef.value?.validate(async (errors) => {
       if (!errors) {
@@ -1119,7 +1296,17 @@
           if (!scheduleUseNewEnv.value) {
             updateParam.config.environmentId = undefined;
           }
-          await scenarioScheduleConfig(updateParam);
+          if (isBatch.value) {
+            const batchConditionParams = await getBatchConditionParams();
+            await scenarioBatchEditSchedule({
+              ...batchParams.value,
+              selectIds: batchParams.value?.selectedIds || [],
+              ...updateParam,
+              ...batchConditionParams,
+            });
+          } else {
+            await scenarioScheduleConfig(updateParam);
+          }
           // 初始化弹窗标题
           if (tableRecord.value?.scheduleConfig) {
             Message.success(t('common.updateSuccess'));
@@ -1148,6 +1335,7 @@
 
   const showBatchModal = ref(false);
   const batchUpdateLoading = ref(false);
+  const selectedTagType = ref<TagUpdateTypeEnum>(TagUpdateTypeEnum.UPDATE);
 
   const batchFormRef = ref<FormInstance>();
 
@@ -1207,6 +1395,7 @@
       values: [],
       append: false,
     };
+    selectedTagType.value = TagUpdateTypeEnum.UPDATE;
   }
 
   function batchUpdate() {
@@ -1214,24 +1403,21 @@
       if (!errors) {
         try {
           batchUpdateLoading.value = true;
+          const batchConditionParams = await getBatchConditionParams();
 
           const batchEditParam = {
             selectIds: batchParams.value?.selectedIds || [],
             selectAll: !!batchParams.value?.selectAll,
             excludeIds: batchParams.value?.excludeIds || [],
-            condition: {
-              keyword: keyword.value,
-              filter: propsRes.value.filter,
-            },
-            projectId: appStore.currentProjectId,
-            moduleIds: batchParams.value?.moduleIds || [],
+            ...batchConditionParams,
             type: batchForm.value?.attr,
             priority: '',
             status: '',
             tags: [],
-            append: batchForm.value.append,
+            append: selectedTagType.value === TagUpdateTypeEnum.APPEND,
             grouped: false,
             envId: '',
+            clear: selectedTagType.value === TagUpdateTypeEnum.CLEAR,
           };
 
           if (batchForm.value.attr === 'Priority') {
@@ -1278,16 +1464,12 @@
       } else if (isBatchCopy.value) {
         optionType = 'batchCopy';
       }
+      const batchConditionParams = await getBatchConditionParams();
       const res = await batchOptionScenario(optionType, {
         selectIds: batchParams.value?.selectedIds || [],
         selectAll: !!batchParams.value?.selectAll,
         excludeIds: batchParams.value?.excludeIds || [],
-        condition: {
-          keyword: keyword.value,
-          filter: propsRes.value.filter,
-        },
-        projectId: appStore.currentProjectId,
-        moduleIds: batchParams.value?.moduleIds || [],
+        ...batchConditionParams,
         targetModuleId: selectedBatchOptModuleKey.value,
       });
 
@@ -1331,36 +1513,48 @@
   }
 
   /**
+   * 打开关闭定时任务
+   */
+  async function handleBatchToggleSchedule(enable: boolean) {
+    try {
+      appStore.showLoading();
+      const { selectedIds, selectAll, excludeIds } = batchParams.value;
+      const batchConditionParams = await getBatchConditionParams();
+      await scenarioBatchEditSchedule({
+        selectIds: selectedIds || [],
+        selectAll: !!selectAll,
+        excludeIds: excludeIds || [],
+        type: 'Schedule',
+        enable,
+        ...batchConditionParams,
+      });
+      Message.success(
+        enable
+          ? t('testPlan.testPlanGroup.enableScheduleTaskSuccess')
+          : t('testPlan.testPlanGroup.closeScheduleTaskSuccess')
+      );
+      resetSelector();
+      loadScenarioList(false);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    } finally {
+      appStore.hideLoading();
+    }
+  }
+
+  /**
    * 处理表格选中后批量操作
    * @param event 批量操作事件对象
    */
   async function handleTableBatch(event: BatchActionParams, params: BatchActionQueryParams) {
     tableSelected.value = params?.selectedIds || [];
 
-    // 构建批量处理的基础参数
-    let moduleIds: string[] = [];
-    const getAllChildren = await tableStore.getSubShow(TableKeyEnum.API_SCENARIO);
-    if (getAllChildren) {
-      moduleIds = [props.activeModule, ...props.offspringIds];
-    } else {
-      moduleIds = [props.activeModule];
-    }
-    batchParams.value = { ...params, moduleIds: [] };
-    batchParams.value.moduleIds = moduleIds;
-    const filterParams = {
-      lastReportStatus: lastReportStatusListFilters.value,
-      status: statusFilters.value,
-      priority: priorityFilters.value,
-      createUser: createUserFilters.value,
-      updateUser: updateUserFilters.value,
-    };
-    if (batchParams.value.condition) {
-      batchParams.value.condition.filter = { ...filterParams };
-      batchParams.value.condition.keyword = keyword.value;
-    } else {
-      batchParams.value.condition = { filter: { ...filterParams }, keyword: keyword.value };
-    }
+    batchParams.value = { ...params };
     switch (event.eventTag) {
+      case 'export':
+        showExportModal.value = true;
+        break;
       case 'delete':
         deleteScenario(undefined, true, batchParams.value);
         break;
@@ -1385,21 +1579,20 @@
         moveModalVisible.value = true;
         break;
       case 'execute':
-        batchOptionParams.value = {
-          projectId: appStore.currentProjectId,
-          selectIds: [],
-          selectAll: false,
-          condition: {},
-        };
-
-        // 构建执行的参数
-        batchOptionParams.value.selectAll = params.selectAll;
-        batchOptionParams.value.excludeIds = params.excludeIds;
-        batchOptionParams.value.selectIds = params.selectedIds?.length ? params.selectedIds : [];
-        batchOptionParams.value.moduleIds = moduleIds;
-        batchOptionParams.value.condition = batchParams.value?.condition || {};
-
+        batchOptionParams.value = await getBatchConditionParams();
         showBatchExecute.value = true;
+        break;
+      case 'openTimingTask':
+        handleBatchToggleSchedule(true);
+        break;
+      case 'closeTimingTask':
+        handleBatchToggleSchedule(false);
+        break;
+      case 'editTimingTask':
+        isBatch.value = true;
+        scheduleModalTitle.value = t('testPlan.testPlanIndex.batchUpdateScheduledTask');
+        showScheduleModal.value = true;
+        await initResourcePool();
         break;
       default:
         break;
@@ -1412,6 +1605,7 @@
 
   defineExpose({
     loadScenarioList,
+    isAdvancedSearchMode,
   });
 
   if (!props.readOnly) {
@@ -1434,12 +1628,43 @@
     }
   }
 
+  const showScenarioReportVisible = ref(false);
+  function openScenarioReportDrawer(record: ApiScenarioTableItem) {
+    if (record.lastReportId) {
+      tableRecord.value = record;
+      showScenarioReportVisible.value = true;
+    }
+  }
+
+  const isActivated = computed(() => cacheStore.cacheViews.includes(CacheTabTypeEnum.API_SCENARIO_TABLE));
+
   onBeforeMount(() => {
-    loadScenarioList();
+    cacheStore.clearCache();
+    if (route.query.view) {
+      setAdvanceFilter({ conditions: [], searchMode: 'AND' }, route.query.view as string);
+      viewName.value = route.query.view as string;
+    }
+    if (route.query.home) {
+      propsRes.value.filter = {
+        ...NAV_NAVIGATION[route.query.home as WorkNavValueEnum],
+      };
+    }
+    if (!isActivated.value) {
+      loadScenarioList();
+      cacheStore.setCache(CacheTabTypeEnum.API_SCENARIO_TABLE);
+    }
   });
+
+  onActivated(() => {
+    if (isActivated.value) {
+      loadScenarioList();
+    }
+  });
+
   watch(
     () => props.activeModule,
     () => {
+      if (isAdvancedSearchMode.value) return;
       resetSelector();
       loadScenarioList();
     }

@@ -4,7 +4,6 @@ import io.metersphere.plugin.sdk.spi.MsPlugin;
 import io.metersphere.sdk.constants.DefaultRepositoryDir;
 import io.metersphere.sdk.constants.LocalRepositoryDir;
 import io.metersphere.sdk.constants.StorageType;
-import io.metersphere.system.controller.handler.result.CommonResultCode;
 import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.file.FileCenter;
 import io.metersphere.sdk.file.FileRequest;
@@ -12,6 +11,7 @@ import io.metersphere.sdk.plugin.MsPluginManager;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.LogUtils;
 import io.metersphere.sdk.util.MsFileUtils;
+import io.metersphere.system.controller.handler.result.CommonResultCode;
 import io.metersphere.system.domain.Plugin;
 import io.metersphere.system.domain.PluginExample;
 import io.metersphere.system.domain.PluginScript;
@@ -210,6 +210,7 @@ public class PluginLoadService {
      */
     public synchronized void unloadPlugin(String pluginId) {
         if (hasPlugin(pluginId)) {
+            pluginChangeServiceInvoker.handlePluginUnLoad(pluginId);
             msPluginManager.deletePlugin(pluginId);
         }
     }
@@ -288,7 +289,7 @@ public class PluginLoadService {
      */
     public <T> Class<? extends T> getExtensionsClass(Class<T> clazz, String pluginId) {
         List<Class<? extends T>> classes = msPluginManager.getExtensionClasses(clazz, pluginId);
-        return CollectionUtils.isEmpty(classes) ? null : classes.get(0);
+        return CollectionUtils.isEmpty(classes) ? null : classes.getFirst();
     }
 
     public MsPluginManager getMsPluginManager() {

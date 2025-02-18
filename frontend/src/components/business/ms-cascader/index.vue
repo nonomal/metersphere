@@ -9,14 +9,19 @@
     multiple
     allow-clear
     check-strictly
-    :max-tag-count="maxTagCount"
+    :max-tag-count="props.shouldCalculateMaxTag ? maxTagCount : 1"
     :virtual-list-props="props.virtualListProps"
     :placeholder="props.placeholder"
     :loading="props.loading"
     :value-key="props.valueKey"
+    :field-names="{
+      label: props.labelKey,
+      value: props.valueKey,
+    }"
     :path-mode="false"
     @change="handleMsCascaderChange"
     @clear="clearValues"
+    @popup-visible-change="updateTriggerWidth"
   >
     <template v-if="props.prefix" #prefix>
       {{ props.prefix }}
@@ -47,17 +52,23 @@
     v-model:model-value="innerValue"
     class="ms-cascader"
     :options="props.options"
-    :trigger-props="{ contentClass: `ms-cascader-popper ms-cascader-popper--${props.optionSize}` }"
+    :trigger-props="{ contentClass: `ms-cascader-popper-native ms-cascader-popper--${props.optionSize}` }"
     :multiple="props.multiple"
     allow-clear
+    :load-more="props.loadMore"
     :check-strictly="props.strictly"
-    :max-tag-count="maxTagCount"
+    :max-tag-count="props.shouldCalculateMaxTag ? maxTagCount : 1"
     :placeholder="props.placeholder"
     :virtual-list-props="props.virtualListProps"
     :loading="props.loading"
     :value-key="props.valueKey"
-    :path-mode="false"
+    :field-names="{
+      label: props.labelKey,
+      value: props.valueKey,
+    }"
+    :path-mode="props.pathMode"
     @change="(val) => emit('change', val)"
+    @popup-visible-change="updateTriggerWidth"
   >
     <template v-if="props.prefix" #prefix>
       {{ props.prefix }}
@@ -105,7 +116,7 @@
     multiple?: boolean; // 是否多选
     strictly?: boolean; // 是否严格模式
     virtualListProps?: VirtualListProps; // 传入开启虚拟滚动
-    panelWidth?: number; // 下拉框宽度，默认为 150px
+    panelWidth?: number; // 下拉框宽度，默认为 150px （超过两级时）
     placeholder?: string;
     loading?: boolean;
     optionSize?: 'small' | 'default';
@@ -113,6 +124,8 @@
     labelPathMode?: boolean; // 是否开启回显的 label 是路径模式
     valueKey?: string;
     labelKey?: string; // 传入自定义的 labelKey
+    shouldCalculateMaxTag?: boolean; // 是否需要计算最大标签数
+    loadMore?: (option: CascaderOption, done: (children?: CascaderOption[]) => void) => void;
   }
 
   const props = withDefaults(defineProps<MsCascaderProps>(), {
@@ -121,6 +134,7 @@
     pathMode: false,
     valueKey: 'value',
     labelKey: 'label',
+    shouldCalculateMaxTag: true,
   });
   const emit = defineEmits(['update:modelValue', 'update:level', 'change']);
 
@@ -131,13 +145,16 @@
   const cascader: Ref = ref(null);
   let selectedLabelObj: Record<string, any> = {}; // 存储已选的选项的label，用于多选时展示全部选项的 tooltip
 
-  const { maxTagCount, getOptionComputedStyle, calculateMaxTag } = useSelect({
-    selectRef: cascader,
-    selectVal: innerValue,
-    isCascade: true,
-    options: props.options,
-    panelWidth: props.panelWidth,
-  });
+  const { maxTagCount, getOptionComputedStyle, calculateMaxTag, updateTriggerWidth } = useSelect(
+    {
+      selectRef: cascader,
+      selectVal: innerValue,
+      isCascade: true,
+      options: props.options,
+      panelWidth: props.panelWidth,
+    },
+    props
+  );
 
   watch(
     () => props.modelValue,
@@ -153,6 +170,9 @@
         // 顶级选项，该级别为单选选项
         innerLevel.value = val[0] as string;
       }
+      if (props.shouldCalculateMaxTag !== false && props.multiple) {
+        calculateMaxTag();
+      }
     },
     {
       immediate: true,
@@ -167,11 +187,11 @@
         selectedLabelObj = {};
         for (let i = 0; i < val.length; i++) {
           const item = val[i];
-          const value = typeof item === 'object' ? item.value : item;
+          const value = typeof item === 'object' ? item[props.valueKey] : item;
           if (!props.labelPathMode) {
-            selectedLabelObj[value] = t((item.label || '').split('/').pop() || '');
+            selectedLabelObj[value] = t((item[props.labelKey] || '').split('/').pop() || '');
           } else {
-            selectedLabelObj[value] = t(item.label || '');
+            selectedLabelObj[value] = t(item[props.labelKey] || '');
           }
         }
       }
@@ -210,12 +230,14 @@
         innerLevel.value = '';
       }
     }
-    calculateMaxTag();
+    if (props.shouldCalculateMaxTag) {
+      calculateMaxTag();
+    }
   }
 
   // TODO: 临时解决 arco-design 的 cascader 组件已选项的label只能是带路径‘/’的 path-mode 的问题
   function getInputLabel(data: CascaderOption) {
-    const isTagCount = data[props.labelKey].includes('+');
+    const isTagCount = (data[props.labelKey] || data.label).includes('+');
     if (isTagCount) {
       return data.label;
     }
@@ -226,7 +248,7 @@
   }
 
   function getInputLabelTooltip(data: CascaderOption) {
-    const isTagCount = data[props.labelKey].includes('+');
+    const isTagCount = (data[props.labelKey] || data.label).includes('+');
     const label = getInputLabel(data);
     if (isTagCount && Array.isArray(innerValue.value)) {
       return Object.values(selectedLabelObj).join('，');
@@ -250,7 +272,8 @@
       }
     }
   }
-  .ms-cascader-popper {
+  .ms-cascader-popper,
+  .ms-cascader-popper-native {
     .arco-cascader-panel {
       .arco-cascader-panel-column {
         .arco-cascader-column-content {
@@ -267,6 +290,10 @@
           background-color: rgb(var(--primary-1));
         }
       }
+    }
+  }
+  .ms-cascader-popper {
+    .arco-cascader-panel {
       .arco-cascader-panel-column:first-child {
         .arco-checkbox {
           @apply hidden;

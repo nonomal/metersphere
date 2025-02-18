@@ -6,15 +6,22 @@ import {
   EditProjectMemberUrl,
   GetProjectMemberListUrl,
   ProjectMemberCommentOptions,
+  ProjectMemberInviteUrl,
   ProjectMemberList,
   ProjectMemberOptions,
   ProjectUserGroupUrl,
   RemoveProjectMemberUrl,
+  UpdateProjectMemberUrl,
 } from '@/api/requrls/project-management/projectMember';
 
 import { ReviewUserItem } from '@/models/caseManagement/caseReview';
 import type { CommonList, TableQueryParams } from '@/models/common';
-import type { ActionProjectMember, ProjectMemberItem } from '@/models/projectManagement/projectAndPermission';
+import type {
+  ActionProjectMember,
+  InviteMemberParams,
+  ProjectMemberItem,
+  ProjectUserOption,
+} from '@/models/projectManagement/projectAndPermission';
 
 // 获取项目成员列表
 export function getProjectMemberList(data: TableQueryParams) {
@@ -27,6 +34,10 @@ export function addOrUpdateProjectMember(data: ActionProjectMember) {
     return MSR.post({ url: EditProjectMemberUrl, data });
   }
   return MSR.post({ url: AddMemberToProjectUrl, data });
+}
+// 系统设置-系统-组织与项目-项目-更新成员用户组
+export function updateProjectMember(data: ActionProjectMember) {
+  return MSR.post({ url: UpdateProjectMemberUrl, data });
 }
 
 // 添加项目成员到用户组
@@ -46,7 +57,7 @@ export function removeProjectMember(projectId: string, userId: string) {
 
 // 获取用户组下拉
 export function getProjectUserGroup(projectId: string) {
-  return MSR.get({ url: ProjectUserGroupUrl, params: projectId });
+  return MSR.get<ProjectUserOption[]>({ url: ProjectUserGroupUrl, params: projectId });
 }
 
 // 项目成员下拉选项
@@ -64,4 +75,9 @@ export function getProjectMemberCommentOptions(projectId: string, keyword?: stri
     url: `${ProjectMemberCommentOptions}/${projectId}`,
     params: { keyword },
   });
+}
+
+// 邀请成员
+export function inviteMember(data: InviteMemberParams) {
+  return MSR.post({ url: ProjectMemberInviteUrl, data }, { isReturnNativeResponse: true });
 }

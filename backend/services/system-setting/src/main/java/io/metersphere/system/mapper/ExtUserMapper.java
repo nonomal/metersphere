@@ -1,11 +1,13 @@
 package io.metersphere.system.mapper;
 
 import io.metersphere.system.domain.User;
+import io.metersphere.system.dto.request.MemberRequest;
 import io.metersphere.system.dto.user.UserDTO;
 import io.metersphere.system.dto.user.UserExtendDTO;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Set;
 
 public interface ExtUserMapper {
 
@@ -39,4 +41,22 @@ public interface ExtUserMapper {
     long countByIdAndPassword(@Param("userId") String id, @Param("password") String password);
 
     long updatePasswordByUserId(@Param("userId") String id, @Param("password") String password);
+
+    /**
+     * 获取用户的安装时间，兼容历史用户使用问题
+     * @return 安装时间
+     */
+    Long gaInstalledTime();
+
+    void updateInstalled();
+
+    List<UserExtendDTO> getMemberList(@Param("request") MemberRequest request);
+
+    /**
+     * 根据用户ID查询有效用户id,名称集合
+     *
+     * @param ids 用户ID集合
+     * @return 用户列表
+     */
+    List<User> selectSimpleUser(@Param("ids") Set<String> ids);
 }

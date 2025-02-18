@@ -7,7 +7,9 @@
 package io.metersphere.functional.service;
 
 
-import io.metersphere.functional.domain.*;
+import io.metersphere.functional.domain.CaseReview;
+import io.metersphere.functional.domain.CaseReviewModule;
+import io.metersphere.functional.domain.CaseReviewModuleExample;
 import io.metersphere.functional.mapper.CaseReviewModuleMapper;
 import io.metersphere.functional.mapper.ExtCaseReviewMapper;
 import io.metersphere.functional.mapper.ExtCaseReviewModuleMapper;
@@ -16,17 +18,11 @@ import io.metersphere.functional.request.CaseReviewModuleUpdateRequest;
 import io.metersphere.project.dto.ModuleCountDTO;
 import io.metersphere.project.dto.NodeSortDTO;
 import io.metersphere.project.service.ModuleTreeService;
-import io.metersphere.sdk.constants.HttpMethodConstants;
 import io.metersphere.sdk.constants.ModuleConstants;
 import io.metersphere.sdk.exception.MSException;
-import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
 import io.metersphere.system.dto.sdk.request.NodeMoveRequest;
-import io.metersphere.system.log.constants.OperationLogModule;
-import io.metersphere.system.log.constants.OperationLogType;
-import io.metersphere.system.log.dto.LogDTO;
-import io.metersphere.system.log.service.OperationLogService;
 import io.metersphere.system.uid.IDGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections4.CollectionUtils;
@@ -57,10 +53,8 @@ public class CaseReviewModuleService extends ModuleTreeService {
     private ExtCaseReviewMapper extCaseReviewMapper;
     @Resource
     private DeleteCaseReviewService deleteCaseReviewService;
-
-
     @Resource
-    private OperationLogService operationLogService;
+    private CaseReviewModuleLogService caseReviewModuleLogService;
 
     public List<BaseTreeNode> getTree(String projectId) {
         List<BaseTreeNode> fileModuleList = extCaseReviewModuleMapper.selectBaseByProjectId(projectId);
@@ -80,6 +74,7 @@ public class CaseReviewModuleService extends ModuleTreeService {
         caseReviewModule.setCreateUser(userId);
         caseReviewModule.setUpdateUser(userId);
         caseReviewModuleMapper.insert(caseReviewModule);
+        caseReviewModuleLogService.addModuleLog(caseReviewModule, userId);
         return caseReviewModule.getId();
     }
 
@@ -95,6 +90,7 @@ public class CaseReviewModuleService extends ModuleTreeService {
         updateModule.setCreateUser(null);
         updateModule.setCreateTime(null);
         caseReviewModuleMapper.updateByPrimaryKeySelective(updateModule);
+        caseReviewModuleLogService.updateModuleLog(updateModule, userId);
     }
 
     public void moveNode(NodeMoveRequest request, String userId) {
@@ -120,32 +116,12 @@ public class CaseReviewModuleService extends ModuleTreeService {
         super.sort(nodeSortDTO);
     }
 
-    public void deleteModule(String moduleId) {
+    public void deleteModule(String moduleId, String userId) {
         CaseReviewModule deleteModule = caseReviewModuleMapper.selectByPrimaryKey(moduleId);
         if (deleteModule != null) {
-            List<CaseReview> caseReviews = this.deleteModuleByIds(Collections.singletonList(moduleId), new ArrayList<>(), deleteModule.getProjectId());
-            batchDelLog(caseReviews, deleteModule.getProjectId());
+            this.deleteModuleByIds(Collections.singletonList(moduleId), new ArrayList<>(), deleteModule.getProjectId());
+            caseReviewModuleLogService.batchDelLog(List.of(deleteModule), deleteModule.getProjectId(), userId, "/case/review/module/delete/" + moduleId);
         }
-    }
-
-    public void batchDelLog(List<CaseReview> caseReviews, String projectId) {
-        List<LogDTO> dtoList = new ArrayList<>();
-        caseReviews.forEach(item -> {
-            LogDTO dto = new LogDTO(
-                    projectId,
-                    "",
-                    item.getId(),
-                    item.getCreateUser(),
-                    OperationLogType.DELETE.name(),
-                    OperationLogModule.CASE_REVIEW,
-                    item.getName());
-
-            dto.setPath("/case/review/module/delete/");
-            dto.setMethod(HttpMethodConstants.GET.name());
-            dto.setOriginalValue(JSON.toJSONBytes(item));
-            dtoList.add(dto);
-        });
-        operationLogService.batchAdd(dtoList);
     }
 
     public List<CaseReview> deleteModuleByIds(List<String> deleteIds, List<CaseReview> caseReviews, String projectId) {
@@ -159,9 +135,9 @@ public class CaseReviewModuleService extends ModuleTreeService {
         if (CollectionUtils.isNotEmpty(caseReviewList)) {
             caseReviews.addAll(caseReviewList);
         }
-        List<String> caseIds = caseReviewList.stream().map(CaseReview::getId).toList();
-        if (CollectionUtils.isNotEmpty(caseIds)) {
-            deleteCaseReviewService.deleteCaseReviewResource(caseIds, projectId);
+        List<String> reviewIds = caseReviewList.stream().map(CaseReview::getId).toList();
+        if (CollectionUtils.isNotEmpty(reviewIds)) {
+            deleteCaseReviewService.deleteCaseReviewResource(reviewIds, projectId);
         }
         List<String> childrenIds = extCaseReviewModuleMapper.selectChildrenIdsByParentIds(deleteIds);
         if (CollectionUtils.isNotEmpty(childrenIds)) {

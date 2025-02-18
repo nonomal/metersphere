@@ -1,6 +1,7 @@
 <template>
   <MsDrawer
     v-model:visible="visible"
+    class="customCaseDrawer"
     :width="900"
     :footer="false"
     show-full-screen
@@ -27,17 +28,15 @@
         @press-enter="updateStepName"
         @blur="updateStepName"
       />
-      <div v-show="!isShowEditStepNameInput" class="flex flex-1 items-center justify-between">
-        <div class="flex items-center gap-[8px]">
+      <div v-show="!isShowEditStepNameInput" class="flex flex-1 items-center justify-between overflow-hidden">
+        <div class="flex flex-1 items-center gap-[8px] overflow-hidden">
           <a-tooltip :content="requestVModel.stepName || activeStep?.name">
-            <div class="one-line-text max-w-[300px]">
-              {{ requestVModel.stepName || characterLimit(activeStep?.name) }}</div
-            >
+            <div class="one-line-text"> {{ requestVModel.stepName || characterLimit(activeStep?.name) }}</div>
           </a-tooltip>
           <MsIcon
             v-if="!activeStep || !activeStep.isQuoteScenarioStep"
             type="icon-icon_edit_outlined"
-            class="cursor-pointer hover:text-[rgb(var(--primary-5))]"
+            class="min-w-[16px] cursor-pointer hover:text-[rgb(var(--primary-5))]"
             @click="showEditScriptNameInput"
           />
         </div>
@@ -53,7 +52,7 @@
             @replace="handleReplace"
           />
           <MsButton class="mr-4" type="icon" status="secondary" @click="handleDelete">
-            <MsIcon type="icon-icon_delete-trash_outlined" />
+            <MsIcon type="icon-icon_delete-trash_outlined1" />
             {{ t('common.delete') }}
           </MsButton>
         </div>
@@ -122,6 +121,7 @@
           :get-text-func="getTabBadge"
           no-content
           class="sticky-content relative top-0 mx-[16px] border-b"
+          @tab-click="requestTabClick"
         />
         <div :class="`request-content-and-response ${activeLayout}`">
           <a-spin class="request block h-full w-full" :loading="requestVModel.executeLoading || loading">
@@ -161,6 +161,7 @@
                 :file-save-as-source-id="activeStep?.id"
                 :file-save-as-api="stepTransferFile"
                 :file-module-options-api="getTransferOptions"
+                is-case
                 @change="handleActiveDebugChange"
               />
               <httpQuery
@@ -268,7 +269,12 @@
 
   import { getPluginScript, getProtocolList } from '@/api/modules/api-test/common';
   import { getCaseDetail } from '@/api/modules/api-test/management';
-  import { getTransferOptions, stepTransferFile, uploadTempFile } from '@/api/modules/api-test/scenario';
+  import {
+    getTransferOptions,
+    scenarioCopyStepFiles,
+    stepTransferFile,
+    uploadTempFile,
+  } from '@/api/modules/api-test/scenario';
   import { useAppStore } from '@/store';
   import { characterLimit } from '@/utils';
   import { scrollIntoView } from '@/utils/dom';
@@ -343,7 +349,7 @@
     stepId: '',
     uniqueId: '',
     resourceId: '',
-    customizeRequestEnvEnable: false,
+    customizeRequestEnvEnable: true,
     protocol: 'HTTP',
     url: '',
     activeTab: RequestComposition.HEADER,
@@ -399,6 +405,7 @@
     errorMessageInfo: {},
   };
   const requestVModel = ref<RequestParam>(defaultApiParams);
+  const copyStepFileIdsMap = ref<Record<string, any>>({});
   const _stepType = computed(() => {
     if (activeStep.value) {
       return getStepType(activeStep.value);
@@ -442,6 +449,14 @@
       deep: true,
     }
   );
+
+  function requestTabClick() {
+    const element = document.querySelector('.customCaseDrawer')?.querySelectorAll('.request-tab-and-response')[0];
+    element?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  }
 
   // 非引用场景下的复制 case 可更改
   const isEditableApi = computed(() => !activeStep.value?.isQuoteScenarioStep && _stepType.value.isCopyCase);
@@ -626,15 +641,6 @@
     () => pluginScriptMap.value[requestVModel.value.protocol]?.script || []
   );
 
-  // 处理插件表单输入框变化
-  const handlePluginFormChange = debounce(() => {
-    if (isEditableApi.value) {
-      // 复制或者新建的时候需要缓存表单数据，引用的不能更改
-      temporaryPluginFormMap[requestVModel.value.uniqueId] = fApi.value?.formData();
-    }
-    handleActiveDebugChange();
-  }, 300);
-
   /**
    * 控制插件表单字段显示
    */
@@ -654,8 +660,19 @@
       // 隐藏多余的字段
       fApi.value?.hidden(true, currentFormFields?.filter((e) => !fields.includes(e)) || []);
     }
+    fApi.value?.refresh(); // 刷新表单，避免字段显隐切换后部分字段不显示
     return fields;
   }
+
+  // 处理插件表单输入框变化
+  const handlePluginFormChange = debounce(() => {
+    if (isEditableApi.value) {
+      // 复制或者新建的时候需要缓存表单数据，引用的不能更改
+      temporaryPluginFormMap[requestVModel.value.uniqueId] = fApi.value?.formData();
+    }
+    controlPluginFormFields(); // TODO:临时解决插件表单通过表单交互控制字段显隐未隐藏/显示环境字段的问题
+    handleActiveDebugChange();
+  }, 300);
 
   /**
    * 设置插件表单数据
@@ -788,7 +805,8 @@
           requestVModel.value.body,
           undefined,
           props.fileParams?.uploadFileIds || requestVModel.value.uploadFileIds, // 外面解析详情的时候传入，或引用 case 在requestVModel内存储
-          props.fileParams?.linkFileIds || requestVModel.value.linkFileIds // 外面解析详情的时候传入，或引用 case 在requestVModel内存储
+          props.fileParams?.linkFileIds || requestVModel.value.linkFileIds, // 外面解析详情的时候传入，或引用 case 在requestVModel内存储
+          copyStepFileIdsMap.value
         );
       }
       requestParams = {
@@ -955,8 +973,14 @@
     return true;
   }
 
+  const isReplace = ref(false);
+
   function handleClose() {
-    emit('applyStep', cloneDeep(makeRequestParams()) as RequestParam);
+    if (isReplace.value) {
+      isReplace.value = false;
+    } else {
+      emit('applyStep', cloneDeep(makeRequestParams()) as RequestParam);
+    }
   }
 
   // const showAddDependencyDrawer = ref(false);
@@ -972,7 +996,26 @@
       const res = await getCaseDetail(activeStep.value?.resourceId || '');
       let parseRequestBodyResult;
       if (res.protocol === 'HTTP') {
-        parseRequestBodyResult = parseRequestBodyFiles(res.request.body); // 解析请求体中的文件，将详情中的文件 id 集合收集，更新时以判断文件是否删除以及是否新上传的文件
+        if (
+          (activeStep.value?.copyFromStepId || activeStep.value?.refType === ScenarioStepRefType.COPY) &&
+          activeStep.value?.isNew
+        ) {
+          // 复制的步骤需要复制文件
+          const fileIds = parseRequestBodyFiles(res.request.body, [], [], []).uploadFileIds;
+          if (fileIds.length > 0) {
+            copyStepFileIdsMap.value = await scenarioCopyStepFiles({
+              copyFromStepId: activeStep.value?.copyFromStepId,
+              resourceId: activeStep.value?.resourceId,
+              stepType: activeStep.value?.stepType,
+              refType: activeStep.value?.refType,
+              isTempFile: false, // 复制未保存的步骤时 true
+              fileIds,
+            });
+          }
+          parseRequestBodyFiles(res.request.body, [], [], [], copyStepFileIdsMap.value);
+        } else {
+          parseRequestBodyResult = parseRequestBodyFiles(res.request.body, [], [], [], copyStepFileIdsMap.value); // 解析请求体中的文件，将详情中的文件 id 集合收集，更新时以判断文件是否删除以及是否新上传的文件
+        }
       }
       requestVModel.value = {
         responseActiveTab: ResponseComposition.BODY,
@@ -990,6 +1033,7 @@
         resourceId: res.id,
         stepId: activeStep.value?.id || '',
         uniqueId: activeStep.value?.uniqueId || '',
+        customizeRequestEnvEnable: true,
         ...parseRequestBodyResult,
       };
       nextTick(() => {
@@ -1004,13 +1048,28 @@
     }
   }
 
+  function setDefaultActiveTab() {
+    if (requestVModel.value.body.bodyType !== RequestBodyFormat.NONE) {
+      requestVModel.value.activeTab = RequestComposition.BODY;
+    } else if (requestVModel.value.query.length > 0) {
+      requestVModel.value.activeTab = RequestComposition.QUERY;
+    } else if (requestVModel.value.rest.length > 0) {
+      requestVModel.value.activeTab = RequestComposition.REST;
+    } else if (requestVModel.value.headers.length > 0) {
+      requestVModel.value.activeTab = RequestComposition.HEADER;
+    } else {
+      requestVModel.value.activeTab = RequestComposition.BODY;
+    }
+  }
+
   /**
    * 替换步骤
    * @param newStep 替换的新步骤
    */
   function handleReplace(newStep: ScenarioStepItem) {
+    isReplace.value = true;
     emit('replace', {
-      ...newStep,
+      ...cloneDeep(newStep),
       name: activeStep.value?.name || newStep.name,
     });
   }
@@ -1022,6 +1081,13 @@
     },
     {
       immediate: true,
+    }
+  );
+
+  watch(
+    () => appStore.loading,
+    (val) => {
+      loading.value = val;
     }
   );
 
@@ -1047,6 +1113,9 @@
         }
         handleActiveDebugProtocolChange(requestVModel.value.protocol);
         nextTick(() => {
+          if (requestVModel.value.protocol === 'HTTP') {
+            setDefaultActiveTab();
+          }
           isSwitchingContent.value = false;
         });
       }
@@ -1057,7 +1126,7 @@
 <style lang="less" scoped>
   .exec-btn {
     :deep(.arco-btn) {
-      color: white !important;
+      color: var(--color-text-fff) !important;
       background-color: rgb(var(--primary-5)) !important;
       .btn-base-primary-hover();
       .btn-base-primary-active();
@@ -1076,19 +1145,21 @@
     .ms-scroll-bar();
   }
   .sticky-content {
-    @apply sticky bg-white;
+    @apply sticky;
 
     z-index: 101;
+    background-color: var(--color-text-fff);
   }
   .request-content-and-response {
     display: flex;
     &.vertical {
       flex-direction: column;
       .response :deep(.response-head) {
-        @apply sticky bg-white;
+        @apply sticky;
 
-        top: 0;
-        z-index: 102; // 覆盖请求参数tab
+        top: 46px; // 请求参数tab高度(不算border-bottom)
+        z-index: 11;
+        background-color: var(--color-text-fff);
       }
       .request-tab-pane {
         min-height: 400px;

@@ -16,8 +16,6 @@ import org.apache.jmeter.protocol.http.util.HTTPFileArg;
 
 import java.io.File;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * @Author: jianxing
@@ -78,30 +76,6 @@ public abstract class MsBodyConverter<T> {
         String mimetype = ContentType.APPLICATION_OCTET_STREAM.getMimeType();
         HTTPFileArg fileArg = new HTTPFileArg(path, StringUtils.EMPTY, mimetype);
         return fileArg;
-    }
-
-    /**
-     * 将文本中的 @xxx 转换成 ${__Mock(@xxx)}
-     *
-     * @param text
-     * @return
-     */
-    protected String parseTextMock(String text) {
-        String pattern = "@[a-zA-Z\\\\(|,'-\\\\d ]*[a-zA-Z)-9),\\\\\"]";
-        Pattern regex = Pattern.compile(pattern);
-        Matcher matcher = regex.matcher(text);
-        while (matcher.find()) {
-            //取出group的最后一个字符 主要是防止 @string|number 和 @string 这种情况
-            //如果是 “ 或者, 结尾的  需要截取
-            String group = matcher.group();
-            String lastChar = null;
-            if (group.endsWith(",") || group.endsWith("\"")) {
-                lastChar = group.substring(group.length() - 1);
-                group = group.substring(0, group.length() - 1);
-            }
-            text = text.replace(matcher.group(), StringUtils.join("${__Mock(", group, ")}", lastChar));
-        }
-        return text;
     }
 
     /**

@@ -1,8 +1,16 @@
+import { TagType } from '@/components/pure/ms-tag/ms-tag.vue';
+
 import type { TableQueryParams } from '@/models/common';
 import { ColumnEditTypeEnum, SelectAllEnum, TableKeyEnum } from '@/enums/tableEnum';
 import { FilterRemoteMethodsEnum, FilterSlotNameEnum } from '@/enums/tableFilterEnum';
 
-import type { TableChangeExtra, TableColumnData, TableData, TableDraggable } from '@arco-design/web-vue';
+import type {
+  TableChangeExtra,
+  TableColumnData,
+  TableData,
+  TableDraggable,
+  TableRowSelection,
+} from '@arco-design/web-vue';
 
 export interface MsPaginationI {
   current: number;
@@ -16,16 +24,25 @@ export interface MsPaginationI {
 }
 
 export interface MsTableColumnFilterConfig {
+  filterCheckedList?: string[]; // 筛选选中的值
   filterSlotName?: FilterSlotNameEnum; // 筛选组件的slotName @desc 定义枚举是为了table组件内的插槽的filterSlotName 可以精确的让外部组件使用的时候可以拿到插槽作用域的值
   options?: Record<string, any>[]; // 筛选数据
   valueKey?: string;
   labelKey?: string;
   mode?: 'static' | 'remote';
+  emptyFilter?: boolean; // 是否空选项查询（包含未执行和排队中无状态）
   remoteMethod?: FilterRemoteMethodsEnum; // 加载选项的类型
   loadOptionParams?: Record<string, any>; // 请求下拉的参数
-  placeholderText?: string;
   firstLabelKey?: string;
   secondLabelKey?: string;
+  disabledTooltip?: boolean;
+}
+
+export interface MsTableRowSelectionDisabledConfig {
+  disabledChildren?: boolean; // 是否禁用子节点选择
+  parentKey?: string; // 父节点Key
+  checkStrictly?: boolean; // 父子节点选择是否关联，关联存在半选状态，不关联不存在，选择父即父，选择子即子
+  disabledKey?: string; // 是否禁用选择
 }
 
 export interface MsTableColumnData extends TableColumnData {
@@ -57,6 +74,9 @@ export interface MsTableColumnData extends TableColumnData {
   isCustomParam?: boolean;
   // 插槽表格过滤筛选数据item
   filterItem?: any;
+  // 是否标签编辑列
+  allowEditTag?: boolean;
+  tagPrimary?: TagType;
   // 自定义属性
   [key: string]: any;
 }
@@ -87,6 +107,7 @@ export interface MsTableProps<T> {
   heightUsed?: number; // 已经使用的高度
   enableDrag?: boolean; // 表格是否可拖拽
   draggable?: TableDraggable;
+  draggableCondition?: boolean; // 允许拖拽的条件
   /** 选择器相关 */
   selectable?: boolean; // 是否显示选择器
   selectorType: 'none' | 'checkbox' | 'radio'; // 选择器类型
@@ -95,6 +116,7 @@ export interface MsTableProps<T> {
   excludeKeys: Set<string>; // 排除的key
   selectorStatus: SelectAllEnum; // 选择器状态
   showSelectorAll?: boolean; // 是否显示跨页全选选择器
+  rowSelection?: TableRowSelection; // 行选择器
   /** end */
   loading?: boolean; // 加载效果
   bordered?: boolean; // 是否显示边框
@@ -111,8 +133,14 @@ export interface MsTableProps<T> {
   emptyDataShowLine?: boolean; // 空数据是否显示 "-"
   showJumpMethod?: boolean; // 是否展示跳转方法
   isSimpleSetting?: boolean; // 是否是简单的设置
+  onlyPageSize?: boolean; // 简单设置气泡下，是否只展示页码调整
   filterIconAlignLeft?: boolean; // 筛选图标是否靠左
   paginationSize?: 'small' | 'mini' | 'medium' | 'large';
+  // 行选择器禁用配置
+  rowSelectionDisabledConfig?: MsTableRowSelectionDisabledConfig;
+  sorter?: Record<string, any>; // 排序
+  hoverable?: boolean; // 是否展示hover效果
+  isHiddenSetting?: boolean; // 是否隐藏设置
   [key: string]: any;
 }
 
@@ -157,13 +185,9 @@ export interface SetPaginationPrams {
 export interface BatchActionQueryParams {
   excludeIds?: string[]; // 排除的id
   selectedIds?: string[];
-  selectIds?: string[]; // 选中的id
   selectAll: boolean; // 是否跨页全选
   params?: TableQueryParams; // 查询参数
   currentSelectCount?: number; // 当前选中的数量
   condition?: any; // 查询条件
-}
-
-export interface CombineParams {
   [key: string]: any;
 }

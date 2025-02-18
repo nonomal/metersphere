@@ -27,7 +27,7 @@ public class JSON {
             .build();
     private static final TypeFactory typeFactory = objectMapper.getTypeFactory();
 
-    public static final int DEFAULT_MAX_STRING_LEN = 20_000_000_0;
+    public static final int DEFAULT_MAX_STRING_LEN = Integer.MAX_VALUE;
 
     static {
         objectMapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
@@ -50,6 +50,14 @@ public class JSON {
     public static String toJSONString(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static String toFormatJSONString(Object value) {
+        try {
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

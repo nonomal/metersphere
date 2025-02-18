@@ -7,14 +7,12 @@
       class="mb-[8px]"
       :max-length="255"
     />
-    <div class="folder">
-      <div :class="getFolderClass('all')" @click="setActiveFolder('all')">
-        <MsIcon type="icon-icon_folder_filled1" class="folder-icon" />
-        <div class="folder-name">{{ t('caseManagement.caseReview.allCases') }}</div>
-        <div class="folder-count">({{ allCount }})</div>
-      </div>
-    </div>
-    <a-divider class="my-[8px]" />
+    <MsFolderAll
+      :active-folder="activeFolder"
+      :folder-name="t('caseManagement.caseReview.allCases')"
+      :all-count="allCount"
+      @set-active-folder="setActiveFolder"
+    />
     <a-spin class="min-h-[200px] w-full" :loading="loading">
       <MsTree
         :selected-keys="selectedKeys"
@@ -51,12 +49,12 @@
   import { useRoute } from 'vue-router';
   import { useVModel } from '@vueuse/core';
 
-  import MsIcon from '@/components/pure/ms-icon-font/index.vue';
+  import MsFolderAll from '@/components/business/ms-folder-all/index.vue';
   import MsTree from '@/components/business/ms-tree/index.vue';
   import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
 
-  import { getReviewDetailModuleTree } from '@/api/modules/case-management/caseReview';
   import { useI18n } from '@/hooks/useI18n';
+  import useCaseReviewStore from '@/store/modules/case/caseReview';
   import { mapTree } from '@/utils';
 
   import { ModuleTreeNode } from '@/models/common';
@@ -67,10 +65,11 @@
     isExpandAll?: boolean; // 是否展开所有节点
     selectedKeys: string[]; // 选中的节点 key
   }>();
-  const emit = defineEmits(['init', 'folderNodeSelect']);
+  const emit = defineEmits(['folderNodeSelect']);
 
   const route = useRoute();
   const { t } = useI18n();
+  const caseReviewStore = useCaseReviewStore();
 
   const virtualListProps = computed(() => {
     return {
@@ -92,18 +91,14 @@
     }
   );
 
-  function getFolderClass(id: string) {
-    return activeFolder.value === id ? 'folder-text folder-text--active' : 'folder-text';
-  }
-
   function setActiveFolder(id: string) {
     activeFolder.value = id;
     emit('folderNodeSelect', [id], []);
   }
 
   const moduleKeyword = ref('');
-  const folderTree = ref<ModuleTreeNode[]>([]);
-  const loading = ref(false);
+  const folderTree = computed(() => caseReviewStore.moduleTree);
+  const loading = computed(() => caseReviewStore.loading);
 
   const selectedKeys = useVModel(props, 'selectedKeys', emit);
 
@@ -111,22 +106,7 @@
    * 初始化模块树
    */
   async function initModules() {
-    try {
-      loading.value = true;
-      const res = await getReviewDetailModuleTree(route.query.id as string);
-      folderTree.value = mapTree<ModuleTreeNode>(res, (node) => {
-        return {
-          ...node,
-          count: props.modulesCount?.[node.id] || 0,
-        };
-      });
-      emit('init', folderTree.value);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.log(error);
-    } finally {
-      loading.value = false;
-    }
+    await caseReviewStore.initModules(route.query.id as string);
   }
 
   /**
@@ -142,6 +122,25 @@
     emit('folderNodeSelect', _selectedKeys, offspringIds);
   }
 
+  /**
+   * 选中父节点
+   * @param tree 原来的模块树
+   */
+  function selectParentNode(tree: ModuleTreeNode[]) {
+    mapTree(tree || [], (e) => {
+      if (e.id === selectedKeys.value[0]) {
+        if (e.parentId) {
+          selectedKeys.value = [e.parentId];
+          folderNodeSelect([e.parentId], e.parent);
+        } else {
+          setActiveFolder('all');
+        }
+        return e;
+      }
+      return e;
+    });
+  }
+
   onBeforeMount(() => {
     initModules();
   });
@@ -152,50 +151,20 @@
   watch(
     () => props.modulesCount,
     (obj) => {
-      folderTree.value = mapTree<ModuleTreeNode>(folderTree.value, (node) => {
+      const tree = mapTree<ModuleTreeNode>(folderTree.value, (node) => {
         return {
           ...node,
           count: obj?.[node.id] || 0,
         };
       });
+      caseReviewStore.setModulesTree(tree);
       allCount.value = obj?.all || 0;
     }
   );
 
   defineExpose({
     initModules,
+    setActiveFolder,
+    selectParentNode,
   });
 </script>
-
-<style lang="less" scoped>
-  .folder {
-    @apply flex cursor-pointer items-center justify-between;
-
-    padding: 8px 4px;
-    border-radius: var(--border-radius-small);
-    &:hover {
-      background-color: rgb(var(--primary-1));
-    }
-    .folder-text {
-      @apply flex cursor-pointer items-center;
-      .folder-icon {
-        margin-right: 4px;
-        color: var(--color-text-4);
-      }
-      .folder-name {
-        color: var(--color-text-1);
-      }
-      .folder-count {
-        margin-left: 4px;
-        color: var(--color-text-4);
-      }
-    }
-    .folder-text--active {
-      .folder-icon,
-      .folder-name,
-      .folder-count {
-        color: rgb(var(--primary-5));
-      }
-    }
-  }
-</style>

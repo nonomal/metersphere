@@ -13,4 +13,7 @@ public class FunctionalThirdDemandPageRequest extends BasePageRequest {
     @NotBlank(message = "{case_review.project_id.not_blank}")
     private String projectId;
 
+    @Schema(description = "当前选择的用例Id", requiredMode = Schema.RequiredMode.REQUIRED)
+    private String caseId;
+
 }

@@ -1,6 +1,6 @@
 <template>
   <MsCard simple no-content-padding>
-    <MsSplitBox :size="300" :max="0.5">
+    <MsSplitBox :not-show-first="isAdvancedSearchMode" :size="300" :max="0.5">
       <template #first>
         <div class="flex flex-col">
           <div class="p-[16px]">
@@ -18,18 +18,14 @@
               @execute="handleExecute"
             />
           </div>
-          <div class="flex-1">
+          <div v-if="!docShareId" class="flex-1">
             <a-divider class="!my-0 !mb-0" />
-            <div class="case">
-              <div
-                class="flex items-center px-[20px]"
-                :class="getActiveClass('recycle')"
-                @click="setActiveFolder('recycle')"
-              >
-                <MsIcon type="icon-icon_delete-trash_outlined" class="folder-icon" />
-                <div class="folder-name mx-[4px]">{{ t('caseManagement.featureCase.recycle') }}</div>
-                <div class="folder-count">({{ recycleModulesCount || 0 }})</div>
+            <div class="case h-[40px] !px-[24px]" @click="setActiveFolder('recycle')">
+              <div class="flex items-center" :class="getActiveClass('recycle')">
+                <MsIcon type="icon-icon_delete-trash_outlined1" class="folder-icon" />
+                <div class="folder-name mx-[4px]">{{ t('common.recycle') }}</div>
               </div>
+              <div class="folder-count">{{ recycleModulesCount || 0 }}</div>
             </div>
           </div>
         </div>
@@ -38,7 +34,7 @@
         <div class="relative flex h-full flex-col">
           <div
             id="managementContainer"
-            :class="['absolute z-[101] h-full w-full', importDrawerVisible ? '' : 'invisible']"
+            :class="['absolute z-[102] h-full w-full', importDrawerVisible ? '' : 'invisible']"
             style="transition: all 0.3s"
           >
             <importApi
@@ -47,6 +43,7 @@
               :active-module="activeModule"
               popup-container="#managementContainer"
               @done="handleImportDone"
+              @open-task-drawer="taskDrawerVisible = true"
             />
           </div>
           <management
@@ -54,13 +51,15 @@
             :module-tree="folderTree"
             :active-module="activeModule"
             :offspring-ids="offspringIds"
-            :protocol="protocol"
+            :selected-protocols="selectedProtocols"
             @import="importDrawerVisible = true"
+            @handle-adv-search="handleAdvSearch"
           />
         </div>
       </template>
     </MsSplitBox>
   </MsCard>
+  <importTaskDrawer v-model:visible="taskDrawerVisible" />
 </template>
 
 <script lang="ts" setup>
@@ -74,6 +73,7 @@
   import MsSplitBox from '@/components/pure/ms-split-box/index.vue';
   import { RequestParam } from '../components/requestComposition/index.vue';
   import importApi from './components/import.vue';
+  import importTaskDrawer from './components/importTaskDrawer.vue';
   import management from './components/management/index.vue';
   import moduleTree from './components/moduleTree.vue';
 
@@ -81,30 +81,26 @@
   import { useI18n } from '@/hooks/useI18n';
   import useAppStore from '@/store/modules/app';
 
-  import { ApiDefinitionGetModuleParams } from '@/models/apiTest/management';
+  import { ApiDefinitionGetModuleParams, ShareDetailType } from '@/models/apiTest/management';
   import { ModuleTreeNode } from '@/models/common';
   import { ApiTestRouteEnum } from '@/enums/routeEnum';
 
+  const appStore = useAppStore();
   const route = useRoute();
   const { t } = useI18n();
   const router = useRouter();
+
   const activeModule = ref<string>('all');
   const folderTree = ref<ModuleTreeNode[]>([]);
   const folderTreePathMap = ref<Record<string, any>>({});
   const importDrawerVisible = ref(false);
   const offspringIds = ref<string[]>([]);
-  const protocol = ref('HTTP');
+  const selectedProtocols = ref<string[]>([]);
   const activeNodeId = ref<string | number>('all');
   const moduleTreeRef = ref<InstanceType<typeof moduleTree>>();
   const managementRef = ref<InstanceType<typeof management>>();
-
-  function handleModuleInit(tree: ModuleTreeNode[], _protocol: string, pathMap: Record<string, any>) {
-    folderTree.value = tree;
-    protocol.value = _protocol;
-    folderTreePathMap.value = pathMap;
-  }
-
   function newApi() {
+    importDrawerVisible.value = false;
     managementRef.value?.newTab();
   }
 
@@ -117,36 +113,42 @@
   function handleApiNodeClick(node: ModuleTreeNode) {
     managementRef.value?.newTab(node);
   }
-
   function setActiveApi(params: RequestParam) {
     if (params.id === 'all') {
       // 切换到全部 tab 时需设置为上次激活的 api 节点的模块
-      activeNodeId.value = params.moduleId;
-    } else {
       activeNodeId.value = params.id;
+    } else {
+      activeNodeId.value = params.moduleId;
     }
   }
 
-  function handleProtocolChange(val: string) {
-    protocol.value = val;
+  function handleProtocolChange(val: string[]) {
+    selectedProtocols.value = val;
   }
 
-  const appStore = useAppStore();
+  const docShareId = ref<string>(route.query.docShareId as string);
   const recycleModulesCount = ref(0);
   async function selectRecycleCount() {
-    const res = await getTrashModuleCount({
-      projectId: appStore.currentProjectId,
-      keyword: '',
-      moduleIds: [],
-      protocol: protocol.value,
-    });
-    recycleModulesCount.value = res.all;
+    if (!docShareId.value) {
+      const res = await getTrashModuleCount({
+        projectId: appStore.currentProjectId,
+        keyword: '',
+        moduleIds: [],
+        protocols: selectedProtocols.value,
+      });
+      recycleModulesCount.value = res.all;
+    }
+  }
+
+  function handleModuleInit(tree: ModuleTreeNode[], _protocols: string[], pathMap: Record<string, any>) {
+    folderTree.value = tree;
+    selectedProtocols.value = _protocols;
+    folderTreePathMap.value = pathMap;
+    selectRecycleCount();
   }
 
   async function refreshModuleTree() {
     await moduleTreeRef.value?.refresh();
-    //  涉及到模块树的刷新操作（比如删除），也会刷新回收站的数量
-    selectRecycleCount();
   }
 
   function refreshModuleTreeCount(params: ApiDefinitionGetModuleParams) {
@@ -178,7 +180,6 @@
       // 携带 cId 参数，自动打开接口用例详情 tab
       managementRef.value?.newCaseTab(route.query.cId as string);
     }
-    selectRecycleCount();
   });
 
   // 获取激活用例类型样式
@@ -195,11 +196,31 @@
     }
   };
 
+  const isAdvancedSearchMode = computed(() => managementRef.value?.isAdvancedSearchMode);
+  function handleAdvSearch() {
+    moduleTreeRef.value?.setActiveFolder('all');
+  }
+
+  const taskDrawerVisible = ref(false);
+  onBeforeMount(() => {
+    if (route.query.taskDrawer) {
+      taskDrawerVisible.value = true;
+    }
+  });
+
+  const shareDetailInfo = ref<ShareDetailType>({
+    invalid: false,
+    allowExport: false,
+    isPrivate: false,
+  });
+
   /** 向子孙组件提供方法和值 */
   provide('setActiveApi', setActiveApi);
   provide('refreshModuleTree', refreshModuleTree);
   provide('refreshModuleTreeCount', refreshModuleTreeCount);
   provide('folderTreePathMap', folderTreePathMap.value);
+  provide('docShareId', docShareId.value);
+  provide('shareDetailInfo', shareDetailInfo);
 </script>
 
 <style lang="less" scoped>
@@ -243,12 +264,16 @@
     }
   }
   .recycle {
-    @apply absolute bottom-0 bg-white pb-4;
+    @apply absolute bottom-0 pb-4;
+
+    background-color: var(--color-text-fff);
     :deep(.arco-divider-horizontal) {
       margin: 8px 0;
     }
     .recycle-bin {
-      @apply bottom-0 flex items-center bg-white;
+      @apply bottom-0 flex items-center;
+
+      background-color: var(--color-text-fff);
       .recycle-count {
         margin-left: 4px;
         color: var(--color-text-4);

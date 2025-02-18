@@ -75,7 +75,7 @@
       showInTable: true,
     },
     {
-      title: 'project.environmental.http.desc',
+      title: 'common.desc',
       dataIndex: 'description',
       showDrag: true,
       showInTable: true,
@@ -104,7 +104,6 @@
     noDisable: true,
     showSetting: false,
     showPagination: false,
-    enableDrag: false,
     showMode: false,
     heightUsed: 644,
     debug: true,

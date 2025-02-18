@@ -15,9 +15,9 @@ import io.metersphere.system.dto.user.UserExtendDTO;
 import io.metersphere.system.log.annotation.Log;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.security.CheckOwner;
+import io.metersphere.system.service.SimpleUserService;
 import io.metersphere.system.service.SystemProjectLogService;
 import io.metersphere.system.service.SystemProjectService;
-import io.metersphere.system.service.UserService;
 import io.metersphere.system.utils.PageUtils;
 import io.metersphere.system.utils.Pager;
 import io.metersphere.system.utils.SessionUtils;
@@ -30,6 +30,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import jakarta.validation.constraints.NotBlank;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.shiro.authz.annotation.Logical;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -43,7 +44,7 @@ public class SystemProjectController {
     @Resource
     private SystemProjectService systemProjectService;
     @Resource
-    private UserService userService;
+    private SimpleUserService simpleUserService;
 
     @PostMapping("/add")
     @RequiresPermissions(PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ_ADD)
@@ -124,7 +125,6 @@ public class SystemProjectController {
     @PostMapping("/member-list")
     @RequiresPermissions(PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ)
     @Operation(summary = "系统设置-系统-组织与项目-项目-成员列表")
-    @CheckOwner(resourceId = "#request.projectId", resourceType = "project")
     public Pager<List<UserExtendDTO>> getProjectMember(@Validated @RequestBody ProjectMemberRequest request) {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize());
         return PageUtils.setPageInfo(page, systemProjectService.getProjectMember(request));
@@ -133,12 +133,8 @@ public class SystemProjectController {
     @PostMapping("/add-member")
     @RequiresPermissions(PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_MEMBER_ADD)
     @Operation(summary = "系统设置-系统-组织与项目-项目-添加成员")
-    @CheckOwner(resourceId = "#request.projectId", resourceType = "project")
     public void addProjectMember(@Validated @RequestBody ProjectAddMemberRequest request) {
-        ProjectAddMemberBatchRequest batchRequest = new ProjectAddMemberBatchRequest();
-        batchRequest.setProjectIds(List.of(request.getProjectId()));
-        batchRequest.setUserIds(request.getUserIds());
-        systemProjectService.addProjectMember(batchRequest, SessionUtils.getUserId());
+        systemProjectService.addMemberByProject(request, SessionUtils.getUserId());
     }
 
     @GetMapping("/remove-member/{projectId}/{userId}")
@@ -156,7 +152,7 @@ public class SystemProjectController {
     @RequiresPermissions(PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ)
     public List<User> getUserList(@Schema(description = "查询关键字，根据邮箱和用户名查询")
                                   @RequestParam(value = "keyword", required = false) String keyword) {
-        return userService.getUserList(keyword);
+        return simpleUserService.getUserList(keyword);
     }
 
     @PostMapping("/pool-options")

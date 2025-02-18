@@ -1,331 +1,354 @@
 <template>
-  <MsDrawer
-    v-model:visible="visible"
-    :width="960"
-    no-content-padding
-    :show-continue="true"
-    :footer="requestVModel.isNew === true"
-    :ok-disabled="requestVModel.executeLoading || (isHttpProtocol && !requestVModel.url)"
-    :handle-before-cancel="handleBeforeCancel"
-    show-full-screen
-    @confirm="handleSave"
-    @continue="handleContinue"
-    @close="handleClose"
-  >
-    <template #title>
-      <div class="flex max-w-[60%] items-center gap-[8px]">
-        <div
-          v-if="props.step"
-          class="flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[var(--color-text-brand)] pr-[2px] !text-white"
-        >
-          {{ props.step.sort }}
-        </div>
-        <stepTypeVue
-          v-if="props.step && [ScenarioStepType.API, ScenarioStepType.CUSTOM_REQUEST].includes(props.step?.stepType)"
-          :step="props.step"
-        />
-        <a-tooltip v-if="!isShowEditStepNameInput" :content="title" position="bottom">
-          <div class="flex items-center gap-[4px]">
-            <div class="one-line-text max-w-[300px]">
-              {{ title }}
-            </div>
-            <MsIcon
-              v-if="!props.step || !props.step.isQuoteScenarioStep"
-              type="icon-icon_edit_outlined"
-              class="cursor-pointer hover:text-[rgb(var(--primary-5))]"
-              @click="isShowEditStepNameInput = true"
-            />
-          </div>
-        </a-tooltip>
-      </div>
-      <a-input
-        v-if="isShowEditStepNameInput"
-        ref="stepNameInputRef"
-        v-model:model-value="requestVModel.stepName"
-        class="flex-1"
-        :placeholder="t('apiScenario.pleaseInputStepName')"
-        :max-length="255"
-        show-word-limit
-        @press-enter="updateStepName"
-        @blur="updateStepName"
-      />
-      <div v-show="!isShowEditStepNameInput" class="ml-auto flex items-center gap-[16px]">
-        <div
-          v-if="!props.step || props.step?.stepType === ScenarioStepType.CUSTOM_REQUEST"
-          class="customApiDrawer-title-right flex items-center gap-[16px]"
-        >
-          <a-tooltip :content="appStore.currentEnvConfig?.name" :disabled="!appStore.currentEnvConfig?.name">
-            <div class="one-line-text max-w-[250px] text-[14px] font-normal text-[var(--color-text-4)]">
-              {{ t('apiScenario.env', { name: appStore.currentEnvConfig?.name }) }}
-            </div>
-          </a-tooltip>
-          <a-select
-            v-model:model-value="requestVModel.customizeRequestEnvEnable"
-            class="w-[150px]"
-            :disabled="props.step?.isQuoteScenarioStep"
-            @change="handleUseEnvChange"
-          >
-            <template #prefix>
-              <div> {{ t('project.environmental.env') }} </div>
-            </template>
-            <a-option :value="true">{{ t('common.quote') }}</a-option>
-            <a-option :value="false">{{ t('common.notQuote') }}</a-option>
-          </a-select>
-        </div>
-        <div
-          v-if="props.step && !props.step.isQuoteScenarioStep"
-          class="right-operation-button-icon ml-auto flex items-center"
-        >
-          <replaceButton
-            v-if="props.step.resourceId && props.step?.stepType !== ScenarioStepType.CUSTOM_REQUEST"
-            :steps="props.steps"
-            :step="props.step"
-            :resource-id="props.step.resourceId"
-            :scenario-id="scenarioId"
-            @replace="handleReplace"
-          />
-          <MsButton type="icon" status="secondary" class="mr-4" @click="emit('deleteStep')">
-            <MsIcon type="icon-icon_delete-trash_outlined" />
-            {{ t('common.delete') }}
-          </MsButton>
-        </div>
-      </div>
-    </template>
-    <a-empty
-      v-if="pluginError && !isHttpProtocol"
-      :description="t('apiTestDebug.noPlugin')"
-      class="h-[200px] items-center justify-center"
+  <div>
+    <MsDrawer
+      v-model:visible="visible"
+      :width="960"
+      class="customApiDrawer"
+      no-content-padding
+      :show-continue="true"
+      :footer="requestVModel.isNew === true"
+      :ok-disabled="requestVModel.executeLoading || (isHttpProtocol && !requestVModel.url) || loading"
+      :handle-before-cancel="handleBeforeCancel"
+      show-full-screen
+      unmount-on-close
+      @confirm="handleSave"
+      @continue="handleContinue"
+      @close="handleClose"
     >
-      <template #image>
-        <MsIcon type="icon-icon_plugin_outlined" size="48" />
-      </template>
-    </a-empty>
-    <div v-show="!pluginError || isHttpProtocol" class="flex h-full flex-col">
-      <div class="flex flex-wrap items-center justify-between gap-[12px] px-[18px] pt-[8px]">
-        <div class="flex flex-1 items-center gap-[16px]">
-          <a-select
-            v-if="requestVModel.isNew"
-            v-model:model-value="requestVModel.protocol"
-            :options="protocolOptions"
-            :loading="protocolLoading"
-            :disabled="_stepType.isQuoteApi || props.step?.isQuoteScenarioStep"
-            class="w-[90px]"
-            @change="(val) => handleActiveDebugProtocolChange(val as string)"
+      <template #title>
+        <div class="flex flex-1 items-center gap-[8px] overflow-hidden">
+          <div
+            v-if="props.step"
+            class="flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[var(--color-text-brand)] pr-[2px] !text-white"
+          >
+            {{ props.step.sort }}
+          </div>
+          <stepTypeVue
+            v-if="props.step && [ScenarioStepType.API, ScenarioStepType.CUSTOM_REQUEST].includes(props.step?.stepType)"
+            :step="props.step"
           />
-          <div v-else class="flex items-center gap-[4px]">
-            <apiMethodName
-              :method="(requestVModel.protocol as RequestMethods)"
-              tag-background-color="rgb(var(--link-7))"
-              tag-text-color="white"
-              is-tag
-              class="flex items-center"
-            />
-            <a-tooltip v-if="!isHttpProtocol" :content="requestVModel.name" :mouse-enter-delay="500">
-              <div class="one-line-text max-w-[350px]"> {{ requestVModel.name }}</div>
+          <div v-if="!isShowEditStepNameInput" class="flex flex-1 items-center gap-[4px] overflow-hidden">
+            <a-tooltip :content="title" position="bottom">
+              <div class="one-line-text">
+                {{ title }}
+              </div>
+              <MsIcon
+                v-if="!props.step || !props.step.isQuoteScenarioStep"
+                type="icon-icon_edit_outlined"
+                class="min-w-[16px] cursor-pointer hover:text-[rgb(var(--primary-5))]"
+                @click="isShowEditStepNameInput = true"
+              />
             </a-tooltip>
           </div>
-          <a-input-group v-if="isHttpProtocol" class="flex-1">
-            <apiMethodSelect
-              v-model:model-value="requestVModel.method"
-              class="w-[140px]"
-              :disabled="_stepType.isQuoteApi || props.step?.isQuoteScenarioStep"
-              @change="handleActiveDebugChange"
-            />
-            <a-input
-              v-model:model-value="requestVModel.url"
-              :max-length="255"
-              :placeholder="showEnvPrefix ? t('apiScenario.pleaseInputUrl') : t('apiTestDebug.urlPlaceholder')"
-              allow-clear
-              class="hover:z-10"
-              :style="isUrlError ? 'border: 1px solid rgb(var(--danger-6);z-index: 10' : ''"
-              :disabled="_stepType.isQuoteApi || props.step?.isQuoteScenarioStep"
-              @input="() => (isUrlError = false)"
-              @change="handleUrlChange"
-            >
-              <template v-if="showEnvPrefix" #prefix>
-                {{ (appStore.currentEnvConfig as EnvConfig)?.httpConfig.find((e) => e.type === 'NONE')?.url }}
-              </template>
-            </a-input>
-          </a-input-group>
+          <a-input
+            v-if="isShowEditStepNameInput"
+            v-model:model-value="requestVModel.stepName"
+            class="flex-1"
+            :placeholder="t('apiScenario.pleaseInputStepName')"
+            :max-length="255"
+            show-word-limit
+            @press-enter="updateStepName"
+            @blur="updateStepName"
+          />
         </div>
-        <div v-permission="[props.permissionMap?.execute]">
-          <template v-if="hasLocalExec">
-            <a-dropdown-button
-              v-if="!requestVModel.executeLoading"
-              :disabled="requestVModel.executeLoading || (isHttpProtocol && !requestVModel.url)"
-              class="exec-btn"
-              @click="() => execute(isPriorityLocalExec ? 'localExec' : 'serverExec')"
-              @select="execute"
+        <div v-show="!isShowEditStepNameInput" class="ml-auto flex items-center gap-[16px]">
+          <div
+            v-if="!props.step || props.step?.stepType === ScenarioStepType.CUSTOM_REQUEST"
+            class="customApiDrawer-title-right flex items-center gap-[16px]"
+          >
+            <a-tooltip :content="appStore.currentEnvConfig?.name" :disabled="!appStore.currentEnvConfig?.name">
+              <div class="one-line-text max-w-[250px] text-[14px] font-normal text-[var(--color-text-4)]">
+                {{ t('apiScenario.env', { name: appStore.currentEnvConfig?.name }) }}
+              </div>
+            </a-tooltip>
+            <a-select
+              v-model:model-value="requestVModel.customizeRequestEnvEnable"
+              class="w-[150px]"
+              :disabled="props.step?.isQuoteScenarioStep"
+              @change="handleUseEnvChange"
             >
-              {{ isPriorityLocalExec ? t('apiTestDebug.localExec') : t('apiTestDebug.serverExec') }}
-              <template #icon>
-                <icon-down />
+              <template #prefix>
+                <div> {{ t('project.environmental.env') }} </div>
               </template>
-              <template #content>
-                <a-doption :value="isPriorityLocalExec ? 'serverExec' : 'localExec'">
-                  {{ isPriorityLocalExec ? t('apiTestDebug.serverExec') : t('apiTestDebug.localExec') }}
-                </a-doption>
-              </template>
-            </a-dropdown-button>
+              <a-option :value="true">{{ t('common.quote') }}</a-option>
+              <a-option :value="false">{{ t('common.notQuote') }}</a-option>
+            </a-select>
+          </div>
+          <div
+            v-if="props.step && !props.step.isQuoteScenarioStep"
+            class="right-operation-button-icon ml-auto flex items-center"
+          >
+            <replaceButton
+              v-if="props.step.resourceId && props.step?.stepType !== ScenarioStepType.CUSTOM_REQUEST"
+              :steps="props.steps"
+              :step="props.step"
+              :resource-id="props.step.resourceId"
+              :scenario-id="scenarioId"
+              @replace="handleReplace"
+            />
+            <MsButton type="icon" status="secondary" class="mr-4" @click="emit('deleteStep')">
+              <MsIcon type="icon-icon_delete-trash_outlined1" />
+              {{ t('common.delete') }}
+            </MsButton>
+          </div>
+        </div>
+      </template>
+      <a-empty
+        v-if="pluginError && !isHttpProtocol"
+        :description="t('apiTestDebug.noPlugin')"
+        class="h-[200px] items-center justify-center"
+      >
+        <template #image>
+          <MsIcon type="icon-icon_plugin_outlined" size="48" />
+        </template>
+      </a-empty>
+      <div v-show="!pluginError || isHttpProtocol" class="flex h-full flex-col">
+        <div class="flex flex-wrap items-center justify-between gap-[12px] px-[18px] pt-[8px]">
+          <div class="flex flex-1 items-center gap-[16px]">
+            <a-select
+              v-if="requestVModel.isNew"
+              v-model:model-value="requestVModel.protocol"
+              :loading="protocolLoading"
+              :disabled="_stepType.isQuoteApi || props.step?.isQuoteScenarioStep"
+              class="w-[90px]"
+            >
+              <a-tooltip
+                v-for="item of protocolOptions"
+                :key="item.value as string"
+                :content="item.label"
+                :mouse-enter-delay="300"
+              >
+                <a-option :value="item.value">
+                  {{ item.label }}
+                </a-option>
+              </a-tooltip>
+            </a-select>
+            <div v-else class="flex items-center gap-[4px]">
+              <apiMethodName
+                :method="(requestVModel.protocol as RequestMethods)"
+                tag-background-color="rgb(var(--link-7))"
+                tag-text-color="white"
+                is-tag
+                class="flex items-center"
+              />
+              <a-tooltip v-if="!isHttpProtocol" :content="requestVModel.name" :mouse-enter-delay="500">
+                <div class="one-line-text max-w-[350px]"> {{ requestVModel.name }}</div>
+              </a-tooltip>
+            </div>
+            <a-input-group v-if="isHttpProtocol" class="flex-1">
+              <apiMethodSelect
+                v-model:model-value="requestVModel.method"
+                class="w-[140px]"
+                :disabled="_stepType.isQuoteApi || props.step?.isQuoteScenarioStep"
+                @change="handleActiveDebugChange"
+              />
+              <a-input
+                v-model:model-value="requestVModel.url"
+                :max-length="255"
+                :placeholder="showEnvPrefix ? t('apiScenario.pleaseInputUrl') : t('apiTestDebug.urlPlaceholder')"
+                allow-clear
+                class="hover:z-10"
+                :style="isUrlError ? 'border: 1px solid rgb(var(--danger-6);z-index: 10' : ''"
+                :disabled="_stepType.isQuoteApi || props.step?.isQuoteScenarioStep"
+                @input="() => (isUrlError = false)"
+                @change="handleUrlChange"
+              >
+                <template v-if="showEnvPrefix" #prefix>
+                  {{ (appStore.currentEnvConfig as EnvConfig)?.httpConfig.find((e) => e.type === 'NONE')?.url }}
+                </template>
+                <template #suffix>
+                  <MsIcon
+                    type="icon-icon_curl"
+                    :size="18"
+                    class="cursor-pointer hover:text-[rgb(var(--primary-5))]"
+                    @click="importDialogVisible = true"
+                  />
+                </template>
+              </a-input>
+            </a-input-group>
+          </div>
+          <div v-permission="[props.permissionMap?.execute]">
+            <template v-if="hasLocalExec">
+              <a-dropdown-button
+                v-if="!requestVModel.executeLoading"
+                :disabled="requestVModel.executeLoading || (isHttpProtocol && !requestVModel.url)"
+                class="exec-btn"
+                @click="() => execute(isPriorityLocalExec ? 'localExec' : 'serverExec')"
+                @select="execute"
+              >
+                {{ isPriorityLocalExec ? t('apiTestDebug.localExec') : t('apiTestDebug.serverExec') }}
+                <template #icon>
+                  <icon-down />
+                </template>
+                <template #content>
+                  <a-doption :value="isPriorityLocalExec ? 'serverExec' : 'localExec'">
+                    {{ isPriorityLocalExec ? t('apiTestDebug.serverExec') : t('apiTestDebug.localExec') }}
+                  </a-doption>
+                </template>
+              </a-dropdown-button>
+              <a-button v-else type="primary" class="mr-[12px]" @click="stopDebug">
+                {{ t('common.stop') }}
+              </a-button>
+            </template>
+            <a-button
+              v-else-if="!requestVModel.executeLoading"
+              class="mr-[12px]"
+              type="primary"
+              @click="() => execute('serverExec')"
+            >
+              {{ t('apiTestDebug.serverExec') }}
+            </a-button>
             <a-button v-else type="primary" class="mr-[12px]" @click="stopDebug">
               {{ t('common.stop') }}
             </a-button>
-          </template>
-          <a-button
-            v-else-if="!requestVModel.executeLoading"
-            class="mr-[12px]"
-            type="primary"
-            @click="() => execute('serverExec')"
-          >
-            {{ t('apiTestDebug.serverExec') }}
-          </a-button>
-          <a-button v-else type="primary" class="mr-[12px]" @click="stopDebug">
-            {{ t('common.stop') }}
-          </a-button>
+          </div>
         </div>
-      </div>
-      <div class="request-tab-and-response flex-1">
-        <div class="px-[18px]">
-          <a-input
-            v-if="props.step?.stepType && _stepType.isQuoteApi && isHttpProtocol"
-            v-model:model-value="requestVModel.name"
-            :max-length="255"
-            :placeholder="t('apiTestManagement.apiNamePlaceholder')"
-            :disabled="!isEditableApi"
-            allow-clear
-            class="my-[8px]"
+        <div class="request-tab-and-response flex-1">
+          <div class="px-[18px]">
+            <a-input
+              v-if="props.step?.stepType && _stepType.isQuoteApi && isHttpProtocol"
+              v-model:model-value="requestVModel.name"
+              :max-length="255"
+              :placeholder="t('apiTestManagement.apiNamePlaceholder')"
+              :disabled="!isEditableApi"
+              allow-clear
+              class="my-[8px]"
+            />
+          </div>
+          <MsTab
+            v-if="requestVModel.activeTab"
+            v-model:active-key="requestVModel.activeTab"
+            :content-tab-list="contentTabList"
+            :get-text-func="getTabBadge"
+            class="sticky-content no-content relative top-0 mx-[16px] border-b"
+            @tab-click="requestTabClick"
           />
-        </div>
-        <MsTab
-          v-if="requestVModel.activeTab"
-          v-model:active-key="requestVModel.activeTab"
-          :content-tab-list="contentTabList"
-          :get-text-func="getTabBadge"
-          class="sticky-content no-content relative top-0 mx-[16px] border-b"
-        />
-        <div :class="`request-content-and-response ${activeLayout}`">
-          <a-spin class="request block h-full w-full" :loading="requestVModel.executeLoading || loading">
-            <div class="request-tab-pane flex flex-col p-[16px]">
-              <a-spin
-                v-show="requestVModel.activeTab === RequestComposition.PLUGIN"
-                :loading="pluginLoading"
-                class="min-h-[100px] w-full"
-              >
-                <MsFormCreate
-                  v-model:api="fApi"
-                  :rule="currentPluginScript"
-                  :option="currentPluginOptions"
-                  @change="
-                    () => {
-                      if (isInitPluginForm) {
-                        handlePluginFormChange();
+          <div :class="`request-content-and-response ${activeLayout}`">
+            <a-spin class="request block h-full w-full" :loading="requestVModel.executeLoading || loading">
+              <div class="request-tab-pane flex flex-col p-[16px]">
+                <a-spin
+                  v-show="requestVModel.activeTab === RequestComposition.PLUGIN"
+                  :loading="pluginLoading"
+                  class="min-h-[100px] w-full"
+                >
+                  <MsFormCreate
+                    v-model:api="fApi"
+                    :rule="currentPluginScript"
+                    :option="currentPluginOptions"
+                    @change="
+                      () => {
+                        if (isInitPluginForm) {
+                          handlePluginFormChange();
+                        }
                       }
-                    }
-                  "
+                    "
+                  />
+                </a-spin>
+                <httpHeader
+                  v-if="requestVModel.activeTab === RequestComposition.HEADER"
+                  v-model:params="requestVModel.headers"
+                  :disabled-param-value="!isEditableApi && !isEditableParamValue"
+                  :disabled-except-param="!isEditableApi"
+                  :layout="activeLayout"
+                  @change="handleActiveDebugChange"
                 />
-              </a-spin>
-              <httpHeader
-                v-if="requestVModel.activeTab === RequestComposition.HEADER"
-                v-model:params="requestVModel.headers"
-                :disabled-param-value="!isEditableApi && !isEditableParamValue"
-                :disabled-except-param="!isEditableApi"
-                :layout="activeLayout"
-                @change="handleActiveDebugChange"
-              />
-              <httpBody
-                v-else-if="requestVModel.activeTab === RequestComposition.BODY"
-                v-model:params="requestVModel.body"
-                :disabled-param-value="!isEditableApi && !isEditableParamValue"
-                :disabled-except-param="!isEditableApi"
-                :upload-temp-file-api="uploadTempFile"
-                :file-save-as-source-id="props.step?.id"
-                :file-save-as-api="stepTransferFile"
-                :file-module-options-api="getTransferOptions"
-                @change="handleActiveDebugChange"
-              />
-              <httpQuery
-                v-else-if="requestVModel.activeTab === RequestComposition.QUERY"
-                v-model:params="requestVModel.query"
-                :disabled-param-value="!isEditableApi && !isEditableParamValue"
-                :disabled-except-param="!isEditableApi"
-                @change="handleActiveDebugChange"
-              />
-              <httpRest
-                v-else-if="requestVModel.activeTab === RequestComposition.REST"
-                v-model:params="requestVModel.rest"
-                :disabled-param-value="!isEditableApi && !isEditableParamValue"
-                :disabled-except-param="!isEditableApi"
-                @change="handleActiveDebugChange"
-              />
-              <precondition
-                v-else-if="requestVModel.activeTab === RequestComposition.PRECONDITION"
-                v-model:config="requestVModel.children[0].preProcessorConfig"
-                is-definition
-                :disabled="!isEditableApi"
-                :tip-content="t('apiScenario.openGlobalPreConditionTip')"
-                @change="handleActiveDebugChange"
-              />
-              <postcondition
-                v-else-if="requestVModel.activeTab === RequestComposition.POST_CONDITION"
-                v-model:config="requestVModel.children[0].postProcessorConfig"
-                :response="responseResultBody"
-                :disabled="!isEditableApi"
-                :tip-content="t('apiScenario.openGlobalPostConditionTip')"
-                is-definition
-                @change="handleActiveDebugChange"
-              />
-              <assertion
-                v-else-if="requestVModel.activeTab === RequestComposition.ASSERTION"
-                v-model:params="requestVModel.children[0].assertionConfig.assertions"
-                :response="responseResultBody"
-                is-definition
-                :disabled="!isEditableApi"
-                :assertion-config="requestVModel.children[0].assertionConfig"
-                :show-extraction="true"
-              />
-              <auth
-                v-else-if="requestVModel.activeTab === RequestComposition.AUTH"
-                v-model:params="requestVModel.authConfig"
-                :disabled="!isEditableApi"
-                @change="handleActiveDebugChange"
-              />
-              <setting
-                v-else-if="requestVModel.activeTab === RequestComposition.SETTING"
-                v-model:params="requestVModel.otherConfig"
-                :disabled="!isEditableApi"
-                @change="handleActiveDebugChange"
-              />
-            </div>
-          </a-spin>
+                <httpBody
+                  v-else-if="requestVModel.activeTab === RequestComposition.BODY"
+                  v-model:params="requestVModel.body"
+                  :disabled-param-value="!isEditableApi && !isEditableParamValue"
+                  :disabled-except-param="!isEditableApi"
+                  :disabled-body-type="!isEditableApi"
+                  :upload-temp-file-api="uploadTempFile"
+                  :file-save-as-source-id="props.step?.id"
+                  :file-save-as-api="stepTransferFile"
+                  :file-module-options-api="getTransferOptions"
+                  @change="handleActiveDebugChange"
+                />
+                <httpQuery
+                  v-else-if="requestVModel.activeTab === RequestComposition.QUERY"
+                  v-model:params="requestVModel.query"
+                  :disabled-param-value="!isEditableApi && !isEditableParamValue"
+                  :disabled-except-param="!isEditableApi"
+                  @change="handleActiveDebugChange"
+                />
+                <httpRest
+                  v-else-if="requestVModel.activeTab === RequestComposition.REST"
+                  v-model:params="requestVModel.rest"
+                  :disabled-param-value="!isEditableApi && !isEditableParamValue"
+                  :disabled-except-param="!isEditableApi"
+                  @change="handleActiveDebugChange"
+                />
+                <precondition
+                  v-else-if="requestVModel.activeTab === RequestComposition.PRECONDITION"
+                  v-model:config="requestVModel.children[0].preProcessorConfig"
+                  is-definition
+                  :disabled="!isEditableApi"
+                  :tip-content="t('apiScenario.openGlobalPreConditionTip')"
+                  @change="handleActiveDebugChange"
+                />
+                <postcondition
+                  v-else-if="requestVModel.activeTab === RequestComposition.POST_CONDITION"
+                  v-model:config="requestVModel.children[0].postProcessorConfig"
+                  :response="responseResultBody"
+                  :disabled="!isEditableApi"
+                  :tip-content="t('apiScenario.openGlobalPostConditionTip')"
+                  is-definition
+                  @change="handleActiveDebugChange"
+                />
+                <assertion
+                  v-else-if="requestVModel.activeTab === RequestComposition.ASSERTION"
+                  v-model:params="requestVModel.children[0].assertionConfig.assertions"
+                  :response="responseResultBody"
+                  is-definition
+                  :disabled="!isEditableApi"
+                  :assertion-config="requestVModel.children[0].assertionConfig"
+                  :show-extraction="true"
+                />
+                <auth
+                  v-else-if="requestVModel.activeTab === RequestComposition.AUTH"
+                  v-model:params="requestVModel.authConfig"
+                  :disabled="!isEditableApi"
+                  @change="handleActiveDebugChange"
+                />
+                <setting
+                  v-else-if="requestVModel.activeTab === RequestComposition.SETTING"
+                  v-model:params="requestVModel.otherConfig"
+                  :disabled="!isEditableApi"
+                  @change="handleActiveDebugChange"
+                />
+              </div>
+            </a-spin>
 
-          <response
-            v-if="visible"
-            v-show="showResponse"
-            ref="responseRef"
-            v-model:active-layout="activeLayout"
-            v-model:active-tab="requestVModel.responseActiveTab"
-            class="response"
-            :is-http-protocol="isHttpProtocol"
-            :is-priority-local-exec="isPriorityLocalExec"
-            :request-url="requestVModel.url"
-            :is-expanded="isVerticalExpanded"
-            :request-result="currentResponse"
-            :console="currentResponse?.console"
-            :is-edit="false"
-            is-definition
-            hide-layout-switch
-            :loading="requestVModel.executeLoading || loading"
-            @execute="execute"
-          >
-            <template #titleRight>
-              <loopPagination v-model:current-loop="currentLoop" :loop-total="loopTotal" />
-            </template>
-          </response>
+            <response
+              v-if="visible"
+              v-show="showResponse"
+              ref="responseRef"
+              v-model:active-layout="activeLayout"
+              v-model:active-tab="requestVModel.responseActiveTab"
+              class="response"
+              :is-http-protocol="isHttpProtocol"
+              :is-priority-local-exec="isPriorityLocalExec"
+              :request-url="requestVModel.url"
+              :is-expanded="isVerticalExpanded"
+              :request-result="currentResponse"
+              :console="currentResponse?.console"
+              :is-edit="false"
+              is-definition
+              hide-layout-switch
+              :loading="requestVModel.executeLoading || loading"
+              @execute="execute"
+            >
+              <template #titleRight>
+                <loopPagination v-model:current-loop="currentLoop" :loop-total="loopTotal" />
+              </template>
+            </response>
+          </div>
         </div>
       </div>
-    </div>
-    <!-- <addDependencyDrawer v-model:visible="showAddDependencyDrawer" :mode="addDependencyMode" /> -->
-  </MsDrawer>
+      <!-- <addDependencyDrawer v-model:visible="showAddDependencyDrawer" :mode="addDependencyMode" /> -->
+    </MsDrawer>
+    <importCurlDialog v-model:visible="importDialogVisible" @done="handleImportCurlDone" />
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -343,22 +366,29 @@
   import stepTypeVue from './stepType/stepType.vue';
   import apiMethodName from '@/views/api-test/components/apiMethodName.vue';
   import apiMethodSelect from '@/views/api-test/components/apiMethodSelect.vue';
+  import importCurlDialog from '@/views/api-test/components/importCurlDialog.vue';
   import auth from '@/views/api-test/components/requestComposition/auth.vue';
   import { TabErrorMessage } from '@/views/api-test/components/requestComposition/index.vue';
   import postcondition from '@/views/api-test/components/requestComposition/postcondition.vue';
   import precondition from '@/views/api-test/components/requestComposition/precondition.vue';
-  import response from '@/views/api-test/components/requestComposition/response/index.vue';
   import setting from '@/views/api-test/components/requestComposition/setting.vue';
 
   import { getPluginScript, getProtocolList } from '@/api/modules/api-test/common';
   import { getDefinitionDetail } from '@/api/modules/api-test/management';
-  import { getTransferOptions, stepTransferFile, uploadTempFile } from '@/api/modules/api-test/scenario';
+  import {
+    getTransferOptions,
+    scenarioCopyStepFiles,
+    stepTransferFile,
+    uploadTempFile,
+  } from '@/api/modules/api-test/scenario';
   import { useI18n } from '@/hooks/useI18n';
   import { useAppStore } from '@/store';
   import { getGenerateId, parseQueryParams } from '@/utils';
   import { scrollIntoView } from '@/utils/dom';
+  import { getLocalStorage, setLocalStorage } from '@/utils/local-storage';
 
   import {
+    CurlParseResult,
     EnableKeyValueParam,
     ExecuteApiRequestFullParams,
     ExecuteBody,
@@ -372,11 +402,13 @@
   import { ScenarioStepFileParams, ScenarioStepItem } from '@/models/apiTest/scenario';
   import type { EnvConfig } from '@/models/projectManagement/environmental';
   import {
+    ProtocolKeyEnum,
     RequestAuthType,
     RequestBodyFormat,
     RequestComposition,
     RequestMethods,
     ResponseComposition,
+    ScenarioStepRefType,
     ScenarioStepType,
   } from '@/enums/apiEnum';
 
@@ -392,6 +424,7 @@
     filterAssertions,
     filterConditionsSqlValidParams,
     filterKeyValParams,
+    parseCurlBody,
     parseRequestBodyFiles,
   } from '@/views/api-test/components/utils';
   import type { Api } from '@form-create/arco-design';
@@ -401,6 +434,9 @@
   const httpBody = defineAsyncComponent(() => import('@/views/api-test/components/requestComposition/body.vue'));
   const httpQuery = defineAsyncComponent(() => import('@/views/api-test/components/requestComposition/query.vue'));
   const httpRest = defineAsyncComponent(() => import('@/views/api-test/components/requestComposition/rest.vue'));
+  const response = defineAsyncComponent(
+    () => import('@/views/api-test/components/requestComposition/response/index.vue')
+  );
   // const addDependencyDrawer = defineAsyncComponent(
   //   () => import('@/views/api-test/management/components/addDependencyDrawer.vue')
   // );
@@ -477,7 +513,7 @@
     stepName: '',
     resourceId: '',
     customizeRequest: true,
-    customizeRequestEnvEnable: false,
+    customizeRequestEnvEnable: true,
     protocol: 'HTTP',
     url: '',
     activeTab: RequestComposition.HEADER,
@@ -534,6 +570,7 @@
   };
 
   const requestVModel = ref<RequestParam>(defaultApiParams);
+  const copyStepFileIdsMap = ref<Record<string, any>>({});
   // 步骤类型判断
   const _stepType = computed(() => {
     if (props.step) {
@@ -558,6 +595,7 @@
   // 是否显示环境域名前缀
   const showEnvPrefix = computed(
     () =>
+      requestVModel.value.customizeRequest &&
       requestVModel.value.customizeRequestEnvEnable &&
       appStore.currentEnvConfig?.httpConfig.find((e) => e.type === 'NONE')?.url
   );
@@ -585,6 +623,14 @@
       deep: true,
     }
   );
+
+  function requestTabClick() {
+    const element = document.querySelector('.customApiDrawer')?.querySelectorAll('.request-tab-and-response')[0];
+    element?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  }
 
   // 复制 api 只要加载过一次后就会保存，所以 props.request 是不为空的
   const isCopyApiNeedInit = computed(() => _stepType.value.isCopyApi && props.request === undefined);
@@ -765,22 +811,14 @@
     () => pluginScriptMap.value[requestVModel.value.protocol]?.script || []
   );
 
-  // 处理插件表单输入框变化
-  const handlePluginFormChange = debounce(() => {
-    if (isEditableApi.value) {
-      // 复制或者新建的时候需要缓存表单数据，引用的不能更改
-      temporaryPluginFormMap[requestVModel.value.uniqueId] = fApi.value?.formData();
-    }
-    handleActiveDebugChange();
-  }, 300);
-
   /**
    * 控制插件表单字段显示
    */
   function controlPluginFormFields() {
     const currentFormFields = fApi.value?.fields();
     let fields: string[] = [];
-    if (requestVModel.value.customizeRequestEnvEnable) {
+    if (requestVModel.value.customizeRequestEnvEnable || _stepType.value.isQuoteApi) {
+      // 自定义请求引用环境或是引用的 api 时，使用环境的字段显示
       fields = pluginScriptMap.value[requestVModel.value.protocol].apiDefinitionFields || [];
     } else {
       fields = pluginScriptMap.value[requestVModel.value.protocol].apiDebugFields || [];
@@ -793,8 +831,19 @@
       // 隐藏多余的字段
       fApi.value?.hidden(true, currentFormFields?.filter((e) => !fields.includes(e)) || []);
     }
+    fApi.value?.refresh(); // 刷新表单，避免字段显隐切换后部分字段不显示
     return fields;
   }
+
+  // 处理插件表单输入框变化
+  const handlePluginFormChange = debounce(() => {
+    if (isEditableApi.value) {
+      // 复制或者新建的时候需要缓存表单数据，引用的不能更改
+      temporaryPluginFormMap[requestVModel.value.uniqueId] = fApi.value?.formData();
+      controlPluginFormFields(); // TODO:临时解决插件表单通过表单交互控制字段显隐未隐藏/显示环境字段的问题
+    }
+    handleActiveDebugChange();
+  }, 300);
 
   /**
    * 设置插件表单数据
@@ -903,7 +952,7 @@
   }
 
   const showResponse = computed(
-    () => isHttpProtocol.value || requestVModel.value.response?.requestResults[0]?.responseResult.responseCode
+    () => isHttpProtocol.value || requestVModel.value.response?.requestResults[0]?.responseResult
   );
   const activeLayout = ref<'horizontal' | 'vertical'>('vertical');
   const isVerticalExpanded = computed(() => activeLayout.value === 'vertical');
@@ -952,7 +1001,8 @@
         requestVModel.value.body,
         undefined,
         props.fileParams?.uploadFileIds || requestVModel.value.uploadFileIds, // 外面解析详情的时候传入，或引用 api 在requestVModel内存储
-        props.fileParams?.linkFileIds || requestVModel.value.linkFileIds // 外面解析详情的时候传入，或引用 api 在requestVModel内存储
+        props.fileParams?.linkFileIds || requestVModel.value.linkFileIds, // 外面解析详情的时候传入，或引用 api 在requestVModel内存储
+        copyStepFileIdsMap.value
       );
       requestParams = {
         authConfig: requestVModel.value.authConfig,
@@ -1023,6 +1073,7 @@
         if (valid === true) {
           emit('execute', makeRequestParams(executeType) as RequestParam, executeType);
         } else {
+          requestVModel.value.executeLoading = false;
           requestVModel.value.activeTab = RequestComposition.PLUGIN;
           nextTick(() => {
             scrollIntoView(document.querySelector('.arco-form-item-message'), { block: 'center' });
@@ -1116,6 +1167,7 @@
       return;
     }
     emit('addStep', cloneDeep(makeRequestParams()) as RequestParam);
+    requestVModel.value.stepId = getGenerateId(); // 保存后需要重新生成 id
   }
 
   function handleSave() {
@@ -1144,13 +1196,43 @@
   // const showAddDependencyDrawer = ref(false);
   // const addDependencyMode = ref<'pre' | 'post'>('pre');
 
+  function setDefaultActiveTab() {
+    if (requestVModel.value.body.bodyType !== RequestBodyFormat.NONE) {
+      requestVModel.value.activeTab = RequestComposition.BODY;
+    } else if (requestVModel.value.query.length > 0) {
+      requestVModel.value.activeTab = RequestComposition.QUERY;
+    } else if (requestVModel.value.rest.length > 0) {
+      requestVModel.value.activeTab = RequestComposition.REST;
+    } else if (requestVModel.value.headers.length > 0) {
+      requestVModel.value.activeTab = RequestComposition.HEADER;
+    } else {
+      requestVModel.value.activeTab = RequestComposition.BODY;
+    }
+  }
+
   async function initQuoteApiDetail() {
     try {
       loading.value = true;
       const res = await getDefinitionDetail(props.step?.resourceId || '');
       let parseRequestBodyResult;
       if (res.protocol === 'HTTP') {
-        parseRequestBodyResult = parseRequestBodyFiles(res.request.body, res.response); // 解析请求体中的文件，将详情中的文件 id 集合收集，更新时以判断文件是否删除以及是否新上传的文件
+        if ((props.step?.copyFromStepId || props.step?.refType === ScenarioStepRefType.COPY) && props.step?.isNew) {
+          // 复制的步骤需要复制文件
+          const fileIds = parseRequestBodyFiles(res.request.body, [], [], []).uploadFileIds;
+          if (fileIds.length > 0) {
+            copyStepFileIdsMap.value = await scenarioCopyStepFiles({
+              copyFromStepId: props.step?.copyFromStepId,
+              resourceId: props.step?.resourceId,
+              stepType: props.step?.stepType,
+              refType: props.step?.refType,
+              isTempFile: false, // 复制未保存的步骤时 true
+              fileIds,
+            });
+          }
+          parseRequestBodyFiles(res.request.body, [], [], [], copyStepFileIdsMap.value);
+        } else {
+          parseRequestBodyResult = parseRequestBodyFiles(res.request.body, [], [], [], copyStepFileIdsMap.value); // 解析请求体中的文件，将详情中的文件 id 集合收集，更新时以判断文件是否删除以及是否新上传的文件
+        }
       }
       requestVModel.value = {
         executeLoading: false,
@@ -1225,6 +1307,29 @@
     });
   }
 
+  const importDialogVisible = ref(false);
+  function handleImportCurlDone(res: CurlParseResult) {
+    const { url, method, headers, queryParams, bodyType, body } = res;
+    const requestBody = parseCurlBody(bodyType, body);
+    requestVModel.value.url = url;
+    requestVModel.value.method = method;
+    requestVModel.value.headers = Object.keys(headers).map((e) => ({
+      ...defaultHeaderParamsItem,
+      key: e,
+      value: headers[e],
+    }));
+    requestVModel.value.query = Object.keys(queryParams).map((e) => ({
+      ...defaultRequestParamsItem,
+      key: e,
+      value: queryParams[e],
+    }));
+    requestVModel.value.body = requestBody;
+    importDialogVisible.value = false;
+    nextTick(() => {
+      handleActiveDebugChange();
+    });
+  }
+
   watch(
     () => props.request?.uniqueId,
     () => {
@@ -1232,6 +1337,23 @@
     },
     {
       immediate: true,
+    }
+  );
+
+  watch(
+    () => requestVModel.value.protocol,
+    (val) => {
+      if (requestVModel.value.isNew) {
+        setLocalStorage(ProtocolKeyEnum.API_SCENARIO_CUSTOM_PROTOCOL, val);
+      }
+      handleActiveDebugProtocolChange(val);
+    }
+  );
+
+  watch(
+    () => appStore.loading,
+    (val) => {
+      loading.value = val;
     }
   );
 
@@ -1254,6 +1376,8 @@
             responseActiveTab: ResponseComposition.BODY,
             stepId: props.step?.uniqueId || '',
             uniqueId: props.step?.uniqueId || '',
+            customizeRequestEnvEnable:
+              props.step?.refType === 'DIRECT' ? props.request.customizeRequestEnvEnable : true, // 自定义请求保留本身保存的是否引用环境，其他的请求固定是引用环境
             isNew: false,
           });
           if (_stepType.value.isQuoteApi) {
@@ -1267,14 +1391,24 @@
           handleActiveDebugProtocolChange(requestVModel.value.protocol);
         } else {
           // 新建自定义请求
+          const localProtocol = getLocalStorage<string>(ProtocolKeyEnum.API_SCENARIO_CUSTOM_PROTOCOL);
           const id = getGenerateId();
           requestVModel.value = cloneDeep({
             ...defaultApiParams,
             stepId: id,
             uniqueId: id,
+            customizeRequestEnvEnable: false,
+            protocol:
+              localProtocol?.length && protocolOptions.value.some((item) => item.value === localProtocol)
+                ? localProtocol
+                : 'HTTP',
           });
         }
         requestVModel.value.activeTab = contentTabList.value[0].value;
+        if (requestVModel.value.protocol === 'HTTP') {
+          setDefaultActiveTab();
+        }
+        handleActiveDebugProtocolChange(requestVModel.value.protocol);
         nextTick(() => {
           isSwitchingContent.value = false;
         });
@@ -1303,7 +1437,7 @@
   .exec-btn {
     margin-right: 12px;
     :deep(.arco-btn) {
-      color: white !important;
+      color: var(--color-text-fff) !important;
       background-color: rgb(var(--primary-5)) !important;
       .btn-base-primary-hover();
       .btn-base-primary-active();
@@ -1327,19 +1461,21 @@
     .ms-scroll-bar();
   }
   .sticky-content {
-    @apply sticky bg-white;
+    @apply sticky;
 
     z-index: 101;
+    background-color: var(--color-text-fff);
   }
   .request-content-and-response {
     display: flex;
     &.vertical {
       flex-direction: column;
       .response :deep(.response-head) {
-        @apply sticky bg-white;
+        @apply sticky;
 
-        top: 0;
-        z-index: 102; // 覆盖请求参数tab
+        top: 46px; // 请求参数tab高度(不算border-bottom)
+        z-index: 11;
+        background-color: var(--color-text-fff);
       }
       .request-tab-pane {
         min-height: 400px;

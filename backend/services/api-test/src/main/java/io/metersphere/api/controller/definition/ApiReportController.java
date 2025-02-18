@@ -2,10 +2,7 @@ package io.metersphere.api.controller.definition;
 
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
-import io.metersphere.api.dto.definition.ApiReportBatchRequest;
-import io.metersphere.api.dto.definition.ApiReportDTO;
-import io.metersphere.api.dto.definition.ApiReportDetailDTO;
-import io.metersphere.api.dto.definition.ApiReportPageRequest;
+import io.metersphere.api.dto.definition.*;
 import io.metersphere.api.dto.report.ApiReportListDTO;
 import io.metersphere.api.service.ApiReportShareService;
 import io.metersphere.api.service.definition.ApiReportLogService;
@@ -78,6 +75,14 @@ public class ApiReportController {
         apiReportService.batchDelete(request, SessionUtils.getUserId());
     }
 
+    @PostMapping("/batch-param")
+    @Operation(summary = "接口测试-接口报告-获取用例报告批量参数")
+    @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
+    @RequiresPermissions(PermissionConstants.PROJECT_API_REPORT_READ)
+    public List<String> batchParam(@Validated @RequestBody ApiReportBatchRequest request) {
+        return apiReportService.doSelectIds(request);
+    }
+
     @GetMapping("/get/{id}")
     @Operation(summary = "接口测试-接口报告-报告获取")
     @CheckOwner(resourceId = "#id", resourceType = "api_report")
@@ -112,4 +117,27 @@ public class ApiReportController {
         return apiReportService.getDetail(reportId, stepId);
     }
 
+    @PostMapping("/export/{reportId}")
+    @Operation(summary = "接口测试-用例报告-导出日志")
+    @RequiresPermissions(PermissionConstants.PROJECT_API_REPORT_EXPORT)
+    public void exportLog(@PathVariable String reportId) {
+        apiReportService.exportLog(reportId, SessionUtils.getUserId(), SessionUtils.getCurrentProjectId());
+    }
+
+    @PostMapping("/batch-export")
+    @Operation(summary = "接口测试-用例报告-批量导出日志")
+    @RequiresPermissions(PermissionConstants.PROJECT_API_REPORT_EXPORT)
+    public void batchExportLog(@Validated @RequestBody ApiReportBatchRequest request) {
+        apiReportService.batchExportLog(request, SessionUtils.getUserId(), SessionUtils.getCurrentProjectId());
+    }
+
+
+    @GetMapping("/task-report/{id}")
+    @Operation(summary = "系统-任务中心-接口用例执行任务详情-查看")
+    @RequiresPermissions(value = {PermissionConstants.SYSTEM_CASE_TASK_CENTER_READ,
+            PermissionConstants.ORGANIZATION_CASE_TASK_CENTER_READ, PermissionConstants.PROJECT_CASE_TASK_CENTER_READ,
+            PermissionConstants.PROJECT_API_REPORT_READ, PermissionConstants.PROJECT_API_DEFINITION_CASE_EXECUTE}, logical = Logical.OR)
+    public ApiTaskReportDTO viewCaseItemReport(@PathVariable String id) {
+        return apiReportService.viewCaseTaskItemReport(id);
+    }
 }

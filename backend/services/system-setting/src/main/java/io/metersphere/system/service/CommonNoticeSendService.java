@@ -58,6 +58,48 @@ public class CommonNoticeSendService {
         }
     }
 
+    /**
+     * 发送通知
+     * @param taskType
+     * @param event
+     * @param operator
+     * @param currentProjectId
+     * @param baseSystemConfig
+     * @param resource
+     * @param extraUsers   除了消息通知配置的用户，需要额外通知的用户
+     * @param excludeSelf  是否排除自己
+     */
+    public void sendNotice(String taskType, String event, Map resource, User operator, String currentProjectId, BaseSystemConfigDTO baseSystemConfig,
+                             List<String> extraUsers, boolean excludeSelf) {
+        Map paramMap = new HashMap<>();
+        paramMap.put("url", baseSystemConfig.getUrl());
+        paramMap.put(NoticeConstants.RelatedUser.OPERATOR, operator.getName());
+        paramMap.put("Language", operator.getLanguage());
+        paramMap.putAll(resource);
+        paramMap.putIfAbsent("projectId", currentProjectId);
+
+        // 占位符
+        handleDefaultValues(paramMap);
+
+        String context = getContext(taskType, event);
+
+        String subject = getSubject(taskType, event);
+
+        List<String> relatedUsers = getRelatedUsers(resource.get("relatedUsers"));
+
+        NoticeModel noticeModel = NoticeModel.builder()
+                .operator(operator.getId())
+                .context(context)
+                .subject(subject)
+                .paramMap(paramMap)
+                .event(event)
+                .status((String) paramMap.get("status"))
+                .excludeSelf(true)
+                .relatedUsers(relatedUsers)
+                .build();
+        noticeSendService.sendOther(taskType, noticeModel, extraUsers, excludeSelf);
+    }
+
     private List<String> getRelatedUsers(Object relatedUsers) {
         String relatedUser = (String) relatedUsers;
         List<String> relatedUserList = new ArrayList<>();
@@ -74,9 +116,9 @@ public class CommonNoticeSendService {
 
     private static void setLanguage(String language) {
         Locale locale = Locale.SIMPLIFIED_CHINESE;
-        if (StringUtils.containsIgnoreCase("US", language)) {
+        if (StringUtils.containsIgnoreCase(language, "US")) {
             locale = Locale.US;
-        } else if (StringUtils.containsIgnoreCase("TW", language)) {
+        } else if (StringUtils.containsIgnoreCase(language, "TW")) {
             locale = Locale.TAIWAN;
         }
         LocaleContextHolder.setLocale(locale);

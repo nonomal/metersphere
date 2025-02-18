@@ -42,6 +42,7 @@ public class CheckOwnerAspect {
 
     @Before("pointcut()")
     public void before(JoinPoint joinPoint) {
+
         //从切面织入点处通过反射机制获取织入点处的方法
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         //获取切入点所在的方法
@@ -67,13 +68,23 @@ public class CheckOwnerAspect {
 
         String resourceId = checkOwner.resourceId();
         String resourceType = checkOwner.resourceType();
+        String relationType = checkOwner.relationType();
         Expression titleExp = parser.parseExpression(resourceId);
         Object v = titleExp.getValue(context, Object.class);
+        // 归属组织的资源
         if (orgResources.contains(resourceType)) {
             handleOrganizationResource(v, resourceType);
-        } else if (StringUtils.equals(resourceType, "organization")) {
+        }
+        // 组织自身
+        else if (StringUtils.equals(resourceType, "organization")) {
             handleOrganization(v);
-        } else {
+        }
+        // 中间表
+        else if (StringUtils.isNotBlank(relationType)) {
+            handleProjectResource(v, resourceType, relationType);
+        }
+        // 归属项目的资源
+        else {
             handleProjectResource(v, resourceType);
         }
     }
@@ -104,6 +115,20 @@ public class CheckOwnerAspect {
         }
     }
 
+    private void handleProjectResource(Object v, String resourceType, String relationType) {
+        if (v instanceof String id) {
+            if (!extCheckOwnerMapper.checkoutRelationOwner(resourceType, relationType, SessionUtils.getUserId(), List.of(id))) {
+                throw new MSException(Translator.get("check_owner_case"));
+            }
+        }
+        if (v instanceof List ids) {
+            if (!extCheckOwnerMapper.checkoutRelationOwner(resourceType, relationType, SessionUtils.getUserId(), ids)) {
+                throw new MSException(Translator.get("check_owner_case"));
+            }
+        }
+    }
+
+
     private void handleOrganizationResource(Object v, String resourceType) {
         if (v instanceof String id) {
             if (!extCheckOwnerMapper.checkoutOrganizationOwner(resourceType, SessionUtils.getUserId(), List.of(id))) {
@@ -116,5 +141,4 @@ public class CheckOwnerAspect {
             }
         }
     }
-
 }

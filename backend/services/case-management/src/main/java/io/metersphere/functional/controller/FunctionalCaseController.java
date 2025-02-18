@@ -4,15 +4,14 @@ import com.alibaba.excel.util.StringUtils;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import io.metersphere.functional.domain.FunctionalCase;
+import io.metersphere.functional.dto.ExportTaskDTO;
 import io.metersphere.functional.dto.FunctionalCaseDetailDTO;
 import io.metersphere.functional.dto.FunctionalCasePageDTO;
 import io.metersphere.functional.dto.FunctionalCaseVersionDTO;
 import io.metersphere.functional.dto.response.FunctionalCaseImportResponse;
+import io.metersphere.functional.excel.domain.FunctionalCaseExportColumns;
 import io.metersphere.functional.request.*;
-import io.metersphere.functional.service.FunctionalCaseFileService;
-import io.metersphere.functional.service.FunctionalCaseLogService;
-import io.metersphere.functional.service.FunctionalCaseNoticeService;
-import io.metersphere.functional.service.FunctionalCaseService;
+import io.metersphere.functional.service.*;
 import io.metersphere.project.dto.CustomFieldOptions;
 import io.metersphere.project.service.ProjectTemplateService;
 import io.metersphere.sdk.constants.PermissionConstants;
@@ -22,6 +21,7 @@ import io.metersphere.system.dto.request.OperationHistoryRequest;
 import io.metersphere.system.dto.sdk.SessionUser;
 import io.metersphere.system.dto.sdk.TemplateDTO;
 import io.metersphere.system.dto.sdk.request.PosRequest;
+import io.metersphere.system.file.annotation.FileLimit;
 import io.metersphere.system.log.annotation.Log;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.notice.annotation.SendNotice;
@@ -37,6 +37,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.constraints.NotBlank;
 import org.apache.shiro.authz.annotation.Logical;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -59,6 +60,8 @@ public class FunctionalCaseController {
     private ProjectTemplateService projectTemplateService;
     @Resource
     private FunctionalCaseFileService functionalCaseFileService;
+    @Resource
+    private FunctionalCaseXmindService functionalCaseXmindService;
 
     //TODO 获取模板列表(多模板功能暂时不做)
 
@@ -72,6 +75,7 @@ public class FunctionalCaseController {
     }
 
 
+    @FileLimit
     @PostMapping("/add")
     @Operation(summary = "用例管理-功能用例-新增用例")
     @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_ADD)
@@ -90,10 +94,10 @@ public class FunctionalCaseController {
     @CheckOwner(resourceId = "#id", resourceType = "functional_case")
     public FunctionalCaseDetailDTO getFunctionalCaseDetail(@PathVariable String id) {
         String userId = SessionUtils.getUserId();
-        return functionalCaseService.getFunctionalCaseDetail(id, userId);
+        return functionalCaseService.getFunctionalCaseDetail(id, userId, true);
     }
 
-
+    @FileLimit
     @PostMapping("/update")
     @Operation(summary = "用例管理-功能用例-更新用例")
     @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_UPDATE)
@@ -129,7 +133,6 @@ public class FunctionalCaseController {
     @Operation(summary = "用例管理-功能用例-删除用例")
     @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_DELETE)
     @Log(type = OperationLogType.DELETE, expression = "#msClass.deleteFunctionalCaseLog(#request)", msClass = FunctionalCaseLogService.class)
-    @SendNotice(taskType = NoticeConstants.TaskType.FUNCTIONAL_CASE_TASK, event = NoticeConstants.Event.DELETE, target = "#targetClass.getDeleteFunctionalCaseDTO(#request.id)", targetClass = FunctionalCaseNoticeService.class)
     @CheckOwner(resourceId = "#request.getId()", resourceType = "functional_case")
     public void deleteFunctionalCase(@Validated @RequestBody FunctionalCaseDeleteRequest request) {
         String userId = SessionUtils.getUserId();
@@ -144,7 +147,7 @@ public class FunctionalCaseController {
     public Pager<List<FunctionalCasePageDTO>> getFunctionalCasePage(@Validated @RequestBody FunctionalCasePageRequest request) {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString()) ? request.getSortString() : "pos desc");
-        return PageUtils.setPageInfo(page, functionalCaseService.getFunctionalCasePage(request, false, false));
+        return PageUtils.setPageInfo(page, functionalCaseService.getFunctionalCasePage(request, false, true));
     }
 
     @PostMapping("/module/count")
@@ -224,20 +227,38 @@ public class FunctionalCaseController {
 
     @PostMapping("/pre-check/excel")
     @Operation(summary = "用例管理-功能用例-excel导入检查")
-    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_UPDATE)
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_IMPORT)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public FunctionalCaseImportResponse preCheckExcel(@RequestPart("request") FunctionalCaseImportRequest request, @RequestPart(value = "file", required = false) MultipartFile file) {
         return functionalCaseFileService.preCheckExcel(request, file);
     }
 
+    @PostMapping("/pre-check/xmind")
+    @Operation(summary = "用例管理-功能用例-xmind导入检查")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_IMPORT)
+    @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
+    public FunctionalCaseImportResponse preCheckXMind(@RequestPart("request") FunctionalCaseImportRequest request, @RequestPart(value = "file", required = false) MultipartFile file) {
+        SessionUser user = SessionUtils.getUser();
+        return functionalCaseFileService.preCheckXMind(request, user, file);
+    }
+
 
     @PostMapping("/import/excel")
     @Operation(summary = "用例管理-功能用例-excel导入")
-    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_UPDATE)
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_IMPORT)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public FunctionalCaseImportResponse importExcel(@RequestPart("request") FunctionalCaseImportRequest request, @RequestPart(value = "file", required = false) MultipartFile file) {
         SessionUser user = SessionUtils.getUser();
         return functionalCaseFileService.importExcel(request, user, file);
+    }
+
+    @PostMapping("/import/xmind")
+    @Operation(summary = "用例管理-功能用例-xmind导入")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_IMPORT)
+    @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
+    public FunctionalCaseImportResponse importXMind(@RequestPart("request") FunctionalCaseImportRequest request, @RequestPart(value = "file", required = false) MultipartFile file) {
+        SessionUser user = SessionUtils.getUser();
+        return functionalCaseFileService.importXMind(request, user, file);
     }
 
     @PostMapping("/operation-history")
@@ -248,5 +269,60 @@ public class FunctionalCaseController {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString()) ? request.getSortString() : "create_time desc");
         return PageUtils.setPageInfo(page, functionalCaseService.operationHistoryList(request));
+    }
+
+
+    @PostMapping("/export/excel")
+    @Operation(summary = "用例管理-功能用例-excel导出")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_EXPORT)
+    public String testCaseExport(@Validated @RequestBody FunctionalCaseExportRequest request) {
+        return functionalCaseFileService.export(SessionUtils.getUserId(), request, SessionUtils.getCurrentOrganizationId());
+    }
+
+    @GetMapping("/stop/{taskId}")
+    @Operation(summary = "用例管理-功能用例-导出-停止导出")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_EXPORT)
+    @CheckOwner(resourceId = "#projectId", resourceType = "project")
+    public void caseStopExport(@PathVariable String taskId) {
+        functionalCaseFileService.stopExport(taskId, SessionUtils.getUserId());
+    }
+
+    @GetMapping("/download/xmind/template/{projectId}")
+    @Operation(summary = "用例管理-功能用例-xmind导入-下载模板")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ)
+    @CheckOwner(resourceId = "#projectId", resourceType = "project")
+    public void xmindTemplateExport(@PathVariable String projectId, HttpServletResponse response) {
+        functionalCaseXmindService.downloadXmindTemplate(projectId, response);
+    }
+
+    @GetMapping("/export/columns/{projectId}")
+    @Operation(summary = "用例管理-获取导出字段配置")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ)
+    @CheckOwner(resourceId = "#projectId", resourceType = "project")
+    public FunctionalCaseExportColumns getExportColumns(@PathVariable String projectId) {
+        return functionalCaseFileService.getExportColumns(projectId);
+    }
+
+
+    @GetMapping(value = "/download/file/{projectId}/{fileId}")
+    @Operation(summary = "用例管理-功能用例-下载文件")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_EXPORT)
+    public ResponseEntity<byte[]> downloadImgById(@PathVariable String projectId, @PathVariable String fileId) {
+        return functionalCaseFileService.downloadFile(projectId, fileId, SessionUtils.getUserId());
+    }
+
+
+    @PostMapping("/export/xmind")
+    @Operation(summary = "用例管理-功能用例-xmind导出")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_EXPORT)
+    public String caseExportXmind(@Validated @RequestBody FunctionalCaseExportRequest request) {
+        return functionalCaseXmindService.exportFunctionalCaseXmind(request, SessionUtils.getUserId(), SessionUtils.getCurrentOrganizationId());
+    }
+
+    @GetMapping(value = "/check/export-task")
+    @Operation(summary = "用例管理-功能用例-导出任务校验")
+    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ_EXPORT)
+    public ExportTaskDTO checkExportTask() {
+        return functionalCaseFileService.checkExportTask(SessionUtils.getCurrentProjectId(), SessionUtils.getUserId());
     }
 }

@@ -1,4 +1,4 @@
-import { computed, nextTick, onBeforeUnmount, onMounted, Ref, ref, watch } from 'vue';
+import type { MsCascaderProps } from '@/components/business/ms-cascader/index.vue';
 
 import { calculateMaxDepth } from '@/utils';
 
@@ -19,7 +19,7 @@ export interface UseSelectOption {
  * @param selectRef 选择器 ref 对象
  * @param selectVal 选择器的 v-model
  */
-export default function useSelect(config: UseSelectOption) {
+export default function useSelect(config: UseSelectOption, props?: MsCascaderProps) {
   const maxTagCount = ref(0);
   const selectWidth = ref(0);
   const selectViewInner = ref<HTMLElement | null>(null); // 输入框内容容器 DOM
@@ -36,7 +36,7 @@ export default function useSelect(config: UseSelectOption) {
         const innerViewWidth = selectViewInner.value?.getBoundingClientRect().width;
         let lastWidth = innerViewWidth - 60; // 60px 是“+N”的标签宽度+聚焦输入框的宽度
         const childrenNodes = selectViewInner.value.children;
-        if (maxTagCount.value >= 1 && maxTagCount.value < config.selectVal.value.length) {
+        if (maxTagCount.value >= 1 && maxTagCount.value < config.selectVal.value?.length) {
           return;
         }
         for (let i = 0; i < childrenNodes.length; i++) {
@@ -56,8 +56,15 @@ export default function useSelect(config: UseSelectOption) {
     });
   }
 
+  function updateTriggerWidth() {
+    const selectInput = config.selectRef.value?.$el.nextElementSibling as HTMLElement;
+    if (selectInput) {
+      selectWidth.value = selectInput.offsetWidth; // 设置成输入框的宽度
+    }
+  }
+
   const getOptionComputedStyle = computed(() => {
-    if (config.isCascade) {
+    if (config.isCascade && selectWidth.value > 0) {
       // 减去 80px 是为了防止溢出，因为会出现单选框、右侧箭头
       return {
         width:
@@ -73,7 +80,7 @@ export default function useSelect(config: UseSelectOption) {
   });
 
   watch(
-    () => config.options,
+    () => props?.options,
     (arr) => {
       if (config.isCascade && arr && arr.length > 0) {
         // 级联选择器的选项发生变化时，重新计算最大深度
@@ -88,7 +95,6 @@ export default function useSelect(config: UseSelectOption) {
 
   onMounted(() => {
     if (config.selectRef.value) {
-      selectWidth.value = config.selectRef.value.$el.nextElementSibling.clientWidth;
       selectViewInner.value = config.selectRef.value.$el.nextElementSibling.querySelector('.arco-select-view-inner');
     }
   });
@@ -101,6 +107,7 @@ export default function useSelect(config: UseSelectOption) {
     maxTagCount,
     singleTagMaxWidth,
     getOptionComputedStyle, // 获取选择器选项的样式
+    updateTriggerWidth,
     calculateMaxTag, // 在需要的时机调用此函数以计算最大标签数量，一般在 select 的 change 事件中调用
   };
 }

@@ -1,6 +1,6 @@
 package io.metersphere.api.dto.scenario;
 
-import io.metersphere.system.dto.sdk.BaseCondition;
+import io.metersphere.sdk.dto.BaseCondition;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
@@ -33,4 +33,7 @@ public class ApiScenarioModuleRequest extends BaseCondition {
     @Schema(description = "版本引用fk")
     @Size(max = 50, message = "{api_definition.ref_id.length_range}")
     private String refId;
+
+    @Schema(description = "测试计划id")
+    private String testPlanId;
 }

@@ -33,7 +33,7 @@ public class BodyParamMatchRule {
      * x-www-form-urlencoded 请求体
      * 当 bodyType 为 WWW_FORM 时，使用该字段
      */
-    private keyValueMatchRule wwwFormBody = new keyValueMatchRule();
+    private KeyValueMatchRule wwwFormBody = new KeyValueMatchRule();
     /**
      * json 请求体
      * 当 bodyType 为 JSON 时，使用该字段
@@ -56,7 +56,7 @@ public class BodyParamMatchRule {
     private BinaryBody binaryBody = new BinaryBody();
 
     public boolean matchXml(Map<String, Object> requestMap) {
-        Map<String, Object> mockMap = XMLUtils.xmlStringToJson(rawBody.getValue());
+        Map<String, Object> mockMap = XMLUtils.xmlStringToJson(xmlBody.getValue());
         return this.matchMap(mockMap, requestMap);
     }
 
@@ -109,6 +109,9 @@ public class BodyParamMatchRule {
     }
 
     private boolean matchMap(Map<String, Object> mockMap, Map<String, Object> requestMap) {
+        if ((mockMap.isEmpty() && !requestMap.isEmpty()) || (!mockMap.isEmpty() && requestMap.isEmpty())) {
+            return false;
+        }
         for (Map.Entry<String, Object> entry : mockMap.entrySet()) {
             if (!this.matchObject(entry.getValue(), requestMap.get(entry.getKey()))) {
                 return false;

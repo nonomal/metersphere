@@ -2,7 +2,7 @@ export default {
   'system.user.createUser': 'Create User',
   'system.user.emailInvite': 'Email Invite',
   'system.user.importUser': 'Import User',
-  'system.user.searchUser': 'Search by name or email or phone',
+  'system.user.searchUser': 'Search by name/email/phone',
   'system.user.editUser': 'Edit',
   'system.user.resetPassword': 'Reset PSW',
   'system.user.disable': 'Disable',
@@ -67,6 +67,7 @@ export default {
   'system.user.invite': 'Email invite',
   'system.user.inviteEmail': 'Email',
   'system.user.inviteCancel': 'Cancel',
+  'system.user.inviteEmailRepeat': 'The same email address already exists',
   'system.user.inviteEmailPlaceholder': 'Enter multiple email addresses, separated by carriage returns',
   'system.user.inviteSendEmail': 'SendEmail',
   'system.user.inviteSuccess': 'Invitation successfully',
@@ -74,7 +75,7 @@ export default {
   'system.user.importDownload': 'Download the template',
   'system.user.importModalTip': 'User groups only support adding user groups that exist in the system',
   'system.user.importModalDragText': 'Drag or click this area to select a file',
-  'system.user.importModalFileTip': 'Only supports xls/xlsx format files, and the file size should not exceed 50M',
+  'system.user.importModalFileTip': 'Only supports xls/xlsx format files, and the file size should not exceed {size}M',
   'system.user.importModalCancel': 'Cancel',
   'system.user.importModalConfirm': 'Import',
   'system.user.importModalUploading': 'File is uploading...',
@@ -117,4 +118,5 @@ export default {
   'system.user.num': 'Line',
   'system.user.line': '', // 英文没有后面的单位
   'system.user.closeTip': 'Your changes have not been saved. Do you want to continue closing the window?',
+  'system.user.userName': 'Username',
 };

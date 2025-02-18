@@ -8,22 +8,27 @@ import io.metersphere.project.mapper.ProjectMapper;
 import io.metersphere.project.mapper.ProjectTestResourcePoolMapper;
 import io.metersphere.project.mapper.ProjectVersionMapper;
 import io.metersphere.project.request.ProjectSwitchRequest;
-import io.metersphere.sdk.constants.ApplicationScope;
 import io.metersphere.sdk.constants.InternalUserRole;
 import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.util.BeanUtils;
 import io.metersphere.sdk.util.CommonBeanFactory;
 import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.domain.TestResourcePool;
-import io.metersphere.system.domain.TestResourcePoolExample;
+import io.metersphere.system.domain.TestResourcePoolBlob;
 import io.metersphere.system.domain.User;
 import io.metersphere.system.domain.UserRoleRelationExample;
 import io.metersphere.system.dto.ProjectDTO;
 import io.metersphere.system.dto.sdk.OptionDTO;
 import io.metersphere.system.dto.sdk.SessionUser;
+import io.metersphere.system.dto.taskhub.ResourcePoolOptionsDTO;
 import io.metersphere.system.dto.user.UserDTO;
 import io.metersphere.system.dto.user.UserExtendDTO;
-import io.metersphere.system.mapper.*;
+import io.metersphere.system.mapper.BaseUserMapper;
+import io.metersphere.system.mapper.ExtSystemProjectMapper;
+import io.metersphere.system.mapper.OrganizationMapper;
+import io.metersphere.system.mapper.UserRoleRelationMapper;
+import io.metersphere.system.service.BaseTaskHubService;
+import io.metersphere.system.service.CommonProjectPoolService;
 import io.metersphere.system.service.CommonProjectService;
 import io.metersphere.system.service.UserLoginService;
 import io.metersphere.system.utils.ServiceUtils;
@@ -36,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -57,7 +63,7 @@ public class ProjectService {
     @Resource
     private CommonProjectService commonProjectService;
     @Resource
-    private TestResourcePoolMapper testResourcePoolMapper;
+    private CommonProjectPoolService commonProjectPoolService;
     @Resource
     private ProjectTestResourcePoolMapper projectTestResourcePoolMapper;
     @Resource
@@ -66,6 +72,8 @@ public class ProjectService {
     private BaseUserMapper baseUserMapper;
 
     public static final Long ORDER_STEP = 5000L;
+    @Resource
+    private BaseTaskHubService baseTaskHubService;
 
 
     public List<Project> getUserProject(String organizationId, String userId) {
@@ -172,18 +180,13 @@ public class ProjectService {
     }
 
     public List<OptionDTO> getPoolOptions(String projectId) {
-        checkProjectNotExist(projectId);
-        List<String> poolIds = getPoolIds(projectId);
-        if (CollectionUtils.isEmpty(poolIds)) {
-            return new ArrayList<>();
-        }
-        TestResourcePoolExample example = new TestResourcePoolExample();
-        TestResourcePoolExample.Criteria criteria = example.createCriteria();
-        criteria.andIdIn(poolIds).andEnableEqualTo(true).andDeletedEqualTo(false);
-        List<TestResourcePool> testResourcePools = testResourcePoolMapper.selectByExample(example);
-        return testResourcePools.stream().map(testResourcePool ->
-                new OptionDTO(testResourcePool.getId(), testResourcePool.getName())
-        ).toList();
+        List<TestResourcePool> pools = getPoolOption(projectId);
+        return pools.stream().map(pool -> {
+            OptionDTO option = new OptionDTO();
+            option.setId(pool.getId());
+            option.setName(pool.getName());
+            return option;
+        }).toList();
     }
 
     public static Project checkResourceExist(String id) {
@@ -250,12 +253,6 @@ public class ProjectService {
         if (StringUtils.equalsIgnoreCase(module, "BUG")) {
             moduleName = ProjectMenuConstants.MODULE_MENU_BUG;
         }
-        if (StringUtils.equalsIgnoreCase(module, "PERFORMANCE")) {
-            moduleName = ProjectMenuConstants.MODULE_MENU_LOAD_TEST;
-        }
-        if (StringUtils.equalsIgnoreCase(module, "UI")) {
-            moduleName = ProjectMenuConstants.MODULE_MENU_UI;
-        }
         if (StringUtils.equalsIgnoreCase(module, "TEST_PLAN")) {
             moduleName = ProjectMenuConstants.MODULE_MENU_TEST_PLAN;
         }
@@ -292,5 +289,45 @@ public class ProjectService {
                 .orElse(allProject);
 
     }
+
+    /**
+     * 获取项目下可用的资源池
+     *
+     * @param projectId 项目ID
+     * @return 资源池列表
+     */
+    public List<TestResourcePool> getPoolOption(String projectId) {
+        Project project = projectMapper.selectByPrimaryKey(projectId);
+        if (project.getAllResourcePool()) {
+            return commonProjectPoolService.getProjectAllPoolsByEffect(project);
+        } else {
+            return extProjectMapper.getResourcePoolOption(projectId, "api_test");
+        }
+    }
+
+    /**
+     * 获取项目下的资源池及节点下拉选项
+     *
+     * @param projectId
+     * @return
+     */
+    public List<ResourcePoolOptionsDTO> getProjectResourcePoolOptions(String projectId) {
+        List<TestResourcePool> pools = getAllPoolOption(projectId);
+        if (CollectionUtils.isNotEmpty(pools)) {
+            Map<String, List<TestResourcePoolBlob>> poolMap = baseTaskHubService.getPoolMap(pools);
+            return baseTaskHubService.handleOptions(pools, poolMap);
+        }
+        return null;
+    }
+
+    private List<TestResourcePool> getAllPoolOption(String projectId) {
+        Project project = projectMapper.selectByPrimaryKey(projectId);
+        if (project.getAllResourcePool()) {
+            return commonProjectPoolService.getOrgTestResourcePools(project.getOrganizationId(), false);
+        } else {
+            return extProjectMapper.getResourcePoolOption(projectId, "api_test");
+        }
+    }
+
 }
 

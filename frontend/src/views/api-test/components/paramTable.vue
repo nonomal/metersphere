@@ -24,9 +24,9 @@
       </div>
     </template>
     <template #typeTitle="{ columnConfig }">
-      <div class="flex items-center text-[var(--color-text-3)]">
-        {{ t('apiTestDebug.paramType') }}
-        <a-tooltip :disabled="!columnConfig.typeTitleTooltip" position="right">
+      <div class="flex items-center text-[var(--color-text-3)]" :class="columnConfig.hasRequired ? 'pl-[30px]' : ''">
+        {{ t((columnConfig.title as string) || 'apiTestDebug.paramType') }}
+        <a-tooltip v-if="columnConfig.typeTitleTooltip" :disabled="!columnConfig.typeTitleTooltip" position="right">
           <template #content>
             <template v-if="Array.isArray(columnConfig.typeTitleTooltip)">
               <div v-for="tip of columnConfig.typeTitleTooltip" :key="tip">{{ tip }}</div>
@@ -74,7 +74,13 @@
       </div>
     </template>
     <template #batchAddTitle>
-      <MsButton type="text" size="mini" class="!mr-0" @click="emit('batchAdd')">
+      <MsButton
+        v-if="!props.disabledExceptParam && !props.disabledParamValue"
+        type="text"
+        size="mini"
+        class="!mr-0"
+        @click="emit('batchAdd')"
+      >
         {{ t('apiTestDebug.batchAdd') }}
       </MsButton>
     </template>
@@ -87,10 +93,10 @@
         class="ms-params-input-popover"
       >
         <template #content>
-          <div class="param-popover-title">
-            {{ t('apiTestDebug.paramName') }}
+          <div class="ms-params-popover-title">
+            {{ t(columnConfig.title as string) }}
           </div>
-          <div class="param-popover-value">
+          <div class="ms-params-popover-value">
             {{ record[columnConfig.dataIndex as string] }}
           </div>
         </template>
@@ -99,10 +105,9 @@
           v-model:model-value="record[columnConfig.dataIndex as string]"
           :disabled="props.disabledExceptParam || columnConfig.disabledColumn"
           :data="getAutoCompleteData(columnConfig, record)"
-          class="ms-form-table-input"
+          class="ms-form-table-input ms-form-table-input--hasPlaceholder"
           :trigger-props="{ contentClass: 'ms-form-table-input-trigger' }"
           :filter-option="false"
-          size="mini"
           @focus="handleAutoCompleteFocus(record)"
           @search="(val) => handleSearchParams(val, columnConfig)"
           @change="() => addTableLine(rowIndex, columnConfig.addLineDisabled)"
@@ -119,10 +124,17 @@
           v-model:model-value="record[columnConfig.dataIndex as string]"
           :disabled="props.disabledExceptParam || columnConfig.disabledColumn"
           :placeholder="t('apiTestDebug.commonPlaceholder')"
-          class="ms-form-table-input"
-          size="mini"
+          class="ms-form-table-input ms-params-input ms-form-table-input--hasPlaceholder"
           @input="() => addTableLine(rowIndex, columnConfig.addLineDisabled)"
-        />
+        >
+          <template v-if="props.showQuickCopy" #suffix>
+            <MsIcon
+              type="icon-icon_copy_outlined"
+              class="ms-params-input-suffix-icon"
+              @click="copyParamsName(record[columnConfig.dataIndex as string])"
+            />
+          </template>
+        </a-input>
       </a-popover>
     </template>
     <template #name="{ record, columnConfig, rowIndex }">
@@ -132,10 +144,10 @@
         class="ms-params-input-popover"
       >
         <template #content>
-          <div class="param-popover-title">
+          <div class="ms-params-popover-title">
             {{ t('apiTestDebug.paramName') }}
           </div>
-          <div class="param-popover-value">
+          <div class="ms-params-popover-value">
             {{ record[columnConfig.dataIndex as string] }}
           </div>
         </template>
@@ -143,10 +155,17 @@
           v-model:model-value="record[columnConfig.dataIndex as string]"
           :disabled="props.disabledExceptParam || columnConfig.disabledColumn"
           :placeholder="t('apiTestDebug.commonPlaceholder')"
-          class="ms-form-table-input"
-          size="mini"
+          class="ms-form-table-input ms-form-table-input--hasPlaceholder"
           @input="() => addTableLine(rowIndex, columnConfig.addLineDisabled)"
-        />
+        >
+          <template v-if="props.showQuickCopy" #suffix>
+            <MsIcon
+              type="icon-icon_copy_outlined"
+              class="ms-params-input-suffix-icon"
+              @click="copyParamsName(record[columnConfig.dataIndex as string])"
+            />
+          </template>
+        </a-input>
       </a-popover>
     </template>
     <!-- 参数类型 -->
@@ -155,25 +174,22 @@
         v-if="columnConfig.hasRequired"
         :content="t(record.required ? 'apiTestDebug.paramRequired' : 'apiTestDebug.paramNotRequired')"
       >
-        <MsButton
-          :disabled="props.disabledExceptParam"
-          type="icon"
+        <div
+          class="ms-form-table-required-button"
           :class="[
-            record.required ? '!text-[rgb(var(--danger-5))]' : '!text-[var(--color-text-brand)]',
-            '!mr-[4px] !p-[4px]',
+            record.required ? 'ms-form-table-required-button--required' : '',
+            props.disabledExceptParam || props.disabledParamValue ? 'ms-form-table-required-button--disabled' : '',
           ]"
-          size="mini"
           @click="toggleRequired(record, rowIndex)"
         >
-          <div>*</div>
-        </MsButton>
+          <article>*</article>
+        </div>
       </a-tooltip>
       <a-select
         v-model:model-value="record.paramType"
         :disabled="props.disabledExceptParam"
-        :options="columnConfig.typeOptions || []"
+        :options="columnConfig.options || []"
         class="ms-form-table-input w-full"
-        size="mini"
         @change="(val) => handleTypeChange(val, record, rowIndex, columnConfig.addLineDisabled)"
       />
     </template>
@@ -182,9 +198,8 @@
       <a-select
         v-model:model-value="record.extractType"
         :disabled="props.disabledExceptParam"
-        :options="columnConfig.typeOptions || []"
+        :options="columnConfig.options || []"
         class="ms-form-table-input w-[110px]"
-        size="mini"
         @change="() => addTableLine(rowIndex)"
       />
     </template>
@@ -193,9 +208,8 @@
       <a-select
         v-model:model-value="record.variableType"
         :disabled="props.disabledExceptParam"
-        :options="columnConfig.typeOptions || []"
+        :options="columnConfig.options || []"
         class="ms-form-table-input w-[110px]"
-        size="mini"
         @change="() => addTableLine(rowIndex)"
       />
     </template>
@@ -204,9 +218,8 @@
       <a-select
         v-model:model-value="record.extractScope"
         :disabled="props.disabledExceptParam || record.extractType !== RequestExtractExpressionEnum.REGEX"
-        :options="columnConfig.typeOptions || []"
+        :options="columnConfig.options || []"
         class="ms-form-table-input w-[180px]"
-        size="mini"
         @change="() => addTableLine(rowIndex)"
       />
     </template>
@@ -219,9 +232,8 @@
       <a-select
         v-model:model-value="record.scope"
         :disabled="props.disabledExceptParam"
-        :options="columnConfig.typeOptions || []"
+        :options="columnConfig.options || []"
         class="ms-form-table-input w-[180px]"
-        size="mini"
         @change="(val) => handleScopeChange(val, record, rowIndex, columnConfig.addLineDisabled)"
       />
     </template>
@@ -234,10 +246,10 @@
         class="ms-params-input-popover"
       >
         <template #content>
-          <div class="param-popover-title">
+          <div class="ms-params-popover-title">
             {{ t('apiTestDebug.paramValue') }}
           </div>
-          <div class="param-popover-value">
+          <div class="ms-params-popover-value">
             {{ record.value }}
           </div>
         </template>
@@ -246,7 +258,6 @@
           :disabled="props.disabledParamValue"
           class="ms-form-table-input"
           :placeholder="t('apiTestDebug.commonPlaceholder')"
-          size="mini"
           @input="() => addTableLine(rowIndex)"
         />
       </a-popover>
@@ -264,9 +275,7 @@
         :file-save-as-source-id="props.fileSaveAsSourceId"
         :file-save-as-api="props.fileSaveAsApi"
         :file-module-options-api="props.fileModuleOptionsApi"
-        input-class="ms-form-table-input h-[24px]"
-        input-size="small"
-        tag-size="small"
+        input-class="ms-form-table-input h-[32px]"
         @change="(files, file) => handleFilesChange(files, record, rowIndex, file)"
         @delete-file="() => emitChange('deleteFile')"
       />
@@ -274,10 +283,9 @@
         v-else
         v-model:value="record.value"
         :disabled="props.disabledParamValue"
-        size="mini"
         @change="() => addTableLine(rowIndex, columnConfig.addLineDisabled)"
-        @dblclick="() => quickInputParams(record)"
         @apply="() => addTableLine(rowIndex, columnConfig.addLineDisabled)"
+        @set-params="() => quickInputParams(record)"
       />
     </template>
     <!-- 文件 -->
@@ -295,11 +303,8 @@
         :file-save-as-source-id="props.fileSaveAsSourceId"
         :file-save-as-api="props.fileSaveAsApi"
         :file-module-options-api="props.fileModuleOptionsApi"
-        input-class="ms-form-table-input h-[24px]"
-        input-size="small"
-        tag-size="small"
+        input-class="ms-form-table-input h-[32px]"
         @change="(files, file) => handleFileChange(files, record, rowIndex, file)"
-        @delete-file="() => handleSingleFileDelete(record)"
       />
     </template>
     <!-- 长度范围 -->
@@ -311,7 +316,6 @@
           :placeholder="t('apiTestDebug.paramMin')"
           :min="0"
           class="ms-form-table-input ms-form-table-input-number"
-          size="mini"
           model-event="input"
           @change="() => addTableLine(rowIndex)"
         />
@@ -322,7 +326,6 @@
           :placeholder="t('apiTestDebug.paramMax')"
           :min="0"
           class="ms-form-table-input"
-          size="mini"
           model-event="input"
           @change="() => addTableLine(rowIndex)"
         />
@@ -335,7 +338,6 @@
         :disabled="props.disabledExceptParam"
         :max-tag-count="2"
         input-class="ms-form-table-input"
-        size="mini"
         @change="() => addTableLine(rowIndex)"
         @clear="() => addTableLine(rowIndex)"
       />
@@ -345,7 +347,6 @@
       <paramDescInput
         v-model:desc="record[columnConfig.dataIndex as string]"
         :disabled="props.disabledExceptParam || columnConfig.disabledColumn"
-        size="mini"
         @input="() => addTableLine(rowIndex)"
         @dblclick="() => quickInputDesc(record)"
         @change="handleDescChange"
@@ -380,7 +381,7 @@
     </template>
     <!-- 响应头 -->
     <template #header="{ record, columnConfig }">
-      <a-select v-model="record.header" :disabled="props.disabledExceptParam" class="ms-form-table-input" size="mini">
+      <a-select v-model="record.header" :disabled="props.disabledExceptParam" class="ms-form-table-input">
         <a-option v-for="item in columnConfig.options" :key="item.value">{{ t(item.label) }}</a-option>
       </a-select>
     </template>
@@ -389,7 +390,6 @@
       <a-select
         v-model="record.condition"
         :disabled="props.disabledExceptParam"
-        size="mini"
         class="ms-form-table-input"
         @change="() => addTableLine(rowIndex, columnConfig.addLineDisabled)"
       >
@@ -415,22 +415,19 @@
         v-if="columnConfig.hasRequired"
         :content="t(record.required ? 'apiTestDebug.paramRequired' : 'apiTestDebug.paramNotRequired')"
       >
-        <MsButton
-          type="icon"
+        <div
+          class="ms-form-table-required-button"
           :class="[
-            record.required ? '!text-[rgb(var(--danger-5))]' : '!text-[var(--color-text-brand)]',
-            '!mr-[4px] !p-[4px]',
+            record.required ? 'ms-form-table-required-button--required' : '',
+            props.disabledExceptParam || props.disabledParamValue ? 'ms-form-table-required-button--disabled' : '',
           ]"
-          :disabled="props.disabledExceptParam"
-          size="mini"
           @click="toggleRequired(record, rowIndex)"
         >
-          <div>*</div>
-        </MsButton>
+          <article>*</article>
+        </div>
       </a-tooltip>
       <a-input
         v-model="record.expectedValue"
-        size="mini"
         class="ms-form-table-input"
         :placeholder="t('apiTestDebug.commonPlaceholder')"
         :disabled="isDisabledCondition.includes(record.condition) || props.disabledExceptParam"
@@ -475,7 +472,6 @@
         value-key="id"
         label-key="name"
         :search-keys="['name']"
-        size="mini"
         allow-search
         class="ms-form-table-input"
         :remote-func="initEnvOptions"
@@ -489,15 +485,14 @@
       <MsTagsGroup
         v-if="Array.isArray(record.domain)"
         :tag-list="getDomain(record.domain)"
-        size="small"
         @click="() => showHostModal(record)"
       />
       <div v-else class="text-[var(--color-text-1)]">{{ '-' }}</div>
     </template>
     <!-- 单独启用/禁用列 -->
-    <template #enable="{ record, rowIndex }">
+    <template v-if="!props.selectable" #enable="{ record, rowIndex }">
       <a-switch
-        v-model="record.enable"
+        v-model:model-value="record.enable"
         :disabled="props.disabledExceptParam"
         size="small"
         type="line"
@@ -513,7 +508,7 @@
       <div class="flex w-full flex-row items-center" :class="{ 'justify-end': columnConfig.align === 'right' }">
         <a-switch
           v-if="columnConfig.hasDisable"
-          v-model="record.enable"
+          v-model:model-value="record.enable"
           :disabled="props.disabledExceptParam"
           size="small"
           type="line"
@@ -538,7 +533,6 @@
                 :disabled="props.disabledExceptParam"
                 :options="Object.values(RequestContentTypeEnum).map((e) => ({ label: e, value: e }))"
                 allow-create
-                size="mini"
                 @change="(val) => addTableLine(val as number)"
               />
             </div>
@@ -589,28 +583,28 @@
   </a-modal>
   <a-modal
     v-model:visible="showQuickInputDesc"
-    :title="t('apiTestDebug.desc')"
+    :title="t('common.desc')"
     :ok-text="t('common.save')"
     :ok-button-props="{ disabled: !quickInputDescValue || quickInputDescValue.trim() === '' }"
     class="ms-modal-form"
     body-class="!p-0"
     :width="480"
     title-align="start"
-    :auto-size="{ minRows: 2 }"
     @ok="applyQuickInputDesc"
     @close="clearQuickInputDesc"
   >
     <a-textarea
       v-model:model-value="quickInputDescValue"
       :placeholder="t('apiTestDebug.descPlaceholder')"
-      :max-length="1000"
+      :auto-size="{ minRows: 2 }"
     ></a-textarea>
   </a-modal>
   <DomainModal v-model:visible="hostVisible" :data="hostData" />
 </template>
 
 <script async setup lang="ts">
-  import { TableColumnData, TableData } from '@arco-design/web-vue';
+  import { useClipboard } from '@vueuse/core';
+  import { Message, TableColumnData, TableData } from '@arco-design/web-vue';
   import { cloneDeep } from 'lodash-es';
 
   import { NO_CHECK } from '@/components/pure/ms-advance-filter/index';
@@ -646,12 +640,13 @@
   // 异步加载组件
   const MsAddAttachment = defineAsyncComponent(() => import('@/components/business/ms-add-attachment/index.vue'));
   const MsParamsInput = defineAsyncComponent(() => import('@/components/business/ms-params-input/index.vue'));
+  const { copy, isSupported } = useClipboard({ legacy: true });
 
   export interface ParamTableColumn extends FormTableColumn {
     isAutoComplete?: boolean; // 用于 key 列区分是否是请求/响应头联想输入
     isNormal?: boolean; // 用于 value 列区分是普通输入框还是 MsParamsInput
     hasRequired?: boolean; // 用于 type 列区分是否有 required 星号
-    typeOptions?: { label: string; value: string }[]; // 用于 type 列选择器选项
+    options?: { label: string; value: string }[]; // 用于 type 列选择器选项
     typeTitleTooltip?: string | string[]; // 用于 type 表头列展示的 tooltip
     hasDisable?: boolean; // 用于 operation 列区分是否有 enable 开关
     moreAction?: ActionsItem[]; // 用于 operation 列更多操作按钮配置
@@ -664,7 +659,7 @@
   const props = withDefaults(
     defineProps<{
       params?: Record<string, any>[];
-      defaultParamItem?: Record<string, any>; // 默认参数项，用于添加新行时的默认值
+      defaultParamItem: Record<string, any>; // 默认参数项，用于添加新行时的默认值
       columns: ParamTableColumn[];
       scroll?: {
         x?: number | string;
@@ -696,6 +691,7 @@
       deleteIntercept?: (record: any, deleteCall: () => void) => void; // 删除行拦截器
       typeChangeIntercept?: (record: any, doChange: () => void) => void; // type 列切换拦截
       enableChangeIntercept?: (record: any, val: string | number | boolean) => boolean | Promise<boolean>; // enable 列切换拦截
+      showQuickCopy?: boolean; // 显示快捷复制icon
     }>(),
     {
       params: () => [],
@@ -703,20 +699,6 @@
       showSetting: false,
       tableKey: undefined,
       isSimpleSetting: true,
-      defaultParamItem: () => ({
-        required: false,
-        key: '',
-        paramType: RequestParamsType.STRING,
-        value: '',
-        minLength: undefined,
-        maxLength: undefined,
-        contentType: RequestContentTypeEnum.TEXT,
-        tag: [],
-        description: '',
-        encode: false,
-        disable: false,
-        mustContain: false,
-      }),
     }
   );
   const emit = defineEmits<{
@@ -847,7 +829,7 @@
   //     width: 300,
   //   },
   //   {
-  //     title: t('project.environmental.http.desc'),
+  //     title: t('common.desc'),
   //     dataIndex: 'description',
   //   },
   // ];
@@ -870,6 +852,7 @@
 
   /** 环境管理-环境组 end */
 
+  const defaultLineData = ref(cloneDeep(props.defaultParamItem));
   /**
    * 当表格输入框变化时，给参数表格添加一行数据行
    * @param val 输入值
@@ -877,6 +860,10 @@
    * @param isForce 是否强制添加
    */
   function addTableLine(rowIndex: number, addLineDisabled?: boolean, isInit?: boolean) {
+    if (props.disabledExceptParam || props.disabledParamValue) {
+      // 禁用状态下不允许添加新行
+      return;
+    }
     if (addLineDisabled) {
       emitChange('addTableLine addLineDisabled', isInit);
       return;
@@ -886,11 +873,11 @@
       // 最后一行的更改才会触发添加新一行
       const id = getGenerateId();
       const lastLineData = paramsData.value[rowIndex]; // 上一行数据
-      const selectColumnKeys = props.columns.filter((e) => e.typeOptions).map((e) => e.dataIndex); // 找到下拉框选项的列
+      const selectColumnKeys = props.columns.filter((e) => e.options).map((e) => e.dataIndex); // 找到下拉框选项的列
       const nextLine = {
+        ...cloneDeep(defaultLineData.value), // 深拷贝，避免有嵌套引用类型，数据隔离
         id,
         enable: true, // 是否勾选
-        ...cloneDeep(props.defaultParamItem), // 深拷贝，避免有嵌套引用类型，数据隔离
       } as any;
       selectColumnKeys.forEach((key) => {
         // 如果是更改了下拉框导致添加新的一列，需要将更改后的下拉框的值应用到下一行（产品为了方便统一输入参数类型）
@@ -909,6 +896,7 @@
         }
       });
       paramsData.value.push(nextLine);
+      defaultLineData.value = cloneDeep(nextLine);
     }
     emitChange('addTableLine', isInit);
     handleMustContainColChange(true);
@@ -925,7 +913,7 @@
             // 批量添加过来的数据最后一行会是 undefined
             hasNoIdItem = true;
             return {
-              ...cloneDeep(props.defaultParamItem),
+              ...cloneDeep(defaultLineData.value),
               id: getGenerateId(),
             };
           }
@@ -939,22 +927,21 @@
           }
           return item;
         });
+        const { lastDataIsDefault } = filterKeyValParams(arr, defaultLineData.value, false);
         if (
-          (!props.disabledExceptParam || !props.disabledParamValue) &&
-          hasNoIdItem &&
-          !filterKeyValParams(arr, props.defaultParamItem).lastDataIsDefault &&
-          !props.isTreeTable
+          (hasNoIdItem && !lastDataIsDefault) ||
+          (!props.disabledExceptParam && !props.disabledParamValue && !lastDataIsDefault && !props.isTreeTable)
         ) {
           addTableLine(arr.length - 1, false, true);
         }
       } else {
-        if (props.disabledExceptParam) return;
+        if (props.disabledExceptParam || props.disabledParamValue) return;
         const id = getGenerateId();
         paramsData.value = [
           {
             id, // 默认给时间戳 id，若 props.defaultParamItem 有 id，则覆盖
             enable: true, // 是否勾选
-            ...cloneDeep(props.defaultParamItem),
+            ...cloneDeep(defaultLineData.value),
           },
         ] as any[];
         emitChange('watch props.params', true);
@@ -966,6 +953,9 @@
   );
 
   function toggleRequired(record: Record<string, any>, rowIndex: number) {
+    if (props.disabledExceptParam || props.disabledParamValue) {
+      return;
+    }
     record.required = !record.required;
     addTableLine(rowIndex);
     emitChange('toggleRequired');
@@ -1002,8 +992,8 @@
         record.files = files.map((e) => ({
           ...e,
           fileId: e.uid || e.fileId || '',
-          fileName: e.originalName || '',
-          fileAlias: e.name || '',
+          fileName: e.originalName || e.name || e.fileName || '',
+          fileAlias: e.name || e.fileName || '',
         }));
       }
       addTableLine(rowIndex);
@@ -1039,9 +1029,21 @@
         record.file = {
           ...files[0],
           fileId: files[0].uid || files[0].fileId || '',
-          fileName: files[0].originalName || '',
+          fileName: files[0].originalName || files[0].fileName || '',
           fileAlias: files[0].name || '',
         };
+      } else {
+        paramsData.value.forEach((e) => {
+          if (e.id === record.id) {
+            e.file = {
+              fileId: '',
+              fileName: '',
+              fileAlias: '',
+              local: false,
+              delete: false,
+            };
+          }
+        });
       }
       addTableLine(rowIndex);
       emitChange('handleFileChange');
@@ -1051,17 +1053,6 @@
     } finally {
       appStore.hideLoading();
     }
-  }
-
-  function handleSingleFileDelete(record: Record<string, any>) {
-    record.file = {
-      fileId: '',
-      fileName: '',
-      fileAlias: '',
-      local: false,
-      delete: false,
-    };
-    emitChange('deleteFile');
   }
 
   const showQuickInputParam = ref(false);
@@ -1233,6 +1224,14 @@
     record[item.dataIndex as string] = val;
   }
 
+  function copyParamsName(value: string) {
+    const copyValue = `\${${value}}`;
+    if (isSupported) {
+      copy(copyValue);
+      Message.info(t('common.copySuccessToClipboard'));
+    }
+  }
+
   const isDisabledCondition = ref([NO_CHECK.value]);
 
   defineExpose({
@@ -1242,26 +1241,14 @@
 
 <style lang="less" scoped>
   .content-type-trigger-content {
-    @apply bg-white;
-
     padding: 8px;
     border-radius: var(--border-radius-small);
+    background-color: var(--color-text-fff);
     box-shadow: 0 4px 10px -1px rgb(100 100 102 / 15%);
   }
-  .param-popover-title {
-    @apply font-medium;
-
-    margin-bottom: 4px;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 16px;
-    color: var(--color-text-1);
-  }
-  .param-popover-value {
-    min-width: 100px;
-    max-width: 280px;
-    font-size: 12px;
-    line-height: 16px;
-    color: var(--color-text-1);
+  :deep(.ms-form-table-input-number) {
+    .arco-input {
+      @apply text-right;
+    }
   }
 </style>

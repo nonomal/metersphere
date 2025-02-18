@@ -1,9 +1,12 @@
 <template>
   <div class="resContent">
     <!-- 展开折叠列表 -->
-    <div class="tiledList">
+    <div v-if="props.requestResult?.responseResult.responseCode" class="tiledList">
       <div v-for="item of props.menuList" :key="item.value" class="menu-list-wrapper">
-        <div v-if="isShowContent(item.value)" class="menu-list">
+        <div
+          v-if="isShowContent(item.value)"
+          :class="`${props.activeType === 'SubRequest' ? 'top-[90px]' : 'top-[38px]'} menu-list`"
+        >
           <div class="flex items-center">
             <MsButton
               v-if="!expandIds.includes(item.value)"
@@ -42,16 +45,24 @@
               <ResValueScript :active-tab="item.value" :request-result="props.requestResult" />
             </div>
             <div v-if="!expandIds.includes(item.value) && item.value === ResponseComposition.EXTRACT">
-              <ResValueScript :active-tab="item.value" :request-result="props.requestResult" />
+              <ExtractTable :request-result="props.requestResult" :scroll="{ x: '100%' }" />
             </div>
             <div v-if="!expandIds.includes(item.value) && item.value === ResponseComposition.ASSERTION">
-              <ResAssertion :request-result="props.requestResult" />
+              <ResAssertion :request-result="props.requestResult" :scroll="{ x: '100%' }" />
             </div>
           </div>
         </transition>
         <a-divider v-if="isShowContent(item.value)" type="dashed" :margin="0"></a-divider>
       </div>
     </div>
+    <a-empty v-else class="flex h-[150px] items-center gap-[16px] p-[16px]">
+      <template #image>
+        <img :src="noDataSvg" class="!h-[60px] w-[78px]" />
+      </template>
+      <div class="flex items-center">
+        {{ t('report.detail.api.noResponseContent') }}
+      </div>
+    </a-empty>
   </div>
 </template>
 
@@ -65,6 +76,7 @@
   import ResBody from './body.vue';
   import ResConsole from './console.vue';
   import ResValueScript from './resValueScript.vue';
+  import ExtractTable from '@/views/api-test/components/requestComposition/response/result/extractTable.vue';
 
   import { useI18n } from '@/hooks/useI18n';
 
@@ -78,10 +90,12 @@
     requestResult?: RequestResult;
     console?: string;
     environmentName?: string;
+    activeType: string; // 激活类型
     menuList: { label: string; value: keyof typeof ResponseComposition }[];
     reportId?: string;
   }>();
 
+  const noDataSvg = `${import.meta.env.BASE_URL}images/noResponse.svg`;
   const expandIds = ref<string[]>([]);
   function changeExpand(value: string) {
     const isExpand = expandIds.value.indexOf(value) > -1;
@@ -109,7 +123,7 @@
   const showRealRequest = computed(
     () => props.requestResult?.responseResult?.headers.trim() || props.requestResult?.url || props.requestResult?.body
   );
-  const showExtract = computed(() => props.requestResult?.responseResult?.vars?.trim());
+  const showExtract = computed(() => (props.requestResult?.responseResult?.extractResults || []).length);
 
   function isShowContent(key: keyof typeof ResponseComposition) {
     switch (key) {
@@ -120,7 +134,7 @@
       case ResponseComposition.REAL_REQUEST:
         return showRealRequest.value;
       case ResponseComposition.CONSOLE:
-        return props?.console?.trim();
+        return props?.console?.trim() && props.requestResult?.responseResult.responseCode;
       case ResponseComposition.EXTRACT:
         return showExtract.value;
       case ResponseComposition.ASSERTION:
@@ -146,7 +160,9 @@
     border: 1px solid var(--color-text-n8);
     border-top: none;
     border-radius: 0 0 6px 6px;
-    @apply mb-4 bg-white p-4;
+    @apply mb-4  p-4;
+
+    background-color: var(--color-text-fff);
     .resContent {
       height: 38px;
       border-radius: 6px;
@@ -157,11 +173,10 @@
     .menu-list-wrapper {
       .menu-list {
         position: sticky;
-        top: 50px;
         z-index: 999999;
         height: 40px;
         line-height: 40px;
-        background: white;
+        background: var(--color-text-fff);
         @apply flex items-start justify-between px-4;
         .menu-title {
           @apply font-medium;

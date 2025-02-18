@@ -16,10 +16,13 @@ public class FunctionalCaseManageInterceptor {
         List<MybatisInterceptorConfig> configList = new ArrayList<>();
 
         configList.add(new MybatisInterceptorConfig(FunctionalCaseMindDTO.class, "steps", CompressUtils.class, "zip", "unzip"));
+        configList.add(new MybatisInterceptorConfig(FunctionalCaseMindDTO.class, "executeSteps", CompressUtils.class, "zip", "unzip"));
         configList.add(new MybatisInterceptorConfig(FunctionalCaseMindDTO.class, "textDescription", CompressUtils.class, "zip", "unzip"));
         configList.add(new MybatisInterceptorConfig(FunctionalCaseMindDTO.class, "expectedResult", CompressUtils.class, "zip", "unzip"));
         configList.add(new MybatisInterceptorConfig(FunctionalCaseMindDTO.class, "prerequisite", CompressUtils.class, "zip", "unzip"));
         configList.add(new MybatisInterceptorConfig(FunctionalCaseMindDTO.class, "description", CompressUtils.class, "zip", "unzip"));
+        configList.add(new MybatisInterceptorConfig(FunctionalCaseMindDTO.class, "content", CompressUtils.class, "zip", "unzip"));
+
 
         return configList;
     }

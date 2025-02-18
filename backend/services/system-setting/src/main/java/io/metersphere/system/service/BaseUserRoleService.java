@@ -2,19 +2,18 @@ package io.metersphere.system.service;
 
 import io.metersphere.sdk.constants.InternalUserRole;
 import io.metersphere.sdk.constants.UserRoleEnum;
+import io.metersphere.sdk.constants.UserRoleType;
 import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.config.PermissionCache;
-import io.metersphere.system.domain.User;
-import io.metersphere.system.domain.UserRole;
-import io.metersphere.system.domain.UserRoleExample;
-import io.metersphere.system.domain.UserRoleRelation;
+import io.metersphere.system.domain.*;
 import io.metersphere.system.dto.permission.Permission;
 import io.metersphere.system.dto.permission.PermissionDefinitionItem;
 import io.metersphere.system.dto.sdk.request.PermissionSettingUpdateRequest;
 import io.metersphere.system.mapper.UserMapper;
 import io.metersphere.system.mapper.UserRoleMapper;
+import io.metersphere.system.mapper.UserRolePermissionMapper;
 import io.metersphere.system.uid.IDGenerator;
 import io.metersphere.system.utils.ServiceUtils;
 import jakarta.annotation.Resource;
@@ -42,6 +41,8 @@ public class BaseUserRoleService {
     @Resource
     private UserRoleMapper userRoleMapper;
     @Resource
+    private UserRolePermissionMapper userRolePermissionMapper;
+    @Resource
     private UserMapper userMapper;
     @Resource
     protected BaseUserRolePermissionService baseUserRolePermissionService;
@@ -62,10 +63,13 @@ public class BaseUserRoleService {
         // 深拷贝
         permissionDefinition = JSON.parseArray(JSON.toJSONString(permissionDefinition), PermissionDefinitionItem.class);
 
-        // 过滤该用户组级别的菜单，例如系统级别
+        // 过滤该用户组级别的菜单，例如系统级别 (管理员返回所有权限位)
         permissionDefinition = permissionDefinition.stream()
-                .filter(item -> StringUtils.equals(item.getType(), userRole.getType()))
-                .toList();
+                .filter(item -> StringUtils.equals(item.getType(), userRole.getType()) || StringUtils.equals(userRole.getId(), InternalUserRole.ADMIN.getValue()))
+                .sorted(Comparator.comparing(PermissionDefinitionItem::getOrder))
+
+
+                .collect(Collectors.toList());
 
         // 设置勾选项
         for (PermissionDefinitionItem firstLevel : permissionDefinition) {
@@ -86,7 +90,8 @@ public class BaseUserRoleService {
                     } else {
                         p.setName(translateDefaultPermissionName(p));
                     }
-                    if (permissionIds.contains(p.getId())) {
+                    // 管理员默认勾选全部二级权限位
+                    if (permissionIds.contains(p.getId()) || StringUtils.equals(userRole.getId(), InternalUserRole.ADMIN.getValue())) {
                         p.setEnable(true);
                     } else {
                         // 如果权限有未勾选，则二级菜单设置为未勾选
@@ -141,6 +146,14 @@ public class BaseUserRoleService {
         userRole.setCreateTime(System.currentTimeMillis());
         userRole.setUpdateTime(System.currentTimeMillis());
         userRoleMapper.insert(userRole);
+        if (StringUtils.equals(userRole.getType(), UserRoleType.PROJECT.name())) {
+            // 项目级别用户组, 初始化基本信息权限
+            UserRolePermission initPermission = new UserRolePermission();
+            initPermission.setId(IDGenerator.nextStr());
+            initPermission.setRoleId(userRole.getId());
+            initPermission.setPermissionId("PROJECT_BASE_INFO:READ");
+            userRolePermissionMapper.insert(initPermission);
+        }
         return userRole;
     }
 
@@ -252,11 +265,11 @@ public class BaseUserRoleService {
         List<UserRoleRelation> addRelations = new ArrayList<>();
         userRoleRelationMap.forEach((groupId, relations) -> {
             // 如果当前用户组只有一个用户，并且就是要删除的用户组，则添加组织成员等默认用户组
-            if (relations.size() == 1 && StringUtils.equals(relations.get(0).getRoleId(), roleId)) {
+            if (relations.size() == 1 && StringUtils.equals(relations.getFirst().getRoleId(), roleId)) {
                 UserRoleRelation relation = new UserRoleRelation();
                 relation.setId(IDGenerator.nextStr());
-                relation.setUserId(relations.get(0).getUserId());
-                relation.setSourceId(relations.get(0).getSourceId());
+                relation.setUserId(relations.getFirst().getUserId());
+                relation.setSourceId(relations.getFirst().getSourceId());
                 relation.setRoleId(defaultRoleId);
                 relation.setCreateTime(System.currentTimeMillis());
                 relation.setCreateUser(currentUserId);

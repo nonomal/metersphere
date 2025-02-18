@@ -3,11 +3,11 @@ package io.metersphere.system.security.realm;
 
 import io.metersphere.sdk.constants.SessionConstants;
 import io.metersphere.sdk.constants.UserSource;
+import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.dto.sdk.SessionUser;
 import io.metersphere.system.dto.user.UserDTO;
-import io.metersphere.system.utils.SessionUtils;
-import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.service.UserLoginService;
+import io.metersphere.system.utils.SessionUtils;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.shiro.SecurityUtils;
@@ -95,7 +95,7 @@ public class LocalRealm extends AuthorizingRealm {
         UserDTO user = userLoginService.getUserDTO(userId);
         String msg;
         if (user == null) {
-            user = userLoginService.getUserDTOByEmail(userId, UserSource.LOCAL.name());
+            user = userLoginService.getUserDTOByEmail(userId);
             if (user == null) {
                 msg = "The user does not exist: " + userId;
                 logger.warn(msg);

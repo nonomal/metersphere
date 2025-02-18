@@ -47,10 +47,6 @@ export const planStatusOptions: { value: planStatusType; label: string }[] = [
   },
   {
     value: 'COMPLETED',
-    label: t('caseManagement.caseReview.unStart'),
-  },
-  {
-    value: 'ARCHIVED',
-    label: t('caseManagement.caseReview.going'),
+    label: t('caseManagement.caseReview.finished'),
   },
 ];

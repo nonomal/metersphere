@@ -11,8 +11,8 @@ import io.metersphere.api.service.definition.ApiReportService;
 import io.metersphere.api.service.scenario.ApiScenarioReportService;
 import io.metersphere.api.service.schedule.SwaggerUrlImportJob;
 import io.metersphere.sdk.constants.ApiExecuteResourceType;
-import io.metersphere.sdk.constants.ApiReportStatus;
 import io.metersphere.sdk.constants.ProjectApplicationType;
+import io.metersphere.sdk.constants.ResultStatus;
 import io.metersphere.sdk.constants.ScheduleType;
 import io.metersphere.system.domain.Schedule;
 import io.metersphere.system.invoker.ProjectServiceInvoker;
@@ -207,6 +207,7 @@ public class CleanupApiTests {
         schedule.setId(IDGenerator.nextStr());
         schedule.setCreateTime(System.currentTimeMillis());
         schedule.setUpdateTime(System.currentTimeMillis());
+        schedule.setNum(1123L);
         scheduleMapper.insertSelective(schedule);
         schedule = new Schedule();
         schedule.setName("test-111");
@@ -222,6 +223,7 @@ public class CleanupApiTests {
         schedule.setId(IDGenerator.nextStr());
         schedule.setCreateTime(System.currentTimeMillis());
         schedule.setUpdateTime(System.currentTimeMillis());
+        schedule.setNum(123456L);
         scheduleMapper.insertSelective(schedule);
     }
 
@@ -250,9 +252,9 @@ public class CleanupApiTests {
             apiReport.setEnvironmentId("api-environment-id" + i);
             apiReport.setRunMode("api-run-mode" + i);
             if (i % 50 == 0) {
-                apiReport.setStatus(ApiReportStatus.SUCCESS.name());
+                apiReport.setStatus(ResultStatus.SUCCESS.name());
             } else if (i % 39 == 0) {
-                apiReport.setStatus(ApiReportStatus.ERROR.name());
+                apiReport.setStatus(ResultStatus.ERROR.name());
             }
             apiReport.setTriggerMode("api-trigger-mode" + i);
             reports.add(apiReport);
@@ -284,9 +286,9 @@ public class CleanupApiTests {
             scenarioReport.setCreateUser("admin");
             scenarioReport.setUpdateUser("admin");
             if (i % 50 == 0) {
-                scenarioReport.setStatus(ApiReportStatus.SUCCESS.name());
+                scenarioReport.setStatus(ResultStatus.SUCCESS.name());
             } else if (i % 39 == 0) {
-                scenarioReport.setStatus(ApiReportStatus.ERROR.name());
+                scenarioReport.setStatus(ResultStatus.ERROR.name());
             }
             scenarioReport.setUpdateTime(System.currentTimeMillis());
             scenarioReport.setPoolId("api-pool-id" + i);

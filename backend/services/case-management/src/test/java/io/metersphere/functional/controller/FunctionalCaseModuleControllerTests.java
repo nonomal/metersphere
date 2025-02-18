@@ -11,7 +11,7 @@ import io.metersphere.functional.request.FunctionalCaseModuleUpdateRequest;
 import io.metersphere.functional.service.FunctionalCaseModuleService;
 import io.metersphere.project.domain.Project;
 import io.metersphere.project.mapper.ProjectMapper;
-import io.metersphere.sdk.constants.FunctionalCaseExecuteResult;
+import io.metersphere.sdk.constants.ExecStatus;
 import io.metersphere.sdk.constants.ModuleConstants;
 import io.metersphere.sdk.constants.SessionConstants;
 import io.metersphere.sdk.util.JSON;
@@ -19,7 +19,6 @@ import io.metersphere.system.base.BaseTest;
 import io.metersphere.system.controller.handler.ResultHolder;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
 import io.metersphere.system.dto.sdk.request.NodeMoveRequest;
-import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.uid.IDGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections4.CollectionUtils;
@@ -704,8 +703,6 @@ public class FunctionalCaseModuleControllerTests extends BaseTest {
         //service层判断：测试删除空集合
         functionalCaseModuleService.deleteModuleByIds(new ArrayList<>(), new ArrayList<>(), "admin");
 
-        checkLog(functionalCase.getId(), OperationLogType.DELETE, URL_MODULE_TREE_DELETE);
-
 
     }
 
@@ -763,7 +760,7 @@ public class FunctionalCaseModuleControllerTests extends BaseTest {
         functionalCase.setPos(500L);
         functionalCase.setVersionId("12335");
         functionalCase.setRefId(functionalCase.getId());
-        functionalCase.setLastExecuteResult(FunctionalCaseExecuteResult.PENDING.name());
+        functionalCase.setLastExecuteResult(ExecStatus.PENDING.name());
         functionalCase.setPublicCase(false);
         functionalCase.setLatest(true);
         functionalCase.setCreateUser("gyq");

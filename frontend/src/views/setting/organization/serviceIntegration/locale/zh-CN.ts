@@ -1,7 +1,9 @@
 export default {
   'organization.service.searchPlugin': '通过插件名称搜索',
-  'organization.service.statusEnableTip': '开启：项目可以与该平台集成并生成该平台的默认模板',
-  'organization.service.statusDisableTip': '关闭：项目无法与该平台集成且该平台默认模板不可用',
+  'organization.service.statusEnableTip': '开启：项目可以与该平台集成',
+  'organization.service.statusJiraEnableTip': '开启：项目可以与该平台集成并生成该平台的默认模板',
+  'organization.service.statusDisableTip': '关闭：项目无法与该平台集成',
+  'organization.service.statusJiraDisableTip': '关闭：项目无法与该平台集成且该平台默认模板不可用',
   'organization.service.headerTip': '服务集成 使用指引',
   'organization.service.integrationList': '集成列表',
   'organization.service.packUp': '收起',
@@ -46,4 +48,5 @@ export default {
   'organization.service.configSuccess': '配置成功',
   'organization.service.updateSuccess': '更新成功',
   'organization.service.noPermissionsTip': '您没有操作权限，请联系管理员',
+  'organization.service.applyTapdAccount': '申请开通 TAPD 的 API 账号',
 };

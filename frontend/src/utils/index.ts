@@ -2,12 +2,15 @@ import { cloneDeep } from 'lodash-es';
 import JSEncrypt from 'jsencrypt';
 
 import { BatchActionQueryParams, MsTableColumnData } from '@/components/pure/ms-table/type';
+import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
 
 import { BugEditCustomField, CustomFieldItem } from '@/models/bug-management';
 
 import { isObject } from './is';
 
 type TargetContext = '_self' | '_parent' | '_blank' | '_top';
+const multipleExcludes = ['MULTIPLE_SELECT', 'CHECKBOX', 'MULTIPLE_MEMBER'];
+const selectExcludes = ['MEMBER', 'RADIO', 'SELECT'];
 
 /**
  * 打开新窗口
@@ -150,12 +153,12 @@ export function desensitize(str: string): string {
  * @param str 标题的动态内容
  * @returns 转化后的字符串
  */
-export function characterLimit(str?: string): string {
+export function characterLimit(str?: string, length?: number): string {
   if (!str) return '';
-  if (str.length <= 20) {
+  if (str.length <= (length || 20)) {
     return str;
   }
-  return `${str.slice(0, 20 - 3)}...`;
+  return `${str.slice(0, length || 20 - 3)}...`;
 }
 
 /**
@@ -231,7 +234,7 @@ export function traverseTree<T>(
  */
 export function mapTree<T>(
   tree: TreeNode<T> | TreeNode<T>[] | T | T[],
-  customNodeFn: (node: TreeNode<T>, path: string) => TreeNode<T> | null = (node) => node,
+  customNodeFn: (node: TreeNode<T>, path: string, _level: number) => TreeNode<T> | null = (node) => node,
   customChildrenKey = 'children',
   parentPath = '',
   level = 0,
@@ -256,7 +259,7 @@ export function mapTree<T>(
         const fullPath = node.path ? `${_parentPath}/${node.path}`.replace(/\/+/g, '/') : '';
         node.sort = i + 1; // sort 从 1 开始
         node.parent = _parent || undefined; // 没有父节点说明是树的第一层
-        const newNode = typeof customNodeFn === 'function' ? customNodeFn(node, fullPath) : node;
+        const newNode = typeof customNodeFn === 'function' ? customNodeFn(node, fullPath, _level) : node;
         if (newNode) {
           newNode.level = _level;
           if (newNode[customChildrenKey] && newNode[customChildrenKey].length > 0) {
@@ -265,7 +268,7 @@ export function mapTree<T>(
         }
         return newNode;
       })
-      .filter(Boolean);
+      .filter((node: TreeNode<T> | null) => node !== null);
   }
   return mapFunc(cloneTree, parentPath, level, parent);
 }
@@ -279,8 +282,9 @@ export function mapTree<T>(
  */
 export function filterTree<T>(
   tree: TreeNode<T> | TreeNode<T>[] | T | T[],
-  filterFn: (node: TreeNode<T>) => boolean,
-  customChildrenKey = 'children'
+  filterFn: (node: TreeNode<T>, nodeIndex: number, parent?: TreeNode<T> | null) => boolean,
+  customChildrenKey = 'children',
+  parentNode: TreeNode<T> | null = null
 ): TreeNode<T>[] {
   if (!Array.isArray(tree)) {
     tree = [tree];
@@ -289,11 +293,11 @@ export function filterTree<T>(
   for (let i = 0; i < tree.length; i++) {
     const node = (tree as TreeNode<T>[])[i];
     // 如果节点满足过滤条件，则保留该节点，并递归过滤子节点
-    if (filterFn(node)) {
-      const newNode = cloneDeep(node);
+    if (filterFn(node, i, parentNode)) {
+      const newNode = cloneDeep({ ...node, [customChildrenKey]: [] });
       if (node[customChildrenKey] && node[customChildrenKey].length > 0) {
         // 递归过滤子节点，并将过滤后的子节点添加到当前节点中
-        newNode[customChildrenKey] = filterTree(node[customChildrenKey], filterFn, customChildrenKey);
+        newNode[customChildrenKey] = filterTree(node[customChildrenKey], filterFn, customChildrenKey, node);
       } else {
         newNode[customChildrenKey] = [];
       }
@@ -312,16 +316,17 @@ export function filterTree<T>(
 export function findNodeByKey<T>(
   trees: TreeNode<T>[],
   targetKey: string | number,
-  customKey = 'key'
+  customKey = 'key',
+  dataKey: string | undefined = undefined
 ): TreeNode<T> | T | null {
   for (let i = 0; i < trees.length; i++) {
     const node = trees[i];
-    if (node[customKey] === targetKey) {
+    if (dataKey ? node[dataKey]?.[customKey] === targetKey : node[customKey] === targetKey) {
       return node; // 如果当前节点的 key 与目标 key 匹配，则返回当前节点
     }
 
     if (Array.isArray(node.children) && node.children.length > 0) {
-      const _node = findNodeByKey(node.children, targetKey, customKey); // 递归在子节点中查找
+      const _node = findNodeByKey(node.children, targetKey, customKey, dataKey); // 递归在子节点中查找
       if (_node) {
         return _node; // 如果在子节点中找到了匹配的节点，则返回该节点
       }
@@ -386,6 +391,34 @@ export function findNodePathByKey<T>(
 
   return null;
 }
+
+/**
+ * 根据customKey替换树节点
+ */
+export function replaceNodeInTree<T>(
+  tree: TreeNode<T>[],
+  targetKey: string,
+  newNode: TreeNode<T>,
+  dataKey?: string,
+  customKey = 'key'
+): boolean {
+  for (let i = 0; i < tree.length; i++) {
+    const node = tree[i];
+    if (dataKey ? node[dataKey]?.[customKey] === targetKey : node[customKey] === targetKey) {
+      // 找到目标节点，进行替换
+      tree[i] = newNode;
+      return true;
+    }
+    if (node.children && node.children.length > 0) {
+      // 如果当前节点有子节点，递归查找
+      if (replaceNodeInTree(node.children, targetKey, newNode, dataKey, customKey)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 /**
  * 在某个节点前/后插入单个新节点
  * @param treeArr 目标树
@@ -461,7 +494,6 @@ export function insertNodes<T>(
     }
     return false;
   }
-
   insertNodeInTree(treeArr);
 }
 
@@ -548,6 +580,7 @@ export function deleteNodes<T>(
   treeArr: TreeNode<T>[],
   targetKeys: (string | number)[],
   deleteCondition?: (node: TreeNode<T>, parent?: TreeNode<T>) => boolean,
+  deleteCallBack?: (node: TreeNode<T>) => void,
   customKey = 'key'
 ): boolean {
   let hasDeleted = false;
@@ -557,6 +590,9 @@ export function deleteNodes<T>(
       const node = tree[i];
       if (targetKeysSet.has(node[customKey])) {
         if (deleteCondition && deleteCondition(node, node.parent)) {
+          if (deleteCallBack) {
+            deleteCallBack(node);
+          }
           tree.splice(i, 1); // 直接删除当前节点
           hasDeleted = true;
           targetKeysSet.delete(node[customKey]); // 删除后从集合中移除
@@ -638,18 +674,62 @@ export const getHashParameters = (): Record<string, string> => {
   return params;
 };
 
+export function getQueryVariable(variable: string) {
+  const urlString = window.location.href;
+  const queryIndex = urlString.indexOf('?');
+  if (queryIndex !== -1) {
+    const query = urlString.substring(queryIndex + 1);
+
+    // 分割查询参数
+    const params = query.split('&');
+    // 遍历参数，找到 _token 参数的值
+    let variableValue;
+    params.forEach((param) => {
+      const equalIndex = param.indexOf('=');
+      const variableName = param.substring(0, equalIndex);
+      if (variableName === variable) {
+        variableValue = param.substring(equalIndex + 1);
+      }
+    });
+    return variableValue;
+  }
+}
+
+export function getUrlParameterWidthRegExp(name: string) {
+  const url = window.location.href;
+  name = name.replace(/[[\]]/g, '\\$&');
+  const regex = new RegExp(`[?&]${name}(=([^&#]*)|&|#|$)`);
+  const results = regex.exec(url);
+  if (!results) return null;
+  if (!results[2]) return '';
+  return decodeURIComponent(results[2].replace(/\+/g, ' '));
+}
+
+let lastTimestamp = 0;
+let sequence = 0;
+
 /**
  * 生成 id 序列号
  * @returns
  */
 export const getGenerateId = () => {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    // eslint-disable-next-line no-bitwise
-    const r = (Math.random() * 16) | 0;
-    // eslint-disable-next-line no-bitwise
-    const v = c === 'x' ? r : (r & 0x3) | 0x8;
-    return v.toString(16);
-  });
+  let timestamp = new Date().getTime();
+  if (timestamp === lastTimestamp) {
+    sequence++;
+    if (sequence >= 100000) {
+      // 如果超过999，则重置为0，等待下一秒
+      sequence = 0;
+      while (timestamp <= lastTimestamp) {
+        timestamp = new Date().getTime();
+      }
+    }
+  } else {
+    sequence = 0;
+  }
+
+  lastTimestamp = timestamp;
+
+  return timestamp.toString() + sequence.toString().padStart(5, '0');
 };
 
 /**
@@ -807,21 +887,38 @@ export function formatPhoneNumber(phoneNumber = '') {
   }
   return phoneNumber;
 }
+
+// 获取表头自定义字段过滤索引
+export function getCustomFieldIndex(field: CustomFieldItem) {
+  const { fieldId } = field;
+  if (selectExcludes.includes(field.type)) {
+    return `custom_single_${fieldId}`;
+  }
+  if (multipleExcludes.includes(field.type)) {
+    return `custom_multiple_${fieldId}`;
+  }
+  return fieldId;
+}
+
 // 表格自定义字段转column
 export function customFieldToColumns(customFields: CustomFieldItem[]) {
   return customFields.map((field) => {
-    const { fieldName, fieldKey, fieldId } = field;
+    const { fieldName, fieldKey, fieldId, options, platformOptionJson, type } = field;
     const column: MsTableColumnData = {
       title: fieldName,
-      dataIndex: ['handleUser', 'status'].includes(fieldId) ? fieldKey : fieldId,
+      dataIndex: ['handleUser', 'status'].includes(fieldId) ? fieldKey : getCustomFieldIndex(field),
       showTooltip: true,
       showDrag: true,
       showInTable: true,
       width: 200,
+      options: options || JSON.parse(platformOptionJson),
+      type,
+      internal: field.internal,
     };
     return column;
   });
 }
+
 // 表格查询参数转请求参数
 export function tableParamsToRequestParams(params: BatchActionQueryParams) {
   const { selectedIds, selectAll, excludeIds, condition } = params;
@@ -855,6 +952,34 @@ export function parseQueryParams(url: string): QueryParam[] {
   return queryParams;
 }
 
+export interface CascaderOption {
+  children?: CascaderOption[];
+  value: string;
+  text: string;
+}
+
+/**
+ * 解析级联选择器的值
+ * @param arr 值
+ * @param options 级联选项 (默认层级2)
+ */
+export function cascaderValueToLabel(arr: string[], options: CascaderOption[]) {
+  if (!arr || !options || arr.length === 0) return '';
+  let targetLabel = '';
+  options.forEach((option) => {
+    if (option.value === arr[0]) {
+      targetLabel += option.text;
+      if (arr.length === 1) return;
+      option.children?.forEach((child) => {
+        if (child.value === arr[1]) {
+          targetLabel += `/${child.text}`;
+        }
+      });
+    }
+  });
+  return targetLabel;
+}
+
 /**
  * 将表格数据里的自定义字段转换为表格数据二维变一维
  */
@@ -862,9 +987,6 @@ export function customFieldDataToTableData(customFieldData: Record<string, any>[
   if (!customFieldData || !customFields) return {};
 
   const tableData: Record<string, any> = {};
-  const multipleExcludes = ['MULTIPLE_SELECT', 'CHECKBOX', 'MULTIPLE_MEMBER'];
-  const selectExcludes = ['MEMBER', 'RADIO', 'SELECT'];
-
   customFieldData.forEach((field) => {
     const customField = customFields.find((item) => item.fieldId === field.id);
     if (!customField) return;
@@ -889,7 +1011,19 @@ export function customFieldDataToTableData(customFieldData: Record<string, any>[
           .map((val: string) => field.options.find((option: { value: string }) => option.value === val)?.text)
           .join(',');
       } catch (e) {
-        console.log('自定义字段值不是数组');
+        // eslint-disable-next-line no-console
+        console.error('multiple field value is not array!');
+      }
+    } else if (field.type === 'CASCADER' && field.value) {
+      try {
+        const arr = JSON.parse(field.value);
+        if (arr.length > 1) {
+          // 特殊的三方字段-级联选择器
+          tableData[field.id] = cascaderValueToLabel(arr, field.options);
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('cascader field value is nor array!');
       }
     } else {
       tableData[field.id] = field.value;
@@ -991,4 +1125,24 @@ export function formatDuration(ms: number) {
   const hours = minutes / 60;
   // 返回小时
   return `${hours.toFixed(1)}-hr`;
+}
+
+export const operationWidth = (enWidth: number, zhWidth: number) =>
+  localStorage.getItem('MS-locale') === 'en-US' ? enWidth : zhWidth;
+
+/**
+ * 下拉树查询检索
+ * @param searchValue 搜索关键字
+ * @param nodeData 树节点
+ */
+export function filterTreeNode(searchValue: string, nodeData: MsTreeNodeData, nameKey = 'name') {
+  return nodeData[nameKey].toLowerCase().includes(searchValue.toLowerCase());
+}
+
+/**
+ * 判断是否是mac系统
+ */
+export function isMacOs() {
+  const platform = navigator.platform.toLowerCase();
+  return platform.includes('mac');
 }

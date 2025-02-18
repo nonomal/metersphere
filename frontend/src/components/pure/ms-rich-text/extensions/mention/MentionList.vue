@@ -82,15 +82,17 @@
   });
 </script>
 
-<style lang="scss">
+<style lang="less">
   .items {
     position: relative;
-    overflow: hidden;
+    overflow: auto;
     padding: 8px;
+    max-height: 220px;
     border-radius: 4px;
     color: block;
+    background-color: var(--color-text-fff);
     box-shadow: 0 0 0 1px rgba(0 0 0 / 5%), 0 10px 20px rgba(0 0 0 / 10%);
-    @apply bg-white;
+    .ms-scroll-bar();
   }
   .item {
     display: block;

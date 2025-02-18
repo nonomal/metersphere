@@ -17,27 +17,38 @@ import {
   dragSortUrl,
   ExecuteHistoryUrl,
   ExecuteScenarioUrl,
+  ExportScenarioUrl,
   FollowScenarioUrl,
+  GetExportScenarioFileUrl,
   GetModuleCountUrl,
   GetModuleTreeUrl,
+  GetScenarioBatchExportParamsUrl,
   GetScenarioStepUrl,
   GetScenarioUrl,
   GetStepProjectInfoUrl,
   GetSystemRequestUrl,
   GetTrashModuleCountUrl,
   GetTrashModuleTreeUrl,
+  ImportScenarioUrl,
   MoveModuleUrl,
   RecoverScenarioUrl,
   RecycleScenarioUrl,
+  ScenarioAssociateExportUrl,
+  ScenarioBatchEditScheduleUrl,
+  ScenarioBatchExportLogUrl,
+  ScenarioCopyStepFilesUrl,
+  ScenarioExportLogUrl,
   ScenarioHistoryUrl,
   ScenarioPageUrl,
   ScenarioScheduleConfigDeleteUrl,
   ScenarioScheduleConfigUrl,
+  ScenarioStatisticsUrl,
   ScenarioStepTransferFileUrl,
   ScenarioTransferFileUrl,
   ScenarioTransferModuleOptionsUrl,
   ScenarioTrashPageUrl,
   ScenarioUploadTempFileUrl,
+  StopExportScenarioUrl,
   UpdateModuleUrl,
   UpdateScenarioPriorityUrl,
   UpdateScenarioStatusUrl,
@@ -50,6 +61,7 @@ import {
   ApiScenarioBatchEditParams,
   ApiScenarioBatchOptionResult,
   ApiScenarioBatchRunParams,
+  type ApiScenarioBatchScheduleConfig,
   ApiScenarioDebugRequest,
   ApiScenarioGetModuleParams,
   ApiScenarioModuleUpdateParams,
@@ -59,15 +71,21 @@ import {
   ApiScenarioUpdateDTO,
   ExecuteHistoryItem,
   ExecutePageParams,
+  type ExportScenarioParams,
+  type GetScenarioUnSaveStepParams,
   GetSystemRequestParams,
+  type ImportScenarioParams,
+  ImportSystemData,
   Scenario,
   ScenarioDetail,
   ScenarioHistoryItem,
   ScenarioHistoryPageParams,
+  type ScenarioStatisticsItem,
   ScenarioStepResourceInfo,
 } from '@/models/apiTest/scenario';
 import {
   AddModuleParams,
+  type BatchApiParams,
   CommonList,
   DragSortParams,
   ModuleTreeNode,
@@ -303,4 +321,68 @@ export function updateScenarioPro(id: string | number, priority: CaseLevel | und
 // 获取跨项目信息
 export function getStepProjectInfo(id: string, type: ScenarioStepType) {
   return MSR.get<ScenarioStepResourceInfo>({ url: `${GetStepProjectInfoUrl}/${id}`, params: { resourceType: type } });
+}
+
+// 场景导出报告日志记录
+export function logScenarioReportExport(reportId: string) {
+  return MSR.post({ url: `${ScenarioExportLogUrl}/${reportId}` });
+}
+
+// 场景导出报告日志记录
+export function logScenarioReportBatchExport(data: BatchApiParams) {
+  return MSR.post({ url: `${ScenarioBatchExportLogUrl}`, data });
+}
+
+// 场景导出报告id集合
+export function getScenarioBatchExportParams(data: BatchApiParams) {
+  return MSR.post({ url: `${GetScenarioBatchExportParamsUrl}`, data });
+}
+
+// 场景导出报告id集合
+export function scenarioAssociateExport(data: ImportSystemData) {
+  return MSR.post({ url: `${ScenarioAssociateExportUrl}`, data });
+}
+
+// 导入场景
+export function importScenario(params: ImportScenarioParams) {
+  return MSR.uploadFile({ url: ImportScenarioUrl }, { fileList: [params.file], request: params.request }, 'file');
+}
+
+// 导出场景
+export function exportScenario(data: ExportScenarioParams, type: string) {
+  return MSR.post({ url: `${ExportScenarioUrl}/${type}`, data });
+}
+
+// 停止导出场景
+export function stopScenarioExport(taskId: string) {
+  return MSR.get({ url: `${StopExportScenarioUrl}/${taskId}` });
+}
+
+// 获取导出的文件
+export function getScenarioDownloadFile(projectId: string, fileId: string) {
+  return MSR.get(
+    {
+      url: `${GetExportScenarioFileUrl}/${projectId}/${fileId}`,
+      responseType: 'blob',
+    },
+    { isTransformResponse: false }
+  );
+}
+
+// 批量编辑场景定时任务
+export function scenarioBatchEditSchedule(data: ApiScenarioBatchScheduleConfig) {
+  return MSR.post({ url: ScenarioBatchEditScheduleUrl, data });
+}
+
+// 场景执行率统计
+export function getScenarioStatistics(data: string[]) {
+  return MSR.post<ScenarioStatisticsItem[]>({ url: ScenarioStatisticsUrl, data });
+}
+
+// 复制步骤时复制文件
+export function scenarioCopyStepFiles(data: GetScenarioUnSaveStepParams) {
+  return MSR.post<Record<string, any>>({
+    url: ScenarioCopyStepFilesUrl,
+    data,
+  });
 }

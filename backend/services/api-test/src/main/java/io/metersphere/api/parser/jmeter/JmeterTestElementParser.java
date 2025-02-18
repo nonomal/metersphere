@@ -1,16 +1,23 @@
 package io.metersphere.api.parser.jmeter;
 
+import io.metersphere.api.dto.ApiParamConfig;
 import io.metersphere.api.dto.request.MsScenario;
 import io.metersphere.api.dto.scenario.ScenarioOtherConfig;
 import io.metersphere.api.parser.TestElementParser;
-import io.metersphere.api.utils.JmeterElementConverterRegister;
 import io.metersphere.plugin.api.dto.ParameterConfig;
+import io.metersphere.plugin.api.spi.AbstractJmeterElementConverter;
+import io.metersphere.plugin.api.spi.AbstractMsProtocolTestElement;
 import io.metersphere.plugin.api.spi.AbstractMsTestElement;
+import io.metersphere.project.dto.environment.EnvironmentInfoDTO;
+import io.metersphere.project.dto.environment.variables.CommonVariables;
 import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.util.LogUtils;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.config.Arguments;
 import org.apache.jmeter.control.LoopController;
+import org.apache.jmeter.modifiers.UserParameters;
 import org.apache.jmeter.sampler.DebugSampler;
 import org.apache.jmeter.save.SaveService;
 import org.apache.jmeter.testelement.TestElement;
@@ -20,6 +27,8 @@ import org.apache.jorphan.collections.HashTree;
 import org.apache.jorphan.collections.ListedHashTree;
 
 import java.io.ByteArrayOutputStream;
+import java.util.List;
+import java.util.Optional;
 
 /**
  * @Author: jianxing
@@ -44,12 +53,33 @@ public class JmeterTestElementParser implements TestElementParser {
         this.config = config;
         HashTree hashTree = new ListedHashTree();
         TestPlan testPlan = getPlan();
+
+        // 添加场景ID到 JMeter 测试计划变量中
+        if (msTestElement instanceof MsScenario msScenario) {
+            Arguments arguments = new Arguments();
+            arguments.addArgument("ms_scenario_id", msScenario.getResourceId());
+            testPlan.setUserDefinedVariables(arguments);
+        }
+
         name = msTestElement.getName();
         final HashTree testPlanTree = hashTree.add(testPlan);
         final HashTree groupTree = testPlanTree.add(getThreadGroup(msTestElement));
 
+        if (msTestElement instanceof AbstractMsProtocolTestElement) {
+            // 如果是单接口执行，添加环境变量，接口插件也需要支持访问变量
+            // 场景执行时，场景解析器里会处理变量
+            ApiParamConfig apiParamConfig = (ApiParamConfig) config;
+            EnvironmentInfoDTO envConfig = apiParamConfig.getEnvConfig(msTestElement.getProjectId());
+            // 处理环境变量
+            UserParameters userParameters = getEnvUserParameters(msTestElement.getName(), envConfig);
+            Optional.ofNullable(userParameters).ifPresent(groupTree::add);
+        }
+
+        // 拦截器拦截
+        HashTree wrapperTree = AbstractJmeterElementConverter.intercept(config, msTestElement, groupTree);
+
         // 解析 msTestElement
-        JmeterElementConverterRegister.getConverter(msTestElement.getClass()).toHashTree(groupTree, msTestElement, config);
+        JmeterElementConverterRegister.getConverter(msTestElement.getClass()).toHashTree(wrapperTree, msTestElement, config);
 
         // 添加 debugSampler，放最后才能采集到变量信息
         groupTree.add(getDebugSampler());
@@ -89,7 +119,7 @@ public class JmeterTestElementParser implements TestElementParser {
 
         ThreadGroup threadGroup = new ThreadGroup();
         threadGroup.setEnabled(true);
-        threadGroup.setName(config.getReportId());
+        threadGroup.setName(config.getTaskItemId());
         threadGroup.setProperty(TestElement.TEST_CLASS, ThreadGroup.class.getName());
         threadGroup.setProperty(TestElement.GUI_CLASS, SaveService.aliasToClass("ThreadGroupGui"));
         threadGroup.setNumThreads(1);
@@ -130,5 +160,27 @@ public class JmeterTestElementParser implements TestElementParser {
         debugSampler.setProperty("displayJMeterVariables", displayJMeterVariables);
         debugSampler.setProperty("displaySystemProperties", displaySystemProperties);
         return debugSampler;
+    }
+
+    /**
+     * 添加环境变量
+     *
+     * @param name
+     * @param envInfo
+     */
+    private UserParameters getEnvUserParameters(String name, EnvironmentInfoDTO envInfo) {
+        if (envInfo == null) {
+            return null;
+        }
+
+        List<CommonVariables> envVariables = envInfo.getConfig().getCommonVariables();
+        envVariables = envVariables.stream()
+                .filter(variable -> BooleanUtils.isTrue(variable.getEnable()) && variable.isValid())
+                .toList();
+        if (CollectionUtils.isEmpty(envVariables)) {
+            return null;
+        }
+
+        return JmeterTestElementParserHelper.getUserParameters(name, envVariables);
     }
 }

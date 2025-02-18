@@ -19,6 +19,7 @@
       </div>
     </div>
     <ms-base-table
+      ref="apiTableRef"
       v-bind="propsRes"
       :action-config="batchActions"
       :first-column-width="44"
@@ -28,67 +29,11 @@
       @selected-change="handleTableSelect"
       @batch-action="handleTableBatch"
     >
-      <template #methodFilter="{ columnConfig }">
-        <a-trigger
-          v-model:popup-visible="methodFilterVisible"
-          trigger="click"
-          @popup-visible-change="handleFilterHidden"
-        >
-          <MsButton type="text" class="arco-btn-text--secondary ml-[10px]" @click="methodFilterVisible = true">
-            {{ t(columnConfig.title as string) }}
-            <icon-down :class="methodFilterVisible ? 'text-[rgb(var(--primary-5))]' : ''" />
-          </MsButton>
-          <template #content>
-            <div class="arco-table-filters-content">
-              <div class="ml-[6px] flex items-center justify-start px-[6px] py-[2px]">
-                <a-checkbox-group v-model:model-value="methodFilters" direction="vertical" size="small">
-                  <a-checkbox v-for="key of RequestMethods" :key="key" :value="key">
-                    <apiMethodName :method="key" />
-                  </a-checkbox>
-                </a-checkbox-group>
-              </div>
-              <div class="filter-button">
-                <a-button size="mini" class="mr-[8px]" @click="resetMethodFilter">
-                  {{ t('common.reset') }}
-                </a-button>
-                <a-button type="primary" size="mini" @click="handleFilterHidden(false)">
-                  {{ t('system.orgTemplate.confirm') }}
-                </a-button>
-              </div>
-            </div>
-          </template>
-        </a-trigger>
+      <template #[FilterSlotNameEnum.API_TEST_API_REQUEST_METHODS]="{ filterContent }">
+        <apiMethodName :method="filterContent.value" />
       </template>
-      <template #statusFilter="{ columnConfig }">
-        <a-trigger
-          v-model:popup-visible="statusFilterVisible"
-          trigger="click"
-          @popup-visible-change="handleFilterHidden"
-        >
-          <MsButton type="text" class="arco-btn-text--secondary ml-[10px]" @click="statusFilterVisible = true">
-            {{ t(columnConfig.title as string) }}
-            <icon-down :class="statusFilterVisible ? 'text-[rgb(var(--primary-5))]' : ''" />
-          </MsButton>
-          <template #content>
-            <div class="arco-table-filters-content">
-              <div class="ml-[6px] flex items-center justify-start px-[6px] py-[2px]">
-                <a-checkbox-group v-model:model-value="statusFilters" direction="vertical" size="small">
-                  <a-checkbox v-for="val of Object.values(RequestDefinitionStatus)" :key="val" :value="val">
-                    <apiStatus :status="val" />
-                  </a-checkbox>
-                </a-checkbox-group>
-              </div>
-              <div class="filter-button">
-                <a-button size="mini" class="mr-[8px]" @click="resetStatusFilter">
-                  {{ t('common.reset') }}
-                </a-button>
-                <a-button type="primary" size="mini" @click="handleFilterHidden(false)">
-                  {{ t('system.orgTemplate.confirm') }}
-                </a-button>
-              </div>
-            </div>
-          </template>
-        </a-trigger>
+      <template #[FilterSlotNameEnum.API_TEST_API_REQUEST_API_STATUS]="{ filterContent }">
+        <apiStatus :status="filterContent.value" />
       </template>
       <template #deleteUserFilter="{ columnConfig }">
         <TableFilter
@@ -105,6 +50,9 @@
       </template>
       <template #deleteUserName="{ record }">
         <span type="text" class="px-0">{{ record.deleteUserName || '-' }}</span>
+      </template>
+      <template #protocol="{ record }">
+        <apiMethodName :method="record.protocol" />
       </template>
       <template #method="{ record }">
         <apiMethodName :method="record.method" is-tag />
@@ -148,6 +96,7 @@
   import apiStatus from '@/views/api-test/components/apiStatus.vue';
   import TableFilter from '@/views/case-management/caseManagementFeature/components/tableFilter.vue';
 
+  import { getProtocolList } from '@/api/modules/api-test/common';
   import {
     batchCleanOutDefinition,
     batchRecoverDefinition,
@@ -159,8 +108,9 @@
   import useModal from '@/hooks/useModal';
   import useTableStore from '@/hooks/useTableStore';
   import useAppStore from '@/store/modules/app';
-  import { characterLimit } from '@/utils';
+  import { characterLimit, operationWidth } from '@/utils';
 
+  import { ProtocolItem } from '@/models/apiTest/common';
   import {
     ApiDefinitionDetail,
     ApiDefinitionGetModuleParams,
@@ -168,12 +118,13 @@
   } from '@/models/apiTest/management';
   import { RequestDefinitionStatus, RequestMethods } from '@/enums/apiEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
+  import { FilterSlotNameEnum } from '@/enums/tableFilterEnum';
 
   const props = defineProps<{
     class?: string;
     activeModule: string;
     offspringIds: string[];
-    protocol: string; // 查看的协议类型
+    selectedProtocols: string[];
     readOnly?: boolean; // 是否是只读模式
     memberOptions: { label: string; value: string }[];
   }>();
@@ -187,7 +138,53 @@
   const refreshModuleTree: (() => Promise<any>) | undefined = inject('refreshModuleTree');
   const refreshModuleTreeCount: ((data: ApiDefinitionGetModuleParams) => Promise<any>) | undefined =
     inject('refreshModuleTreeCount');
-  const columns: MsTableColumn = [
+
+  // TODO: 后期优化 放store里
+  const protocolList = ref<ProtocolItem[]>([]);
+  async function initProtocolList() {
+    try {
+      const res = await getProtocolList(appStore.currentOrgId);
+      protocolList.value = res.map((e) => ({
+        protocol: e.protocol,
+        polymorphicName: e.polymorphicName,
+        pluginId: e.pluginId,
+      }));
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  }
+  onBeforeMount(() => {
+    initProtocolList();
+  });
+
+  // TODO 后期提到apiTest公用里
+  const requestMethodsOptions = computed(() => {
+    const otherMethods = protocolList.value
+      .filter((e) => e.protocol !== 'HTTP')
+      .map((item) => {
+        return {
+          value: item.protocol,
+          key: item.protocol,
+        };
+      });
+    const httpMethods = Object.values(RequestMethods).map((e) => {
+      return {
+        value: e,
+        key: e,
+      };
+    });
+    return [...httpMethods, ...otherMethods];
+  });
+  const requestApiStatus = computed(() => {
+    return Object.values(RequestDefinitionStatus).map((e) => {
+      return {
+        value: e,
+        key: e,
+      };
+    });
+  });
+  let columns: MsTableColumn = [
     {
       title: 'ID',
       dataIndex: 'num',
@@ -197,7 +194,6 @@
         sortDirections: ['ascend', 'descend'],
         sorter: true,
       },
-      fixed: 'left',
       columnSelectorDisabled: true,
       width: 100,
     },
@@ -213,11 +209,30 @@
       columnSelectorDisabled: true,
     },
     {
+      title: 'apiTestManagement.protocol',
+      dataIndex: 'protocol',
+      slotName: 'protocol',
+      showTooltip: true,
+      width: 200,
+      showDrag: true,
+    },
+    {
       title: 'apiTestManagement.apiType',
       dataIndex: 'method',
       slotName: 'method',
       titleSlotName: 'methodFilter',
       width: 140,
+      showDrag: true,
+      filterConfig: {
+        options: requestMethodsOptions.value,
+        filterSlotName: FilterSlotNameEnum.API_TEST_API_REQUEST_METHODS,
+      },
+    },
+    {
+      title: 'apiTestManagement.path',
+      dataIndex: 'path',
+      showTooltip: true,
+      width: 200,
       showDrag: true,
     },
     {
@@ -227,13 +242,10 @@
       titleSlotName: 'statusFilter',
       width: 130,
       showDrag: true,
-    },
-    {
-      title: 'apiTestManagement.path',
-      dataIndex: 'path',
-      showTooltip: true,
-      width: 200,
-      showDrag: true,
+      filterConfig: {
+        options: requestApiStatus.value,
+        filterSlotName: FilterSlotNameEnum.API_TEST_API_REQUEST_API_STATUS,
+      },
     },
     {
       title: 'common.tag',
@@ -267,7 +279,7 @@
       slotName: 'action',
       dataIndex: 'operation',
       fixed: 'right',
-      width: 150,
+      width: operationWidth(230, 150),
     },
   ];
   const { propsRes, propsEvent, loadList, setLoadListParams, resetSelector } = useTable(
@@ -333,7 +345,7 @@
       projectId: appStore.currentProjectId,
       moduleIds: props.activeModule === 'all' ? [] : queryModuleIds,
       deleted: true,
-      protocol: props.protocol,
+      protocols: props.selectedProtocols,
       filter: {
         status: statusFilters.value,
         method: methodFilters.value,
@@ -349,7 +361,7 @@
           deleteUser: deleteUserFilters.value,
         },
         moduleIds: [],
-        protocol: props.protocol,
+        protocols: props.selectedProtocols,
         projectId: appStore.currentProjectId,
       });
     }
@@ -371,8 +383,9 @@
     }
   );
 
+  // 第一次初始化会触发，所以不需要onBeforeMount再次调用
   watch(
-    () => props.protocol,
+    () => props.selectedProtocols,
     () => {
       resetSelector();
       loadApiList(true);
@@ -401,10 +414,6 @@
     statusFilterVisible.value = false;
     loadApiList(false);
   }
-
-  onBeforeMount(() => {
-    loadApiList(true);
-  });
 
   const tableSelected = ref<(string | number)[]>([]);
   const batchParams = ref<BatchActionQueryParams>({
@@ -448,7 +457,7 @@
       selectIds: batchParams.value.selectedIds as string[],
       moduleIds: props.activeModule === 'all' ? [] : queryModuleIds,
       projectId: appStore.currentProjectId,
-      protocol: props.protocol,
+      protocols: props.selectedProtocols,
       condition: {
         keyword: keyword.value,
         filter: {
@@ -559,7 +568,6 @@
       await recoverDefinition({
         id: record.id,
         projectId: record.projectId,
-        protocol: props.protocol,
       });
       Message.success(t('apiTestManagement.recycle.recoveredSuccessfully'));
       resetSelector();
@@ -576,7 +584,31 @@
     loadApiList,
   });
 
+  function initFilterColumn() {
+    columns = columns.map((item) => {
+      if (item.dataIndex === 'method') {
+        return {
+          ...item,
+          filterConfig: {
+            ...item.filterConfig,
+            options: requestMethodsOptions.value,
+          },
+        };
+      }
+      return item;
+    });
+  }
+
+  await initFilterColumn();
   await tableStore.initColumn(TableKeyEnum.API_TEST, columns, 'drawer', true);
+  const apiTableRef = ref();
+  watch(
+    () => requestMethodsOptions.value,
+    () => {
+      initFilterColumn();
+      apiTableRef.value.initColumn(columns);
+    }
+  );
 </script>
 
 <style lang="less" scoped>

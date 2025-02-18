@@ -39,7 +39,7 @@
                     </div>
                     <div class="flex">
                       <div class="mr-[8px] whitespace-nowrap text-[var(--color-text-4)]">
-                        {{ t('project.messageManagement.desc') }}
+                        {{ t('common.desc') }}
                       </div>
                       <div class="text-[var(--color-text-1)]">{{ field.name }}</div>
                     </div>
@@ -59,8 +59,8 @@
           <div class="font-medium text-[var(--color-text-1)]">
             {{ t('project.messageManagement.messageTemplate') }}
           </div>
-          <div class="flex whitespace-nowrap text-[rgb(var(--warning-6))]">
-            <icon-exclamation-circle class="mr-[4px] mt-[2px] text-[rgb(var(--warning-6))]" />
+          <div class="ml-[8px] flex items-center whitespace-nowrap text-[rgb(var(--warning-6))]">
+            <icon-exclamation-circle class="mr-[4px] text-[rgb(var(--warning-6))]" />
             {{
               currentLocale === 'zh-CN'
                 ? '引用消息变量格式为：${变量名称}'
@@ -95,7 +95,7 @@
           </div>
           <div
             v-else
-            class="flex h-[calc(100%-156px)] flex-col items-center gap-[16px] bg-white"
+            class="flex h-[calc(100%-156px)] flex-col items-center gap-[16px] bg-[var(--color-text-fff)]"
             @click="focusTemplate"
           >
             <div class="content-empty-img"></div>
@@ -325,13 +325,14 @@
     padding: 16px 10px 16px 16px;
   }
   .field-item {
-    @apply flex cursor-pointer bg-white;
+    @apply flex cursor-pointer;
 
     margin-bottom: 4px;
     padding: 8px 12px;
     height: 38px;
     border: 1px solid var(--color-text-n8);
     border-radius: var(--border-radius-small);
+    background-color: var(--color-text-fff);
     gap: 8px;
     .field-plus {
       @apply invisible ml-auto;

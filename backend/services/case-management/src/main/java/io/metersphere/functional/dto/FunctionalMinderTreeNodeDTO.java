@@ -13,6 +13,9 @@ public class FunctionalMinderTreeNodeDTO {
     @Schema(description = "节点ID")
     private String id;
 
+    @Schema(description = "用例ID")
+    private String caseId;
+
     @Schema(description = "节点顺序")
     private Long pos;
 
@@ -20,7 +23,7 @@ public class FunctionalMinderTreeNodeDTO {
     private String text;
 
     @Schema(description = "用例等级")
-    private String priority;
+    private Integer priority;
 
     @Schema(description = "用例评审状态")
     private String status;

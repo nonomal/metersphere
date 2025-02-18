@@ -35,6 +35,12 @@ public class ApiTestCaseDTO {
     @Schema(description = "接口fk")
     private String apiDefinitionId;
 
+    @Schema(description = "接口num")
+    private Long apiDefinitionNum;
+
+    @Schema(description = "接口名称")
+    private String apiDefinitionName;
+
     @Schema(description = "环境fk")
     private String environmentId;
 
@@ -81,7 +87,7 @@ public class ApiTestCaseDTO {
     private List<String> tags;
 
     @Schema(description = "用例通过率")
-    private String passRate;
+    private String passRate = "NONE";
 
     @Schema(description = "请求内容")
     private AbstractMsTestElement request;
@@ -95,4 +101,15 @@ public class ApiTestCaseDTO {
     @Schema(description = "协议")
     private String protocol;
 
+    @Schema(description = "接口定义参数变更标识")
+    private Boolean apiChange;
+
+    @Schema(description = "与接口定义不一致")
+    private Boolean inconsistentWithApi;
+
+    @Schema(description = "忽略接口与用例参数不一致")
+    private Boolean ignoreApiDiff;
+
+    @Schema(description = "忽略接口定义参数变更")
+    private Boolean ignoreApiChange;
 }

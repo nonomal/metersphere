@@ -1,12 +1,16 @@
 package io.metersphere.plan.domain;
 
-import io.metersphere.validation.groups.*;
+import io.metersphere.validation.groups.Created;
+import io.metersphere.validation.groups.Updated;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
+import lombok.Data;
+
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
-import lombok.Data;
 
 @Data
 public class TestPlanApiScenario implements Serializable {
@@ -14,9 +18,6 @@ public class TestPlanApiScenario implements Serializable {
     @NotBlank(message = "{test_plan_api_scenario.id.not_blank}", groups = {Updated.class})
     @Size(min = 1, max = 50, message = "{test_plan_api_scenario.id.length_range}", groups = {Created.class, Updated.class})
     private String id;
-
-    @Schema(description = "num")
-    private Long num;
 
     @Schema(description = "测试计划ID", requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "{test_plan_api_scenario.test_plan_id.not_blank}", groups = {Created.class})
@@ -26,14 +27,17 @@ public class TestPlanApiScenario implements Serializable {
     @Schema(description = "场景ID")
     private String apiScenarioId;
 
+    @Schema(description = "所属环境或环境组id")
+    private String environmentId;
+
+    @Schema(description = "执行人")
+    private String executeUser;
+
     @Schema(description = "最后执行结果")
     private String lastExecResult;
 
     @Schema(description = "最后执行报告")
     private String lastExecReportId;
-
-    @Schema(description = "执行人")
-    private String executeUser;
 
     @Schema(description = "创建时间")
     private Long createTime;
@@ -45,23 +49,33 @@ public class TestPlanApiScenario implements Serializable {
     @NotNull(message = "{test_plan_api_scenario.pos.not_blank}", groups = {Created.class})
     private Long pos;
 
-    @Schema(description = "所属环境")
-    private String environmentId;
+    @Schema(description = "测试计划集id", requiredMode = Schema.RequiredMode.REQUIRED)
+    @NotBlank(message = "{test_plan_api_scenario.test_plan_collection_id.not_blank}", groups = {Created.class})
+    @Size(min = 1, max = 50, message = "{test_plan_api_scenario.test_plan_collection_id.length_range}", groups = {Created.class, Updated.class})
+    private String testPlanCollectionId;
+
+    @Schema(description = "是否为环境组")
+    private Boolean grouped;
+
+    @Schema(description = "最后执行时间")
+    private Long lastExecTime;
 
     private static final long serialVersionUID = 1L;
 
     public enum Column {
         id("id", "id", "VARCHAR", false),
-        num("num", "num", "BIGINT", false),
         testPlanId("test_plan_id", "testPlanId", "VARCHAR", false),
         apiScenarioId("api_scenario_id", "apiScenarioId", "VARCHAR", false),
+        environmentId("environment_id", "environmentId", "VARCHAR", false),
+        executeUser("execute_user", "executeUser", "VARCHAR", false),
         lastExecResult("last_exec_result", "lastExecResult", "VARCHAR", false),
         lastExecReportId("last_exec_report_id", "lastExecReportId", "VARCHAR", false),
-        executeUser("execute_user", "executeUser", "VARCHAR", false),
         createTime("create_time", "createTime", "BIGINT", false),
         createUser("create_user", "createUser", "VARCHAR", false),
         pos("pos", "pos", "BIGINT", false),
-        environmentId("environment_id", "environmentId", "LONGVARCHAR", false);
+        testPlanCollectionId("test_plan_collection_id", "testPlanCollectionId", "VARCHAR", false),
+        grouped("grouped", "grouped", "BIT", false),
+        lastExecTime("last_exec_time", "lastExecTime", "BIGINT", false);
 
         private static final String BEGINNING_DELIMITER = "`";
 

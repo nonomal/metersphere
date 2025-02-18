@@ -2,9 +2,15 @@ on:
   push:
     branches:
       - v3.*
+    paths:
+      - "backend/**"
+      - "pom.xml"
   pull_request:
     branches:
       - v3.*
+    paths:
+      - "backend/**"
+      - "pom.xml"
 
 name: MeterSphere 覆盖率统计
 
@@ -25,10 +31,12 @@ jobs:
           cache: 'maven'
           cache-dependency-path: '**/pom.xml' # optional
           check-latest: true
-      - name: Build with Maven - only frontend
-        run: mvn -T 1C -B package --file pom.xml -pl frontend
+
+      - name: Remove monitoring-engine JAR
+        run: rm -rf ~/.m2/repository/io/metersphere/monitoring-engine
+
       - name: Build with Maven - other
-        run: mvn -T 1C -B package --file pom.xml -pl '!frontend'
+        run: mvn -B package -DskipAntRunForJenkins --file pom.xml -pl '!frontend'
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
         with:

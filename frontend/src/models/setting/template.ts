@@ -28,7 +28,7 @@ export interface FieldOptions {
   value: any;
   text: string;
   internal?: boolean; // 是否是内置模板
-  pos: number; // 排序字段
+  pos?: number; // 排序字段
 }
 
 // 自定义字段
@@ -103,7 +103,7 @@ export interface CustomField {
   fieldId: string;
   required?: boolean; // 是否必填
   apiFieldId?: string; // api字段名
-  defaultValue?: string | string[] | null | number; // 默认值
+  defaultValue: string | (string | number)[] | number; // 默认值
   [key: string]: any;
 }
 
@@ -120,6 +120,7 @@ export interface ActionTemplateManage {
   enablePlatformDefault?: boolean;
   internal?: boolean; // 是否为系统模板
   platForm?: string;
+  uploadImgFileIds: string[]; // 模板附件
   [key: string]: any;
 }
 
@@ -166,4 +167,41 @@ export interface UpdateWorkFlowSetting {
   fromId: string; // 开始id
   toId: string; // 结束id
   enable: boolean;
+}
+
+// 默认缺陷模板系统自定义字段
+export interface defaultBugField {
+  title: string;
+  description: string;
+  descriptionFileIds: string[];
+  [key: string]: any;
+}
+
+// 用例模模板默认自定义系统字段
+export interface defaultCaseField {
+  name: string;
+  prerequisite: string; // 前置条件
+  caseEditType: string; // 编辑模式：步骤模式/文本模式
+  steps: string;
+  textDescription: string;
+  expectedResult: string; // 预期结果
+  description: string;
+  [key: string]: any;
+}
+
+export interface DetailCustomField extends CustomField {
+  fieldId: string;
+  fieldName: string;
+  fieldKey: string;
+  required: boolean;
+  type: string;
+  internal: boolean;
+  internalFieldKey: string; // 系统字段标识 例如用例等级
+  options: FieldOptions[];
+  supportSearch?: boolean;
+  optionMethod?: string;
+  platformOptionJson?: string; // 三方平台下拉选项
+  platformPlaceHolder?: string;
+  platformSystemField?: any; // 三方平台字段
+  apiFieldId?: string; // 三方api
 }

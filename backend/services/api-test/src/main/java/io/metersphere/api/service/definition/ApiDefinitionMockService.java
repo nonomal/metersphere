@@ -101,6 +101,9 @@ public class ApiDefinitionMockService {
     private static final String MOCK_TABLE = "api_definition_mock";
 
     public List<ApiDefinitionMockDTO> getPage(ApiDefinitionMockPageRequest request) {
+        if (CollectionUtils.isEmpty(request.getProtocols())) {
+            return new ArrayList<>();
+        }
         return extApiDefinitionMockMapper.list(request);
     }
 
@@ -189,8 +192,7 @@ public class ApiDefinitionMockService {
         apiDefinitionMock.setUpdateTime(System.currentTimeMillis());
         apiDefinitionMock.setCreateUser(userId);
         if (CollectionUtils.isNotEmpty(request.getTags())) {
-            apiTestCaseService.checkTagLength(request.getTags());
-            apiDefinitionMock.setTags(request.getTags());
+            apiDefinitionMock.setTags(ServiceUtils.parseTags(request.getTags()));
         }
         apiDefinitionMock.setEnable(true);
         ApiDefinition apiDefinition = apiDefinitionMapper.selectByPrimaryKey(apiDefinitionMock.getApiDefinitionId());
@@ -394,6 +396,7 @@ public class ApiDefinitionMockService {
     }
 
     public void batchEdit(ApiMockBatchEditRequest request, String userId) {
+
         List<String> ids = doSelectIds(request);
         if (CollectionUtils.isNotEmpty(ids)) {
             SubListUtils.dealForSubList(ids, 500, subList -> batchEditByType(request, subList, userId, request.getProjectId()));
@@ -423,12 +426,7 @@ public class ApiDefinitionMockService {
     private void batchUpdateTags(ApiDefinitionMockExample example, ApiDefinitionMock updateMock,
                                  ApiMockBatchEditRequest request, List<String> ids,
                                  ApiDefinitionMockMapper mapper) {
-        if (CollectionUtils.isEmpty(request.getTags())) {
-            throw new MSException(Translator.get("tags_is_null"));
-        }
-        apiTestCaseService.checkTagLength(request.getTags());
         if (request.isAppend()) {
-            List<ApiDefinitionMock> tagsByIds = extApiDefinitionMockMapper.getTagsByIds(ids);
             Map<String, ApiDefinitionMock> mockMap = extApiDefinitionMockMapper.getTagsByIds(ids)
                     .stream()
                     .collect(Collectors.toMap(ApiDefinitionMock::getId, Function.identity()));
@@ -437,8 +435,7 @@ public class ApiDefinitionMockService {
                     if (CollectionUtils.isNotEmpty(v.getTags())) {
                         List<String> orgTags = v.getTags();
                         orgTags.addAll(request.getTags());
-                        apiTestCaseService.checkTagLength(orgTags.stream().distinct().toList());
-                        v.setTags(orgTags.stream().distinct().toList());
+                        v.setTags(ServiceUtils.parseTags(orgTags.stream().distinct().toList()));
                     } else {
                         v.setTags(request.getTags());
                     }
@@ -448,7 +445,7 @@ public class ApiDefinitionMockService {
                 });
             }
         } else {
-            updateMock.setTags(request.getTags());
+            updateMock.setTags(request.isClear() ? new ArrayList<>() : ServiceUtils.parseTags(request.getTags()));
             mapper.updateByExampleSelective(updateMock, example);
         }
     }
@@ -459,7 +456,7 @@ public class ApiDefinitionMockService {
     }
 
     public List<String> doSelectIds(ApiTestCaseBatchRequest request) {
-        if (request.isSelectAll()) {
+        if (request.isSelectAll() && CollectionUtils.isNotEmpty(request.getProtocols())) {
             List<String> ids = extApiDefinitionMockMapper.getIds(request);
             if (CollectionUtils.isNotEmpty(request.getExcludeIds())) {
                 ids.removeAll(request.getExcludeIds());

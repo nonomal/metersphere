@@ -517,6 +517,13 @@ public class ApiDefinitionMockControllerTests extends BaseTest {
     public void getPage() throws Exception {
         doApiDefinitionPage("KEYWORD");
         doApiDefinitionPage("FILTER");
+        ApiDefinitionMockPageRequest request = new ApiDefinitionMockPageRequest();
+        request.setProjectId(DEFAULT_PROJECT_ID);
+        request.setApiDefinitionId(apiDefinitionMock.getApiDefinitionId());
+        request.setCurrent(1);
+        request.setPageSize(10);
+        request.setSort(Map.of("createTime", "asc"));
+        this.requestPostWithOkAndReturn(PAGE, request);
     }
 
     private void doApiDefinitionPage(String search) throws Exception {
@@ -525,6 +532,7 @@ public class ApiDefinitionMockControllerTests extends BaseTest {
         request.setApiDefinitionId(apiDefinitionMock.getApiDefinitionId());
         request.setCurrent(1);
         request.setPageSize(10);
+        request.setProtocols(List.of("HTTP"));
         request.setSort(Map.of("createTime", "asc"));
         // "ALL", "KEYWORD", "FILTER", "COMBINE", "DELETED"
         switch (search) {
@@ -599,8 +607,11 @@ public class ApiDefinitionMockControllerTests extends BaseTest {
         request.setProjectId(DEFAULT_PROJECT_ID);
         request.setType("Tags");
         request.setAppend(true);
+        request.setClear(false);
         request.setSelectAll(true);
         request.setTags(new LinkedHashSet<>(List.of("tag1", "tag3", "tag4")));
+        requestPostWithOkAndReturn(BATCH_EDIT, request);
+        request.setProtocols(List.of("HTTP"));
         requestPostWithOkAndReturn(BATCH_EDIT, request);
         ApiDefinitionMockExample example = new ApiDefinitionMockExample();
         List<String> ids = extApiDefinitionMockMapper.getIds(request);
@@ -613,9 +624,15 @@ public class ApiDefinitionMockControllerTests extends BaseTest {
         //覆盖标签
         request.setTags(new LinkedHashSet<>(List.of("tag1")));
         request.setAppend(false);
+        request.setClear(false);
         requestPostWithOkAndReturn(BATCH_EDIT, request);
         apiDefinitionMockMapper.selectByExample(example).forEach(apiTestCase -> {
             Assertions.assertEquals(apiTestCase.getTags(), List.of("tag1"));
+        });
+        request.setClear(true);
+        requestPostWithOkAndReturn(BATCH_EDIT, request);
+        apiDefinitionMockMapper.selectByExample(example).forEach(apiTestCase -> {
+            Assertions.assertTrue(CollectionUtils.isEmpty(apiTestCase.getTags()));
         });
         //标签为空  报错
         request.setTags(new LinkedHashSet<>());
@@ -1250,16 +1267,6 @@ public class ApiDefinitionMockControllerTests extends BaseTest {
         MockHttpServletRequestBuilder requestBuilder = mockServerTestService.getRequestBuilder("GET", url);
         ResultActions action = mockMvc.perform(requestBuilder);
         MockHttpServletResponse mockServerResponse = action.andReturn().getResponse();
-        //判断响应
-        mockServerResponse.getContentAsString(StandardCharsets.UTF_8);
-        mockData.setEnable(false);
-        apiDefinitionMockMapper.updateByPrimaryKeySelective(mockData);
-
-        requestBuilder = mockServerTestService.getRequestBuilder("GET", url);
-        action = mockMvc.perform(requestBuilder);
-        mockServerResponse = action.andReturn().getResponse();
-        //判断响应
-        mockServerResponse.getContentAsString(StandardCharsets.UTF_8);
 
     }
 

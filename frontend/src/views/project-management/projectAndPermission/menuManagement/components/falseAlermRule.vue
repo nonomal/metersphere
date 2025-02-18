@@ -6,9 +6,9 @@
       </div>
     </div>
     <div class="mb-4 flex items-center justify-between">
-      <a-button v-permission="['PROJECT_APPLICATION_API:UPDATE']" type="primary" @click="showAddRule(undefined)">{{
-        t('project.menu.addFalseAlertRules')
-      }}</a-button>
+      <a-button v-permission="['PROJECT_APPLICATION_API:UPDATE']" type="primary" @click="showAddRule(undefined)">
+        {{ t('project.menu.addFalseAlertRules') }}
+      </a-button>
       <a-input-search
         v-model="keyword"
         :placeholder="t('project.menu.nameSearch')"
@@ -24,44 +24,14 @@
       :action-config="tableBatchActions"
       v-on="propsEvent"
       @batch-action="handleTableBatch"
+      @enable-change="enableChange"
     >
       <template #operation="{ record }">
-        <template v-if="!record.enable">
-          <div class="flex flex-row">
-            <span v-permission="['PROJECT_APPLICATION_API:UPDATE']" class="flex flex-row">
-              <MsButton class="!mr-0" @click="handleEnableOrDisableProject(record.id)">{{
-                t('common.enable')
-              }}</MsButton>
-              <a-divider direction="vertical" />
-            </span>
-            <span>
-              <MsButton
-                v-permission="['PROJECT_APPLICATION_API:DELETE']"
-                class="!mr-0"
-                @click="handleDelete(record.id)"
-                >{{ t('common.delete') }}</MsButton
-              >
-            </span>
-          </div>
-        </template>
-        <template v-else>
-          <span v-permission="['PROJECT_APPLICATION_API:UPDATE']" class="flex flex-row items-center">
-            <MsButton class="!mr-0" @click="showAddRule(record)">{{ t('common.edit') }}</MsButton>
-            <a-divider class="h-[16px]" direction="vertical" />
-          </span>
-          <span v-permission="['PROJECT_APPLICATION_API:UPDATE']" class="flex flex-row items-center">
-            <MsButton class="!mr-0" @click="handleEnableOrDisableProject(record.id, false)">{{
-              t('common.disable')
-            }}</MsButton>
-            <a-divider class="h-[16px]" direction="vertical" />
-          </span>
-          <MsTableMoreAction
-            v-permission="['PROJECT_APPLICATION_API:UPDATE']"
-            class="!mr-0"
-            :list="tableActions"
-            @select="handleMoreAction($event, record)"
-          ></MsTableMoreAction>
-        </template>
+        <span v-permission="['PROJECT_APPLICATION_API:UPDATE']" class="flex flex-row items-center">
+          <MsButton class="!mr-0" @click="showAddRule(record)">{{ t('common.edit') }}</MsButton>
+          <a-divider v-permission="['PROJECT_APPLICATION_API:DELETE']" class="h-[16px]" direction="vertical" />
+        </span>
+        <MsTableMoreAction class="!mr-0" :list="tableActions" @select="handleMoreAction($event, record)" />
       </template>
     </MsBaseTable>
   </MsCard>
@@ -92,7 +62,7 @@
 </template>
 
 <script async lang="ts" setup>
-  import { useRouter } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import { Message, TableData } from '@arco-design/web-vue';
 
   import MsButton from '@/components/pure/ms-button/index.vue';
@@ -116,6 +86,7 @@
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import { useAppStore, useTableStore } from '@/store';
+  import { hasAnyPermission } from '@/utils/permission';
 
   import { FakeTableListItem } from '@/models/projectManagement/menuManagement';
   import { ProjectManagementRouteEnum } from '@/enums/routeEnum';
@@ -126,6 +97,7 @@
   const { t } = useI18n();
   const appStore = useAppStore();
   const router = useRouter();
+  const route = useRoute();
   const currentProjectId = computed(() => appStore.currentProjectId);
   const addVisible = ref(false);
   const addLoading = ref(false);
@@ -162,7 +134,7 @@
         label: 'common.delete',
         eventTag: 'batchDelete',
         danger: true,
-        permission: ['PROJECT_APPLICATION_API:UPDATE'],
+        permission: ['PROJECT_APPLICATION_API:DELETE'],
       },
     ],
   };
@@ -174,7 +146,7 @@
   };
   const initBatchFormModels: FormItemModel[] = [
     {
-      filed: 'name',
+      field: 'name',
       type: 'input',
       label: 'project.menu.rule.ruleName',
       rules: [
@@ -183,39 +155,44 @@
       ],
     },
     {
-      filed: 'type',
+      field: 'type',
       type: 'tagInput',
       label: 'project.menu.rule.label',
     },
     {
-      filed: 'rule',
+      field: 'rule',
       type: 'multiple',
       label: 'project.menu.rule.rule',
       hasRedStar: true,
       children: [
         {
-          filed: 'respType', // 匹配规则-内容类型/header/data/body
+          field: 'respType', // 匹配规则-内容类型/header/data/body
           type: 'select',
           options: headerOptions.value,
           className: 'w-[205px]',
           defaultValue: 'RESPONSE_HEADERS',
         },
         {
-          filed: 'relation', // 匹配规则-操作类型
+          field: 'relation', // 匹配规则-操作类型
           type: 'select',
           options: relationOptions.value,
           defaultValue: 'CONTAINS',
           className: 'w-[120px]',
         },
         {
-          filed: 'expression', // 匹配规则-表达式
-          type: 'input',
+          field: 'expression', // 匹配规则-表达式
+          type: 'textarea',
           rules: [{ required: true, message: t('project.menu.rule.expressionNotNull') }],
+          title: t('project.menu.rule.ruleExpression'),
           className: 'w-[301px]',
         },
       ],
     },
   ];
+
+  const hasOperationPermission = computed(() =>
+    hasAnyPermission(['PROJECT_APPLICATION_API:UPDATE', 'PROJECT_APPLICATION_API:DELETE'])
+  );
 
   const batchFormModels: Ref<FormItemModel[]> = ref([...initBatchFormModels]);
 
@@ -230,6 +207,19 @@
       title: 'project.menu.rule.enable',
       dataIndex: 'enable',
       width: 143,
+      permission: ['PROJECT_APPLICATION_API:UPDATE'],
+      filterConfig: {
+        options: [
+          {
+            value: true,
+            label: t('common.enable'),
+          },
+          {
+            value: false,
+            label: t('common.close'),
+          },
+        ],
+      },
     },
     {
       title: 'project.menu.rule.label',
@@ -258,11 +248,11 @@
       width: 210,
     },
     {
-      title: 'project.menu.rule.operation',
+      title: hasOperationPermission.value ? 'project.menu.rule.operation' : '',
       dataIndex: 'operation',
       slotName: 'operation',
       showTooltip: true,
-      width: 169,
+      width: hasOperationPermission.value ? 150 : 50,
     },
   ];
   await tableStore.initColumn(TableKeyEnum.PROJECT_MANAGEMENT_MENU_FALSE_ALERT, rulesColumn, 'drawer');
@@ -339,13 +329,14 @@
       label: 'system.user.delete',
       eventTag: 'delete',
       danger: true,
+      permission: ['PROJECT_APPLICATION_API:DELETE'],
     },
   ];
 
   const handleEnableOrDisableProject = async (v: string | BatchActionQueryParams, isEnable = true) => {
     const title = isEnable ? t('project.menu.rule.enableRule') : t('project.menu.rule.disableRule');
     const content = isEnable ? t('project.menu.rule.enableRuleTip') : t('project.menu.rule.disableRuleTip');
-    const okText = isEnable ? t('common.confirmEnable') : t('common.confirmClose');
+    const okText = isEnable ? t('common.confirmEnable') : t('common.confirmDisable');
     openModal({
       type: 'info',
       cancelText: t('common.cancel'),
@@ -373,7 +364,7 @@
               enable: isEnable,
             });
           }
-          Message.success(isEnable ? t('common.enableSuccess') : t('common.closeSuccess'));
+          Message.success(isEnable ? t('common.enableSuccess') : t('common.disableSuccess'));
           fetchData();
         } catch (error) {
           // eslint-disable-next-line no-console
@@ -410,7 +401,7 @@
     addVisible.value = true;
   };
 
-  const handleCancel = (shouldSearch: boolean, isClose = true) => {
+  const handleCancel = (shouldSearch: boolean) => {
     if (shouldSearch) {
       fetchData();
     }
@@ -441,7 +432,7 @@
           Message.success(t('common.updateSuccess'));
         }
 
-        handleCancel(true, false);
+        handleCancel(true);
       } catch (error) {
         // eslint-disable-next-line no-console
         console.log(error);
@@ -471,8 +462,21 @@
     }
   }
 
+  function enableChange(record: FakeTableListItem, newValue: string | number | boolean) {
+    if (record.id) {
+      handleEnableOrDisableProject(record.id, newValue as boolean);
+    }
+  }
+
   onMounted(() => {
-    setLoadListParams({ projectId: currentProjectId.value });
+    const { status } = route.query;
+    const enabledStatus = status === 'all' ? [] : [true];
+    setLoadListParams({
+      projectId: currentProjectId.value,
+      filter: {
+        enable: enabledStatus,
+      },
+    });
     fetchData();
   });
 </script>

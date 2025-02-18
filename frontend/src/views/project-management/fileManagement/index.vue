@@ -10,16 +10,14 @@
               <div class="folder-count">({{ myFileCount }})</div>
             </div>
           </div>
-          <div class="folder" @click="setActiveFolder('all')">
+          <div class="folder mb-[8px]" @click="setActiveFolder('all')">
             <div :class="getFolderClass('all')">
               <MsIcon type="icon-icon_folder_filled1" class="folder-icon" />
               <div class="folder-name">{{ t('project.fileManagement.allFile') }}</div>
               <div class="folder-count">({{ allFileCount }})</div>
             </div>
             <div class="ml-auto flex items-center">
-              <a-tooltip
-                :content="isExpandAll ? t('project.fileManagement.collapseAll') : t('project.fileManagement.expandAll')"
-              >
+              <a-tooltip :content="isExpandAll ? t('common.collapseAllSubModule') : t('common.expandAllSubModule')">
                 <MsButton type="icon" status="secondary" class="!mr-0 p-[4px]" @click="changeExpand">
                   <MsIcon :type="isExpandAll ? 'icon-icon_folder_collapse1' : 'icon-icon_folder_expansion1'" />
                 </MsButton>
@@ -52,7 +50,6 @@
               </popConfirm>
             </div>
           </div>
-          <a-divider class="my-[8px]" />
           <a-radio-group v-model:model-value="showType" type="button" class="file-show-type" @change="changeShowType">
             <a-radio value="Module">{{ t('project.fileManagement.module') }}</a-radio>
             <a-radio value="Storage">{{ t('project.fileManagement.storage') }}</a-radio>
@@ -254,10 +251,11 @@
 
 <style lang="less" scoped>
   .page {
-    @apply h-full bg-white;
+    @apply h-full;
 
     min-width: 1000px;
     border-radius: var(--border-radius-large);
+    background-color: var(--color-text-fff);
     .folder {
       @apply flex cursor-pointer items-center justify-between;
 

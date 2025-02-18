@@ -1,12 +1,19 @@
 <template>
   <div class="flex gap-[8px] px-[16px] pt-[16px]">
-    <a-select v-model:model-value="currentTab" class="w-[80px]" :options="tabOptions" @change="currentTabChange" />
+    <a-select
+      v-model:model-value="currentTab"
+      class="w-[80px] focus-within:!bg-[var(--color-text-n8)] hover:!bg-[var(--color-text-n8)]"
+      :bordered="false"
+      :options="tabOptions"
+      @change="currentTabChange"
+    />
     <MsEditableTab
       v-model:active-tab="activeApiTab"
       v-model:tabs="apiTabs"
       class="flex-1 overflow-hidden"
       :show-add="currentTab === 'api' && hasAnyPermission(['PROJECT_API_DEFINITION:READ+ADD'])"
       @add="newTab"
+      @close="handleTabClose"
     >
       <template #label="{ tab }">
         <apiMethodName
@@ -32,6 +39,7 @@
       v-show="activeApiTab.id !== 'all'"
       ref="environmentSelectRef"
       :env="activeApiTab.environmentId"
+      size="mini"
     />
   </div>
   <api
@@ -41,12 +49,13 @@
     v-model:api-tabs="apiTabs"
     :active-module="props.activeModule"
     :offspring-ids="props.offspringIds"
-    :protocol="props.protocol"
+    :selected-protocols="props.selectedProtocols"
     :module-tree="props.moduleTree"
     :current-tab="currentTab"
-    :member-options="memberOptions"
     @import="emit('import')"
+    @open-case-tab="(apiCaseDetail:ApiCaseDetail)=>newCaseTab(apiCaseDetail.id)"
     @delete-api="(id) => handleDeleteApiFromModuleTree(id)"
+    @handle-adv-search="(val) => emit('handleAdvSearch', val)"
   />
   <apiCase
     v-show="(activeApiTab.id === 'all' && currentTab === 'case') || activeApiTab.type === 'case'"
@@ -54,27 +63,33 @@
     v-model:api-tabs="apiTabs"
     v-model:active-api-tab="activeApiTab"
     :active-module="props.activeModule"
-    :protocol="props.protocol"
+    :selected-protocols="props.selectedProtocols"
     :module-tree="props.moduleTree"
     :current-tab="currentTab"
     :offspring-ids="props.offspringIds"
-    :member-options="memberOptions"
     @delete-case="(id) => handleDeleteApiFromModuleTree(id)"
+    @handle-adv-search="(val) => emit('handleAdvSearch', val)"
   />
-  <MockTable
-    v-if="activeApiTab.id === 'all' && currentTab === 'mock'"
-    :active-module="props.activeModule"
-    :offspring-ids="props.offspringIds"
-    :protocol="props.protocol"
-    :definition-detail="activeApiTab"
-    @debug="handleMockDebug"
-  />
+  <keep-alive :include="cacheStore.cacheViews">
+    <MockTable
+      v-if="activeApiTab.id === 'all' && currentTab === 'mock'"
+      :key="CacheTabTypeEnum.API_TEST_MOCK_TABLE"
+      :active-module="props.activeModule"
+      :offspring-ids="props.offspringIds"
+      :selected-protocols="props.selectedProtocols"
+      :definition-detail="activeApiTab"
+      @debug="handleMockDebug"
+      @handle-adv-search="(val) => emit('handleAdvSearch', val)"
+    />
+  </keep-alive>
 </template>
 
 <script setup lang="ts">
+  import { useRoute } from 'vue-router';
   import { cloneDeep } from 'lodash-es';
 
   import MsEditableTab from '@/components/pure/ms-editable-tab/index.vue';
+  import { TabItem } from '@/components/pure/ms-editable-tab/types';
   import MsEnvironmentSelect from '@/components/business/ms-environment-select/index.vue';
   import api from './api/index.vue';
   import apiCase from './case/index.vue';
@@ -82,13 +97,15 @@
   import { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
 
   import { getProtocolList } from '@/api/modules/api-test/common';
-  import { getProjectOptions } from '@/api/modules/project-management/projectMember';
   import { useI18n } from '@/hooks/useI18n';
   import useLeaveTabUnSaveCheck from '@/hooks/useLeaveTabUnSaveCheck';
+  import useRequestCompositionStore from '@/store/modules/api/requestComposition';
   import useAppStore from '@/store/modules/app';
+  import useCacheStore from '@/store/modules/cache/cache';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { ProtocolItem } from '@/models/apiTest/common';
+  import { ApiCaseDetail } from '@/models/apiTest/management';
   import { MockDetail } from '@/models/apiTest/mock';
   import { ModuleTreeNode } from '@/models/common';
   import {
@@ -98,6 +115,7 @@
     RequestMethods,
     ResponseComposition,
   } from '@/enums/apiEnum';
+  import { CacheTabTypeEnum } from '@/enums/cacheTabEnum';
 
   import { defaultBodyParams, defaultResponse, defaultResponseItem } from '@/views/api-test/components/config';
 
@@ -108,21 +126,20 @@
   const props = defineProps<{
     activeModule: string;
     offspringIds: string[];
-    protocol: string;
+    selectedProtocols: string[];
     moduleTree: ModuleTreeNode[]; // 模块树
   }>();
   const emit = defineEmits<{
     (e: 'import'): void;
+    (e: 'handleAdvSearch', isStartAdvance: boolean): void;
   }>();
   const appStore = useAppStore();
+  const route = useRoute();
   const { t } = useI18n();
+  const requestCompositionStore = useRequestCompositionStore();
+  const cacheStore = useCacheStore();
 
   const setActiveApi: ((params: RequestParam) => void) | undefined = inject('setActiveApi');
-  const memberOptions = ref<{ label: string; value: string }[]>([]);
-  async function initMemberOptions() {
-    memberOptions.value = await getProjectOptions(appStore.currentProjectId);
-    memberOptions.value = memberOptions.value.map((e: any) => ({ label: e.name, value: e.id }));
-  }
   const currentTab = ref('api');
   const tabOptions = [
     { label: 'API', value: 'api' },
@@ -256,6 +273,7 @@
       apiTabs.value[0].label = t('mockManagement.allMock');
     }
     changeActiveApiTabToFirst();
+    emit('handleAdvSearch', false);
   }
 
   watch(
@@ -301,7 +319,9 @@
    * @param isModule 是否是删除模块
    */
   function handleDeleteApiFromModuleTree(id: string, isModule = false) {
-    if (isModule) {
+    if (activeApiTab.value.id === 'all') {
+      apiRef.value?.refreshTable();
+    } else if (isModule) {
       // 删除整个模块
       apiTabs.value = apiTabs.value.filter((item) => {
         if (activeApiTab.value.id === item.id) {
@@ -333,9 +353,23 @@
     apiRef.value?.openApiTabAndDebugMock(mock);
   }
 
+  function handleTabClose(item: TabItem) {
+    requestCompositionStore.removePluginFormMapItem(item.id);
+    const closingIndex = apiTabs.value.findIndex((e) => e.id === item.id);
+    if (closingIndex > -1) {
+      apiTabs.value.splice(closingIndex, 1);
+    }
+  }
+
   onBeforeMount(() => {
-    initMemberOptions();
     initProtocolList();
+    if ((route.query.tab as string) === 'case') {
+      currentTab.value = 'case';
+      currentTabChange('case');
+    } else if ((route.query.tab as string) === 'mock') {
+      currentTab.value = 'mock';
+      currentTabChange('mock');
+    }
   });
 
   useLeaveTabUnSaveCheck(apiTabs.value, [
@@ -344,6 +378,10 @@
     'PROJECT_API_DEFINITION_CASE:READ+ADD',
     'PROJECT_API_DEFINITION_CASE:READ+UPDATE',
   ]);
+
+  const isAdvancedSearchMode = computed(() =>
+    currentTab.value === 'api' ? apiRef.value?.isAdvancedSearchMode : caseRef.value?.isAdvancedSearchMode
+  );
 
   /** 向孙组件提供属性 */
   provide('defaultCaseParams', readonly(defaultCaseParams));
@@ -356,14 +394,10 @@
     handleApiUpdateFromModuleTree,
     handleDeleteApiFromModuleTree,
     changeActiveApiTabToFirst,
+    isAdvancedSearchMode,
   });
 </script>
 
 <style lang="less" scoped>
   .ms-input-group--prepend();
-  :deep(.arco-select-view-prefix) {
-    margin-right: 8px;
-    padding-right: 0;
-    border-right: 1px solid var(--color-text-input-border);
-  }
 </style>

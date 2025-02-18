@@ -4,26 +4,23 @@ package io.metersphere.api.service.schedule;
 import io.metersphere.api.constants.ApiImportPlatform;
 import io.metersphere.api.dto.definition.ApiScheduleDTO;
 import io.metersphere.api.dto.request.ImportRequest;
-import io.metersphere.api.service.definition.ApiDefinitionImportUtilService;
+import io.metersphere.api.service.definition.ApiDefinitionImportService;
 import io.metersphere.api.service.definition.ApiDefinitionScheduleService;
 import io.metersphere.sdk.util.BeanUtils;
 import io.metersphere.sdk.util.CommonBeanFactory;
 import io.metersphere.system.schedule.BaseScheduleJob;
-import io.metersphere.system.service.UserService;
 import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobKey;
 import org.quartz.TriggerKey;
 
 public class SwaggerUrlImportJob extends BaseScheduleJob {
-    private ApiDefinitionImportUtilService apiDefinitionImportUtilService;
-    private ApiDefinitionScheduleService apiDefinitionScheduleService;
-    private UserService userService;
+    private final ApiDefinitionImportService apiDefinitionImportService;
+    private final ApiDefinitionScheduleService apiDefinitionScheduleService;
 
     public SwaggerUrlImportJob() {
-        apiDefinitionImportUtilService = CommonBeanFactory.getBean(ApiDefinitionImportUtilService.class);
+        apiDefinitionImportService = CommonBeanFactory.getBean(ApiDefinitionImportService.class);
         apiDefinitionScheduleService = CommonBeanFactory.getBean(ApiDefinitionScheduleService.class);
-        userService = CommonBeanFactory.getBean(UserService.class);
     }
 
     @Override
@@ -37,7 +34,7 @@ public class SwaggerUrlImportJob extends BaseScheduleJob {
         request.setUserId(jobDataMap.getString("userId"));
         request.setType("SCHEDULE");
         request.setResourceId(resourceId);
-        apiDefinitionImportUtilService.apiTestImport(null, request, request.getProjectId());
+        apiDefinitionImportService.apiDefinitionImport(null, request, request.getProjectId());
     }
 
     public static JobKey getJobKey(String resourceId) {

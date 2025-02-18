@@ -13,6 +13,7 @@ import io.metersphere.system.domain.SystemParameterExample;
 import io.metersphere.system.dto.sdk.BaseCleanConfigDTO;
 import io.metersphere.system.dto.sdk.BaseSystemConfigDTO;
 import io.metersphere.system.dto.sdk.EMailInfoDto;
+import io.metersphere.system.dto.sdk.UploadInfoDTO;
 import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.log.dto.LogDTO;
@@ -48,6 +49,7 @@ public class SystemParameterService {
 
     private static final String DEFAULT_LOG_TIME = "6D";
     private static final String DEFAULT_HISTORY_TIME = "10";
+    private static final String DEFAULT_API_CONCURRENT_CONFIG = "3";
 
     public void saveBaseInfo(List<SystemParameter> parameters) {
         SystemParameterExample example = new SystemParameterExample();
@@ -58,7 +60,7 @@ public class SystemParameterService {
                 List<SystemParameter> baseUrlParameterList = systemParameterMapper.selectByExample(example);
                 String oldBaseUrl = null;
                 if (CollectionUtils.isNotEmpty(baseUrlParameterList)) {
-                    SystemParameter parameter = baseUrlParameterList.get(0);
+                    SystemParameter parameter = baseUrlParameterList.getFirst();
                     if (!StringUtils.equals(parameter.getParamValue(), param.getParamValue())) {
                         oldBaseUrl = parameter.getParamValue();
                         systemParameterMapper.updateByPrimaryKey(param);
@@ -84,10 +86,13 @@ public class SystemParameterService {
 
     public BaseSystemConfigDTO getBaseInfo() {
         List<SystemParameter> paramList = this.getParamList(ParamConstants.Classify.BASE.getValue());
-        return TransBaseToDto(paramList);
+        BaseSystemConfigDTO baseSystemConfig = transBaseToDto(paramList);
+        UploadInfoDTO uploadConfigInfo = getUploadConfigInfo();
+        baseSystemConfig.setFileMaxSize(uploadConfigInfo.getFileSize());
+        return baseSystemConfig;
     }
 
-    private BaseSystemConfigDTO TransBaseToDto(List<SystemParameter> paramList) {
+    private BaseSystemConfigDTO transBaseToDto(List<SystemParameter> paramList) {
         BaseSystemConfigDTO baseSystemConfigDTO = new BaseSystemConfigDTO();
         if (!CollectionUtils.isEmpty(paramList)) {
             for (SystemParameter param : paramList) {
@@ -158,6 +163,22 @@ public class SystemParameterService {
             }
             example.clear();
         });
+    }
+
+    public void editUploadConfigInfo(List<SystemParameter> parameters) {
+        SystemParameterExample example = new SystemParameterExample();
+        SystemParameter uploadConfig = parameters.getFirst();
+        if (StringUtils.equals(uploadConfig.getParamKey(), ParamConstants.UploadConfig.UPLOAD_FILE_SIZE.getValue())) {
+            example.createCriteria().andParamKeyEqualTo(uploadConfig.getParamKey());
+            if (systemParameterMapper.countByExample(example) > 0) {
+                systemParameterMapper.updateByPrimaryKey(uploadConfig);
+            } else {
+                systemParameterMapper.insert(uploadConfig);
+            }
+            example.clear();
+        } else {
+            throw new MSException(Translator.get("upload_config_save_param_error"));
+        }
     }
 
     public void testEmailConnection(HashMap<String, String> hashMap) {
@@ -311,6 +332,11 @@ public class SystemParameterService {
         return transCleanConfigToDto(paramList);
     }
 
+    public UploadInfoDTO getUploadConfigInfo() {
+        List<SystemParameter> paramList = this.getParamList(ParamConstants.Classify.UPLOAD_CONFIG.getValue());
+        return transUploadConfigToDto(paramList);
+    }
+
     private BaseCleanConfigDTO transCleanConfigToDto(List<SystemParameter> paramList) {
         BaseCleanConfigDTO configDTO = new BaseCleanConfigDTO();
         if (CollectionUtils.isNotEmpty(paramList)) {
@@ -323,5 +349,25 @@ public class SystemParameterService {
             });
         }
         return configDTO;
+    }
+
+    private UploadInfoDTO transUploadConfigToDto(List<SystemParameter> paramList) {
+        UploadInfoDTO configDTO = new UploadInfoDTO();
+        if (CollectionUtils.isNotEmpty(paramList)) {
+            paramList.forEach(param -> {
+                if (StringUtils.equals(param.getParamKey(), ParamConstants.UploadConfig.UPLOAD_FILE_SIZE.getValue())) {
+                    configDTO.setFileSize(param.getParamValue());
+                }
+            });
+        }
+        return configDTO;
+    }
+
+    public String getApiConcurrentConfig() {
+        List<SystemParameter> paramList = this.getParamList(ParamConstants.ApiConcurrentConfig.API_CONCURRENT_CONFIG.getValue());
+        if (CollectionUtils.isNotEmpty(paramList)) {
+            return paramList.getFirst().getParamValue();
+        }
+        return DEFAULT_API_CONCURRENT_CONFIG;
     }
 }

@@ -2,17 +2,18 @@ package io.metersphere.system.controller;
 
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
+import io.metersphere.sdk.constants.EmailInviteSource;
 import io.metersphere.sdk.constants.PermissionConstants;
 import io.metersphere.system.dto.OptionDisabledDTO;
 import io.metersphere.system.dto.OrgUserExtend;
-import io.metersphere.system.dto.request.OrgMemberExtendProjectRequest;
-import io.metersphere.system.dto.request.OrganizationMemberExtendRequest;
-import io.metersphere.system.dto.request.OrganizationMemberUpdateRequest;
-import io.metersphere.system.dto.request.OrganizationRequest;
+import io.metersphere.system.dto.request.*;
 import io.metersphere.system.dto.sdk.OptionDTO;
+import io.metersphere.system.dto.user.response.UserInviteResponse;
 import io.metersphere.system.log.annotation.Log;
+import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.service.OrganizationService;
+import io.metersphere.system.service.SimpleUserService;
 import io.metersphere.system.utils.PageUtils;
 import io.metersphere.system.utils.Pager;
 import io.metersphere.system.utils.SessionUtils;
@@ -39,6 +40,8 @@ public class OrganizationController {
 
     @Resource
     private OrganizationService organizationService;
+    @Resource
+    private SimpleUserService simpleUserService;
 
     @PostMapping("/member/list")
     @Operation(summary = "系统设置-组织-成员-获取组织成员列表")
@@ -55,6 +58,13 @@ public class OrganizationController {
         organizationService.addMemberByOrg(organizationMemberExtendRequest, SessionUtils.getUserId());
     }
 
+    @PostMapping("/user/invite")
+    @Operation(summary = "系统设置-组织-成员-邀请用户注册")
+    @RequiresPermissions(PermissionConstants.ORGANIZATION_MEMBER_INVITE)
+    public UserInviteResponse invite(@Validated @RequestBody UserInviteRequest request) {
+        return simpleUserService.saveInviteRecord(request, EmailInviteSource.ORGANIZATION.name(), SessionUtils.getUser());
+    }
+
     @PostMapping("/role/update-member")
     @Operation(summary = "系统设置-组织-成员-添加组织成员至用户组")
     @RequiresPermissions(PermissionConstants.ORGANIZATION_MEMBER_UPDATE)
@@ -66,7 +76,7 @@ public class OrganizationController {
     @Operation(summary = "系统设置-组织-成员-更新用户")
     @RequiresPermissions(value = {PermissionConstants.ORGANIZATION_MEMBER_UPDATE, PermissionConstants.PROJECT_USER_READ_ADD, PermissionConstants.PROJECT_USER_READ_DELETE}, logical = Logical.OR)
     public void updateMember(@Validated @RequestBody OrganizationMemberUpdateRequest organizationMemberExtendRequest) {
-        organizationService.updateMember(organizationMemberExtendRequest, SessionUtils.getUserId());
+        organizationService.updateMember(organizationMemberExtendRequest, SessionUtils.getUserId(), "/organization/update-member", OperationLogModule.SETTING_ORGANIZATION_MEMBER);
     }
 
     @PostMapping("/project/add-member")
@@ -97,7 +107,8 @@ public class OrganizationController {
 
     @GetMapping("/user/role/list/{organizationId}")
     @Operation(summary = "系统设置-组织-成员-获取当前组织下的所有自定义用户组以及组织级别的用户组")
-    @RequiresPermissions(PermissionConstants.ORGANIZATION_MEMBER_READ)
+    //@RequiresPermissions(PermissionConstants.ORGANIZATION_MEMBER_READ)
+    @RequiresPermissions(value = {PermissionConstants.ORGANIZATION_MEMBER_READ, PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ}, logical = Logical.OR)
     public List<OptionDTO> getUserRoleList(@PathVariable(value = "organizationId") String organizationId) {
         return organizationService.getUserRoleList(organizationId);
     }

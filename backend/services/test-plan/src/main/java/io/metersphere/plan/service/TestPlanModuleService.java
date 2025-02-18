@@ -104,7 +104,7 @@ public class TestPlanModuleService extends ModuleTreeService {
                 example.clear();
             }
         }
-        example.createCriteria().andParentIdEqualTo(module.getParentId()).andNameEqualTo(module.getName()).andIdNotEqualTo(module.getId());
+        example.createCriteria().andParentIdEqualTo(module.getParentId()).andProjectIdEqualTo(module.getProjectId()).andNameEqualTo(module.getName()).andIdNotEqualTo(module.getId());
         if (testPlanModuleMapper.countByExample(example) > 0) {
             throw new MSException(Translator.get("node.name.repeat"));
         }
@@ -117,6 +117,7 @@ public class TestPlanModuleService extends ModuleTreeService {
         updateModule.setId(request.getId());
         updateModule.setName(request.getName().trim());
         updateModule.setParentId(module.getParentId());
+        updateModule.setProjectId(module.getProjectId());
         this.checkDataValidity(updateModule);
         updateModule.setUpdateTime(System.currentTimeMillis());
         updateModule.setUpdateUser(userId);
@@ -141,12 +142,15 @@ public class TestPlanModuleService extends ModuleTreeService {
             return;
         }
         extTestPlanModuleMapper.deleteByIds(deleteIds);
-
-        TestPlanBatchProcessRequest request = new TestPlanBatchProcessRequest();
-        request.setModuleIds(deleteIds);
-        request.setSelectAll(true);
-        request.setProjectId(projectId);
-        testPlanService.batchDelete(request, operator, requestUrl, requestMethod);
+        List<String> planDeleteIds = extTestPlanModuleMapper.selectPlanIdsByModuleIds(deleteIds);
+        if (CollectionUtils.isNotEmpty(planDeleteIds)) {
+            TestPlanBatchProcessRequest request = new TestPlanBatchProcessRequest();
+            request.setModuleIds(deleteIds);
+            request.setSelectAll(false);
+            request.setProjectId(projectId);
+            request.setSelectIds(planDeleteIds);
+            testPlanService.batchDelete(request, operator, requestUrl, requestMethod);
+        }
 
         List<String> childrenIds = extTestPlanModuleMapper.selectChildrenIdsByParentIds(deleteIds);
         if (CollectionUtils.isNotEmpty(childrenIds)) {
@@ -161,6 +165,14 @@ public class TestPlanModuleService extends ModuleTreeService {
                 extTestPlanModuleMapper::selectModuleByParentIdAndPosOperator);
 
         TestPlanModuleExample example = new TestPlanModuleExample();
+        // 拖拽后, 父级模块下存在同名模块
+        example.createCriteria().andParentIdEqualTo(nodeSortDTO.getParent().getId()).andNameEqualTo(nodeSortDTO.getNode().getName())
+                .andProjectIdEqualTo(nodeSortDTO.getNode().getProjectId())
+                .andIdNotEqualTo(nodeSortDTO.getNode().getId());
+        if (testPlanModuleMapper.countByExample(example) > 0) {
+            throw new MSException(Translator.get("test_plan_module_already_exists"));
+        }
+        example.clear();
         example.createCriteria().andParentIdEqualTo(nodeSortDTO.getParent().getId()).andIdEqualTo(request.getDragNodeId());
         //节点换到了别的节点下,要先更新parent节点再计算sort
         if (testPlanModuleMapper.countByExample(example) == 0) {

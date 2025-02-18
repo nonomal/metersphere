@@ -2,7 +2,7 @@
   <div>
     <div
       v-if="props.mode === 'remote' && props.showTab"
-      class="sticky top-[0] z-[9999] mb-[8px] flex justify-between bg-white"
+      class="sticky top-[0] z-[9999] mb-[8px] flex justify-between bg-[var(--color-text-fff)]"
     >
       <a-radio-group v-model:model-value="fileListTab" type="button" size="small">
         <a-radio value="all">{{ `${t('ms.upload.all')} (${innerFileList.length})` }}</a-radio>
@@ -31,27 +31,59 @@
             <template #avatar>
               <a-avatar shape="square" class="rounded-[var(--border-radius-mini)] bg-[var(--color-text-n9)]">
                 <a-image v-if="item.file.type.includes('image/')" :src="item.url" width="40" height="40" hide-footer />
-                <MsIcon
-                  v-else
-                  :type="getFileIcon(item)"
-                  size="24"
-                  :class="item.status === UploadStatus.init ? 'text-[var(--color-text-4)]' : ''"
-                />
+                <MsIcon v-else :type="getFileIcon(item)" size="24" :class="'text-[var(--color-text-4)]'" />
               </a-avatar>
             </template>
             <template #title>
               <div class="m-b[2px] flex items-center">
                 <a-tooltip :content="item.file.name">
                   <div class="show-file-name">
-                    <div class="one-line-text max-w-[421px] pl-[4px] font-normal">
+                    <div
+                      :class="`file-name-first one-line-text pl-[4px] font-normal max-w-[${
+                        props.fileNameMaxWidth || '300px'
+                      }]`"
+                    >
                       {{ item.file.name.slice(0, item.file.name.indexOf('.')) }}
                     </div>
-                    <span class="font-normal text-[var(--color-text-1)]">{{
-                      item.file.name.slice(item.file.name.indexOf('.'))
-                    }}</span>
+                    <span class="font-normal text-[var(--color-text-1)]">
+                      {{ item.file.name.slice(item.file.name.lastIndexOf('.')) }}
+                    </span>
                   </div>
                 </a-tooltip>
                 <slot name="title" :item="item"></slot>
+                <div v-if="props.buttonInTitle" class="ml-auto flex items-center font-normal">
+                  <slot name="titleAction" :item="item">
+                    <MsButton
+                      v-if="item.file.type.includes('image/')"
+                      type="button"
+                      status="primary"
+                      class="!mr-0"
+                      @click="handlePreview(item)"
+                    >
+                      {{ t('ms.upload.preview') }}
+                    </MsButton>
+                    <a-divider v-if="item.file.type.includes('image/')" direction="vertical" />
+                    <MsButton
+                      v-if="item.status === UploadStatus.error"
+                      type="button"
+                      status="secondary"
+                      class="!mr-0"
+                      @click="reupload(item)"
+                    >
+                      {{ t('ms.upload.reUpload') }}
+                    </MsButton>
+                    <a-divider v-if="item.status === UploadStatus.error" direction="vertical" />
+                  </slot>
+                  <MsButton
+                    v-if="props.showDelete && item.status !== 'uploading'"
+                    type="button"
+                    :status="item.deleteContent ? 'primary' : 'danger'"
+                    class="!mr-[4px]"
+                    @click="deleteFile(item)"
+                  >
+                    {{ t(item.deleteContent) || t('ms.upload.delete') }}
+                  </MsButton>
+                </div>
               </div>
             </template>
             <template #description>
@@ -100,7 +132,7 @@
               </div>
             </template>
           </a-list-item-meta>
-          <template #actions>
+          <template v-if="!props.buttonInTitle" #actions>
             <div class="flex items-center">
               <MsButton
                 v-if="item.file.type.includes('image/')"
@@ -192,6 +224,8 @@
       handleView?: (item: MsFileItem) => void; // 是否自定义预览
       showUploadTypeDesc?: boolean; // 自定义上传类型关联于&上传于
       initFileSaveTips?: string; // 上传初始文件时的提示
+      buttonInTitle?: boolean; // 按钮是否在标题中
+      fileNameMaxWidth?: string; // 文件名称最大宽度
     }>(),
     {
       mode: 'remote',
@@ -200,6 +234,7 @@
       showMode: 'fileList',
       boolean: false,
       showUploadTypeDesc: false,
+      buttonInTitle: false,
     }
   );
   const emit = defineEmits<{
@@ -364,6 +399,12 @@
 </script>
 
 <style lang="less" scoped>
+  :deep(.arco-list) {
+    overflow: auto;
+    .arco-list-content {
+      min-width: 425px;
+    }
+  }
   .image-item {
     @apply relative;
     &:hover {

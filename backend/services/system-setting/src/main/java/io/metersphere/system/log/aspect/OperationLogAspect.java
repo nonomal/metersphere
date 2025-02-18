@@ -1,11 +1,11 @@
 package io.metersphere.system.log.aspect;
 
-import io.metersphere.system.log.dto.LogDTO;
-import io.metersphere.system.log.annotation.Log;
-import io.metersphere.system.log.constants.OperationLogType;
-import io.metersphere.system.log.service.OperationLogService;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.LogUtils;
+import io.metersphere.system.log.annotation.Log;
+import io.metersphere.system.log.constants.OperationLogType;
+import io.metersphere.system.log.dto.LogDTO;
+import io.metersphere.system.log.service.OperationLogService;
 import io.metersphere.system.utils.SessionUtils;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -67,7 +67,7 @@ public class OperationLogAspect {
     private final OperationLogType[] beforeMethodNames = new OperationLogType[]{OperationLogType.UPDATE, OperationLogType.DELETE, OperationLogType.COPY
             , OperationLogType.RECOVER, OperationLogType.DISASSOCIATE,OperationLogType.ASSOCIATE, OperationLogType.ARCHIVED};
     // 需要后置执行合并内容的
-    private final OperationLogType[] postMethodNames = new OperationLogType[]{OperationLogType.ADD, OperationLogType.UPDATE};
+    private final OperationLogType[] postMethodNames = new OperationLogType[]{OperationLogType.ADD, OperationLogType.UPDATE, OperationLogType.RERUN};
 
     /**
      * 定义切点 @Pointcut 在注解的位置切入代码
@@ -183,7 +183,7 @@ public class OperationLogAspect {
                 mergeLists(beforeValues.get(), (List<LogDTO>) obj);
             } else if (obj instanceof LogDTO log) {
                 if (CollectionUtils.isNotEmpty(beforeValues.get())) {
-                    beforeValues.get().get(0).setModifiedValue(log.getOriginalValue());
+                    beforeValues.get().getFirst().setModifiedValue(log.getOriginalValue());
                 } else {
                     beforeValues.set(new ArrayList<>() {{
                         this.add(log);
@@ -231,7 +231,7 @@ public class OperationLogAspect {
 
         // 单条存储
         if (logDTOList.size() == 1) {
-            operationLogService.add(logDTOList.get(0));
+            operationLogService.add(logDTOList.getFirst());
         } else {
             operationLogService.batchAdd(logDTOList);
         }

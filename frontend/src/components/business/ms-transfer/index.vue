@@ -22,7 +22,7 @@
           <a-checkbox :model-value="checked" :indeterminate="indeterminate" @change="onSelectAllChange" />
           {{ t('ms.transfer.selected', { count: countTotal }) }}
         </div>
-        <MsButton type="text" :disabled="countTotal === 0" @click="onClear">{{ t('ms.transfer.clear') }}</MsButton>
+        <MsButton type="text" :disabled="countTotal === 0" @click="onClear">{{ t('common.clear') }}</MsButton>
       </div>
     </template>
     <template #source="{ selectedKeys, onSelect }">
@@ -33,7 +33,6 @@
         :data="getTreeData()"
         :keyword="sourceKeyword"
         block-node
-        default-expand-all
         :selectable="false"
         :virtual-list-props="{
           height: '100%',
@@ -41,6 +40,7 @@
           fixedSize: true,
           buffer: 15, // 缓冲区默认 10 的时候，虚拟滚动的底部 padding 计算有问题
         }"
+        hide-switcher-if-no-children
         @check="onSelect"
       >
         <template #title="nodeData">
@@ -158,6 +158,7 @@
             key: itemKey,
             label: itemTitle,
             children: itemChildren ? travel(itemChildren) : [],
+            expanded: item.expanded,
           });
         }
       });
@@ -185,7 +186,13 @@
       width: calc(50% - 34px);
       height: v-bind(height);
       .arco-transfer-view-header {
-        @apply bg-white;
+        background-color: var(--color-text-fff);
+        font-weight: 400;
+      }
+      .arco-transfer-view-body {
+        .ms-tree-container {
+          padding-left: 16px;
+        }
       }
     }
     .arco-transfer-operations {

@@ -43,6 +43,7 @@
     formRule: FormItem[]; // 表单的规则
     formItem: FormRuleItem[]; // 处理后的表单
     api: any; // 表单对象
+    disabled?: boolean; // 是否禁用
   }>();
 
   const emit = defineEmits(['update:api', 'update', 'update:formItem', 'change', 'mounted']);
@@ -165,7 +166,7 @@
       };
 
       if (optionsItem.children) {
-        mappedItem.children = mapOption(optionsItem.children);
+        mappedItem.children = mapOption(optionsItem.children || []);
       }
       return mappedItem;
     });
@@ -185,8 +186,8 @@
       } else {
         fieldType = FieldTypeFormRules[currentTypeForm].type;
       }
-      const options = item?.options;
-      const currentOptions = mapOption(options || []);
+      const options = Array.isArray(item?.options) ? item?.options : [];
+      const currentOptions = mapOption(options);
       const ruleItem: any = {
         type: fieldType, // 表单类型
         field: item.name, // 字段
@@ -278,7 +279,7 @@
   }
 
   function getControlFormItems() {
-    const convertedData = formItems.value.map((item: FormItem) => convertItem(item));
+    const convertedData = (formItems.value || []).map((item: FormItem) => convertItem(item));
     formRuleList.value = convertedData;
   }
 
@@ -328,6 +329,9 @@
 
   function handleMounted() {
     // setValue();
+    if (props.disabled) {
+      fApi.value.disabled(true);
+    }
     emit('mounted');
   }
 
@@ -354,4 +358,11 @@
   });
 </script>
 
-<style scoped></style>
+<style lang="less" scoped>
+  :deep(.arco-form-item-label) {
+    @apply flex items-center;
+    span {
+      @apply block overflow-hidden overflow-ellipsis whitespace-nowrap;
+    }
+  }
+</style>

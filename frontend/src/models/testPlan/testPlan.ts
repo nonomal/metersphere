@@ -1,9 +1,20 @@
+import type { MinderJsonNode, MinderJsonNodeData } from '@/components/pure/ms-minder-editor/props';
 import type { BatchActionQueryParams } from '@/components/pure/ms-table/type';
+import type { saveParams } from '@/components/business/ms-associate-case/types';
 
-import type { customFieldsItem } from '@/models/caseManagement/featureCase';
+import type { customFieldsItem, DetailCase } from '@/models/caseManagement/featureCase';
 import type { TableQueryParams } from '@/models/common';
 import { BatchApiParams, DragSortParams } from '@/models/common';
-import { LastExecuteResults } from '@/enums/caseEnum';
+import { CaseLinkEnum, LastExecuteResults } from '@/enums/caseEnum';
+import type { ExecuteStatusEnum } from '@/enums/taskCenter';
+import {
+  type PlanMinderAssociateType,
+  type PlanMinderCollectionType,
+  type RunMode,
+  testPlanTypeEnum,
+} from '@/enums/testPlanEnum';
+
+import type { TaskReportDetail } from '../apiTest/report';
 
 export type planStatusType = 'PREPARED' | 'UNDERWAY' | 'COMPLETED' | 'ARCHIVED';
 
@@ -29,6 +40,20 @@ export interface AssociateCaseRequest extends BatchApiParams {
   apiScenarioSelectIds?: string[];
   totalCount?: number;
   testPlanId?: string;
+  associateApiType?: string;
+}
+
+export interface AssociateCaseRequestParams {
+  moduleMaps?: Record<string, saveParams>;
+  syncCase: boolean;
+  apiCaseCollectionId: string;
+  apiScenarioCollectionId: string;
+  selectAllModule: boolean;
+  projectId: string;
+  protocols: string[];
+  totalCount?: number;
+  associateApiType?: string;
+  associateType?: string;
 }
 
 export type AssociateCaseRequestType = Pick<AssociateCaseRequest, 'functionalSelectIds' | 'testPlanId'>;
@@ -53,6 +78,7 @@ export interface AddTestPlanParams {
   projectId?: string;
   testPlanId?: string;
   functionalCaseCount?: number;
+  isGroup?: boolean;
 }
 
 export interface TestPlanDetail extends AddTestPlanParams {
@@ -69,17 +95,34 @@ export interface TestPlanDetail extends AddTestPlanParams {
   reReviewedCount: number;
   underReviewedCount: number;
   functionalCaseCount?: number;
+  bugCount?: number;
+  apiCaseCount?: number;
+  apiScenarioCount?: number;
+}
+// 计划列表（不分页）
+export interface TestPlanWithoutPageItem {
+  id: string;
+  num: number;
+  groupId: string;
+  projectId: string;
+  moduleId: string;
+  name: string;
+  status: planStatusType;
+  type: keyof typeof testPlanTypeEnum;
+  tags: string[] | { id: string; name: string }[];
+  createUser: string;
+  createTime: string;
 }
 
 // 计划分页
 export interface TestPlanItem {
-  id?: string;
+  id: string;
   projectId: string;
   num: number;
   name: string;
   status: planStatusType;
-  type: string;
-  tags: string[];
+  type: keyof typeof testPlanTypeEnum;
+  tags: string[] | { id: string; name: string }[];
   schedule: string; // 是否定时
   createUser: string;
   createTime: string;
@@ -88,6 +131,7 @@ export interface TestPlanItem {
   children: TestPlanItem[];
   childrenCount: number;
   groupId: string;
+  functionalCaseCount: number;
 }
 export type TestPlanItemType = TestPlanItem & TestPlanDetail;
 
@@ -109,16 +153,20 @@ export interface UseCountType {
   testProgress: string; // 测试进度
 }
 
+export interface RelateCasesType {
+  id: string;
+  bugId: string;
+  name: string;
+  projectId: string;
+  type: CaseLinkEnum;
+}
+
 // 计划详情缺陷列表
 export interface PlanDetailBugItem {
   id: string;
   num: string;
   title: string;
-  relateCase: {
-    id: string;
-    bugId: string;
-    name: string;
-  }[];
+  relateCases: RelateCasesType[];
   handleUser: string;
   status: string;
   createUser: string;
@@ -132,8 +180,17 @@ export interface FollowPlanParams {
 }
 
 export interface TestPlanBaseParams {
-  projectId: string;
+  projectId?: string;
   testPlanId: string;
+  triggerMode?: string;
+}
+
+export interface CaseBugItem {
+  bugId: string;
+  id: string;
+  title: string;
+  type: string;
+  caseId: string;
 }
 
 export interface PlanDetailFeatureCaseItem {
@@ -141,6 +198,7 @@ export interface PlanDetailFeatureCaseItem {
   num: string;
   name: string;
   moduleId: string;
+  moduleName: string;
   versionName: string;
   createUser: string;
   createUserName: string;
@@ -152,6 +210,8 @@ export interface PlanDetailFeatureCaseItem {
   customFields: customFieldsItem[]; // 自定义字段集合
   caseId: string;
   testPlanId: string;
+  testPlanCollectionName: string; // 测试集名称
+  bugList: CaseBugItem[];
 }
 
 export interface PlanDetailFeatureCaseListQueryParams extends TableQueryParams, TestPlanBaseParams {}
@@ -160,14 +220,10 @@ export interface DisassociateCaseParams {
   id: string;
 }
 
-export interface EditLastExecResultParams extends DisassociateCaseParams {
-  lastExecResult: string;
-}
-
 export interface BatchFeatureCaseParams extends BatchActionQueryParams {
   testPlanId: string;
   moduleIds?: string[];
-  projectId: string;
+  projectId?: string;
 }
 
 export interface ExecuteFeatureCaseFormParams {
@@ -195,10 +251,7 @@ export interface BatchUpdateCaseExecutorParams extends BatchFeatureCaseParams {
   userId: string;
 }
 
-export interface SortFeatureCaseParams extends DragSortParams {
-  testPlanId: string;
-}
-
+export type RunModeType = 'SERIAL' | 'PARALLEL';
 export interface PassRateCountDetail {
   id: string;
   passThreshold: number;
@@ -213,10 +266,22 @@ export interface PassRateCountDetail {
   functionalCaseCount: number;
   apiCaseCount: number;
   apiScenarioCount: number;
+  scheduleConfig: {
+    resourceId: string;
+    enable: boolean;
+    cron: string;
+    runConfig: {
+      runMode: RunModeType;
+    };
+  };
+  nextTriggerTime: number;
+  status: planStatusType;
+  pass: boolean; // 是否通过
 }
 
 // 执行历史
 export interface ExecuteHistoryItem {
+  id: string;
   status: string;
   content: string;
   contentText: string;
@@ -228,6 +293,200 @@ export interface ExecuteHistoryItem {
   steps: string;
   createTime: string;
   deleted: boolean;
+  caseEditType: string; // 类型是：步骤描述
+  showResult: boolean;
 }
 
-export default {};
+export interface moduleForm {
+  moveType: 'MODULE' | 'GROUP';
+  targetId: string | number;
+}
+
+export interface BatchMoveParams extends TableQueryParams {
+  moveType?: 'MODULE' | 'GROUP';
+  targetId?: string | number;
+}
+
+// 计划详情-接口用例
+export interface PlanDetailApiCaseQueryParams extends TableQueryParams, TestPlanBaseParams {
+  apiDefinitionId?: string;
+  protocols: string[];
+  moduleIds?: string[];
+  versionId?: string;
+  refId?: string;
+  collectionId?: string;
+  treeType?: 'MODULE' | 'COLLECTION'; // 视图类型：模块是MODULE，测试集是COLLECTION
+}
+
+export interface PlanDetailApiCaseTreeParams {
+  testPlanId: string;
+  treeType: 'MODULE' | 'COLLECTION'; // 视图类型：模块是MODULE，测试集是COLLECTION
+}
+
+export interface PlanDetailApiCaseItem {
+  id: string;
+  num: number;
+  name: string;
+  moduleId: string;
+  moduleName: string;
+  createUser: string;
+  createUserName: string;
+  lastExecResult: LastExecuteResults;
+  lastExecTime: number;
+  lastExecReportId: string; // 报告id
+  executeUser: string;
+  executeUserName: string;
+  priority: string;
+  protocol: string;
+  path: string;
+  projectId: string;
+  projectName: string;
+  environmentId: string;
+  environmentName: string;
+  testPlanCollectionId: string; // 测试集id
+  testPlanCollectionName: string; // 测试集名称
+  apiTestCaseId: string; // 接口用例id
+}
+
+export interface BatchApiCaseParams extends BatchActionQueryParams {
+  testPlanId: string;
+  moduleIds?: string[];
+  collectionId?: string; // 测试集id
+  protocols?: string[]; // 接口用例传protocols 接口场景不传
+}
+
+export interface BatchMoveApiCaseParams extends BatchApiCaseParams {
+  targetCollectionId: string; // 测试集id
+}
+
+export interface SortApiCaseParams extends DragSortParams {
+  testCollectionId: string; // 测试集id
+}
+
+// 计划详情-接口场景
+export interface PlanDetailApiScenarioQueryParams extends TableQueryParams, TestPlanBaseParams {
+  scenarioId?: string;
+  moduleIds?: string[];
+  versionId?: string;
+  refId?: string;
+  collectionId?: string;
+  treeType?: 'MODULE' | 'COLLECTION'; // 视图类型：模块是MODULE，测试集是COLLECTION
+}
+
+export interface PlanDetailApiScenarioItem {
+  id: string;
+  num: string;
+  name: string;
+  priority: string;
+  projectId: string;
+  projectName: string;
+  environmentId: string;
+  environmentName: string;
+  moduleId: string;
+  moduleName: string;
+  createUser: string;
+  createUserName: string;
+  lastExecResult: LastExecuteResults;
+  lastExecTime: number;
+  executeUser: string;
+  executeUserName: string;
+  lastExecReportId: string; // 报告id
+  testPlanCollectionId: string; // 测试集id
+  testPlanCollectionName: string; // 测试集名称
+  apiScenarioId: string; // 场景id
+}
+
+// 执行历史
+export interface PlanDetailExecuteHistoryItem {
+  id: string;
+  num: string;
+  triggerMode: string; // 执行方式
+  execResult: ExecuteStatusEnum; // 执行结果
+  operationUser: string;
+  startTime: number;
+  endTime: number;
+  deleted: boolean;
+}
+
+export interface CreateTask {
+  resourceId: string;
+  enable: boolean;
+  cron: string;
+  runConfig: { runMode: 'SERIAL' | 'PARALLEL' };
+}
+export interface BatchConfigSchedule extends Partial<CreateTask>, BatchActionQueryParams {
+  projectId: string;
+}
+export interface BatchExecutePlan {
+  projectId?: string;
+  executeIds?: string[];
+  runMode: RunModeType;
+  executionSource: string;
+}
+
+export interface ExecutePlan extends BatchExecutePlan {
+  executeId: string;
+}
+
+export interface PlanMinderNodeData extends MinderJsonNodeData {
+  id: string;
+  pos: number;
+  text: string;
+  num: number; // 关联用例数量
+  priority?: number; // 串行/并行
+  executeMethod?: RunMode; // 串行/并行值
+  type: PlanMinderCollectionType; // 测试集类型(功能：FUNCTIONAL_CASE/接口用例：API_CASE/场景：SCENARIO_CASE)
+  extended: boolean;
+  grouped: boolean; // 是否使用环境组
+  environmentId: string;
+  testResourcePoolId: string;
+  retryOnFail: boolean;
+  retryTimes: number;
+  retryInterval: number;
+  stopOnFail: boolean;
+  tempCollectionNode?: boolean; // 关联用例到未保存的临时测试集节点标识
+}
+export interface PlanMinderNode extends MinderJsonNode {
+  data: PlanMinderNodeData;
+  children: PlanMinderNode[];
+}
+
+export interface PlanMinderAssociateDTO {
+  ids: string[];
+  associateType: PlanMinderAssociateType; // 关联关系的type(功能：FUNCTIONAL_CASE/接口定义：API/接口用例：API_CASE/场景：SCENARIO_CASE)
+}
+export interface PlanMinderEditListItem extends PlanMinderNodeData {
+  name: string;
+  associateDTOS: PlanMinderAssociateDTO[];
+}
+
+export interface PlanMinderEditParams {
+  planId: string;
+  editList: PlanMinderEditListItem[];
+  deletedIds: string[];
+}
+export interface PlanExecuteResultExecuteCaseCount {
+  success: number;
+  error: number;
+  fakeError: number;
+  block: number;
+  pending: number;
+}
+export interface PlanExecuteResult extends TaskReportDetail {
+  taskName: string;
+  reportId: string;
+  childPlans: { id: string; name: string; apiCaseTotal: number; apiScenarioTotal: number }[]; // 子计划
+  createUser: string;
+  executeRate: string;
+  executeCaseCount: PlanExecuteResultExecuteCaseCount;
+  apiCaseTotal: number;
+  apiScenarioTotal: number;
+}
+
+export interface TestPlanCaseDetail extends DetailCase {
+  createUserName: string;
+  createTime: number;
+  lastExecuteResult: string;
+  bugListCount: number;
+  customFields: Record<string, any>[];
+}

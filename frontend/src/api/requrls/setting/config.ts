@@ -24,6 +24,8 @@ export const GetAuthListUrl = '/system/authsource/list';
 export const AddAuthUrl = '/system/authsource/add';
 // 获取认证源详情
 export const GetAuthDetailUrl = '/system/authsource/get';
+// 根据类型获取认证源详情
+export const GetAuthDetailByTypeUrl = '/authentication/get/by/type';
 // 删除认证源
 export const DeleteAuthUrl = '/system/authsource/delete';
 // 测试ldap连接
@@ -34,6 +36,8 @@ export const TestLdapLoginUrl = '/system/authsource/ldap/test-login';
 export const SaveCleanConfigUrl = '/system/parameter/edit/clean-config';
 // 获取内存清理配置
 export const GetCleanConfigUrl = '/system/parameter/get/clean-config';
+// 设置上传配置
+export const EditUploadConfigUrl = '/system/parameter/edit/upload-config';
 
 // 获取系统主页左上角图片
 export const GetTitleImgUrl = `${import.meta.env.VITE_API_BASE_URL}/base-display/get/logo-platform`;

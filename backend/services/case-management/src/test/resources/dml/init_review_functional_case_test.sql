@@ -92,6 +92,7 @@ VALUES ('wx_case_id_1', 'wx_review_id_1', 'admin'),
        ('gyq_case_id_4', 'wx_review_id_1', 'admin'),
        ('gyq_case_id_5', 'wx_review_id_1', 'gyq_case_review'),
        ('gyq_case_id_5', 'wx_review_id_1', 'GGG'),
+       ('gyq_case_id_5', 'wx_review_id_1', 'multiple_review_admin'),
        ('wx_case_id_3', 'wx_review_id_3', 'admin'),
        ('wx_case_id_4', 'wx_review_id_4', 'admin'),
        ('wx_case_id_1', 'wx_review_id_4', '123'),
@@ -119,6 +120,8 @@ INSERT INTO project (id, num, organization_id, name, description, create_user, u
 VALUES ('wx_test_project_review_one', null, 'organization-associate-case-test', '评审跨项目关联用例', '系统默认创建的项目',
         'admin', 'admin', UNIX_TIMESTAMP() * 1000, UNIX_TIMESTAMP() * 1000),
     ('wx_test_project_review_two', null, 'organization-associate-case-test', '评审跨项目关联用例2', '系统默认创建的项目',
+        'admin', 'admin', UNIX_TIMESTAMP() * 1000, UNIX_TIMESTAMP() * 1000),
+       ('wx_test_project', null, 'organization-associate-case-test', '评审跨项目关联用例3', '系统默认创建的项目',
         'admin', 'admin', UNIX_TIMESTAMP() * 1000, UNIX_TIMESTAMP() * 1000);
 
 

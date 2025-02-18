@@ -1,6 +1,7 @@
 <template>
   <MsDrawer
     v-model:visible="innerVisible"
+    class="createAndEditCaseDrawer"
     :title="isEdit ? t('case.updateCase') : t('case.createCase')"
     :width="894"
     no-content-padding
@@ -68,7 +69,16 @@
             <MsTagsInput v-model:model-value="detailForm.tags" :max-tag-count="1" />
           </a-form-item>
         </a-form>
-        <div class="px-[16px] font-medium">{{ t('apiTestManagement.requestParams') }}</div>
+        <div class="flex items-center justify-between">
+          <div class="px-[16px] font-medium">{{ t('apiTestManagement.requestParams') }}</div>
+          <ApiChangeTag
+            :ignore-api-change="detailForm.ignoreApiChange"
+            :ignore-api-diff="detailForm.ignoreApiDiff"
+            :inconsistent-with-api="detailForm.inconsistentWithApi"
+            @show-diff="showDiffDrawer"
+          />
+        </div>
+
         <requestComposition
           ref="requestCompositionRef"
           v-model:request="detailForm"
@@ -80,6 +90,7 @@
           :file-save-as-api="transferFileCase"
           is-definition
           @execute="handleExecute"
+          @request-tab-click="requestTabClick"
         />
       </div>
     </div>
@@ -100,11 +111,14 @@
   import apiStatus from '@/views/api-test/components/apiStatus.vue';
   import executeButton from '@/views/api-test/components/executeButton.vue';
   import requestComposition, { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
+  import ApiChangeTag from '@/views/api-test/management/components/management/case/apiChangeTag.vue';
 
   import { localExecuteApiDebug } from '@/api/modules/api-test/common';
   import {
     addCase,
+    caseFileCopy,
     debugCase,
+    definitionFileCopy,
     getDefinitionDetail,
     getTransferOptionsCase,
     runCase,
@@ -112,8 +126,9 @@
     updateCase,
     uploadTempFileCase,
   } from '@/api/modules/api-test/management';
-  import { getSocket } from '@/api/modules/project-management/commonScript';
   import { useI18n } from '@/hooks/useI18n';
+  import useShortcutSave from '@/hooks/useShortcutSave';
+  import useWebsocket from '@/hooks/useWebsocket';
   import useAppStore from '@/store/modules/app';
   import { getGenerateId } from '@/utils';
 
@@ -121,18 +136,23 @@
   import { RequestCaseStatus, RequestMethods } from '@/enums/apiEnum';
 
   import { casePriorityOptions, defaultResponse } from '@/views/api-test/components/config';
+  import { parseRequestBodyFiles } from '@/views/api-test/components/utils';
 
   const props = defineProps<{
     apiDetail?: RequestParam | ApiDefinitionDetail;
   }>();
   const emit = defineEmits<{
     (e: 'loadCase', id?: string): void;
+    (e: 'showDiff', apiDetailInfo: ApiCaseDetail): void;
   }>();
 
   const { t } = useI18n();
   const appStore = useAppStore();
 
-  const innerVisible = ref(false);
+  const innerVisible = defineModel<boolean>('visible', {
+    default: false,
+  });
+
   const drawerLoading = ref(false);
 
   const apiDefinitionId = ref('');
@@ -183,6 +203,16 @@
   const detailForm = ref(cloneDeep(defaultDetail.value));
   const isEdit = ref(false);
 
+  function requestTabClick() {
+    const element = document
+      .querySelector('.createAndEditCaseDrawer')
+      ?.querySelectorAll('.request-tab-and-response')[0];
+    element?.scrollTo({
+      top: 0,
+      behavior: 'smooth',
+    });
+  }
+
   async function open(apiId: string, record?: ApiCaseDetail | RequestParam, isCopy?: boolean) {
     appStore.showLoading();
     apiDefinitionId.value = apiId;
@@ -192,28 +222,66 @@
     } else {
       await getApiDetail();
     }
+    const apiRequestInfo = apiDetailInfo.value.request || apiDetailInfo.value;
+    if (!isCopy && !record && apiDetailInfo.value.protocol === 'HTTP') {
+      // 创建用例需要复制文件
+      let copyFilesMap: Record<string, any> = {};
+      const fileIds = parseRequestBodyFiles(apiRequestInfo.body, [], [], []).uploadFileIds;
+      if (fileIds.length > 0) {
+        try {
+          copyFilesMap = await definitionFileCopy({
+            resourceId: apiDetailInfo.value.id as string,
+            fileIds,
+          });
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.log(error);
+        }
+      }
+      parseRequestBodyFiles(apiRequestInfo.body, [], [], [], copyFilesMap); // 替换请求文件 id
+    }
     // 创建的时候，请求参数为接口定义的请求参数
     environmentId.value = appStore.currentEnvConfig?.id;
     detailForm.value = {
       ...cloneDeep(defaultDetail.value),
       ...(apiDetailInfo.value.protocol === 'HTTP'
         ? {
-            headers: apiDetailInfo.value.headers ?? apiDetailInfo.value.request.headers,
-            body: apiDetailInfo.value?.body ?? apiDetailInfo.value.request.body,
-            rest: apiDetailInfo.value.rest ?? apiDetailInfo.value.request.rest,
-            query: apiDetailInfo.value.query ?? apiDetailInfo.value.request.query,
-            authConfig: apiDetailInfo.value.authConfig ?? apiDetailInfo.value.request.authConfig,
-            otherConfig: apiDetailInfo.value.otherConfig ?? apiDetailInfo.value.request.otherConfig,
-            url: apiDetailInfo.value.url ?? apiDetailInfo.value.request.url,
+            headers: apiDetailInfo.value.headers ?? apiRequestInfo.headers,
+            body: apiDetailInfo.value?.body ?? apiRequestInfo.body,
+            rest: apiDetailInfo.value.rest ?? apiRequestInfo.rest,
+            query: apiDetailInfo.value.query ?? apiRequestInfo.query,
+            authConfig: apiDetailInfo.value.authConfig ?? apiRequestInfo.authConfig,
+            otherConfig: apiDetailInfo.value.otherConfig ?? apiRequestInfo.otherConfig,
+            url: apiDetailInfo.value.url ?? apiRequestInfo.url,
           }
-        : {}),
-      children: apiDetailInfo.value.children ?? apiDetailInfo.value.request.children,
+        : apiDetailInfo.value),
+      children: apiDetailInfo.value.children ?? apiRequestInfo.children,
     };
     // 复制
     if (isCopy) {
-      detailForm.value = cloneDeep(record as RequestParam);
+      if (record?.protocol === 'HTTP') {
+        // 复制的用例需要复制文件
+        let copyFilesMap: Record<string, any> = {};
+        const fileIds = parseRequestBodyFiles(record.request.body, [], [], []).uploadFileIds;
+        if (fileIds.length > 0) {
+          try {
+            copyFilesMap = await caseFileCopy({
+              resourceId: record.id as string,
+              fileIds,
+            });
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.log(error);
+          }
+        }
+        parseRequestBodyFiles(record.request.body, [], [], [], copyFilesMap); // 替换请求文件 id
+        detailForm.value = {
+          ...cloneDeep(record as RequestParam),
+        };
+      }
       detailForm.value.name = `copy_${record?.name}`;
-      environmentId.value = record?.environmentId;
+      detailForm.value.isCopy = true;
+      environmentId.value = record?.environmentId ?? environmentId.value;
       if (detailForm.value.name.length > 255) {
         detailForm.value.name = detailForm.value.name.slice(0, 255);
       }
@@ -222,7 +290,7 @@
     if (!isCopy && record?.id) {
       isEdit.value = true;
       detailForm.value = cloneDeep(record as RequestParam);
-      environmentId.value = record.environmentId;
+      environmentId.value = record.environmentId ?? environmentId.value;
       detailForm.value.isNew = false;
     }
     appStore.hideLoading();
@@ -249,9 +317,9 @@
         }
         drawerLoading.value = true;
         // 给后端传的参数
-        if (!requestCompositionRef.value?.makeRequestParams()) return;
-        const { linkFileIds, uploadFileIds, request, unLinkFileIds, deleteFileIds } =
-          requestCompositionRef.value.makeRequestParams();
+        const requestParams = await requestCompositionRef.value?.makeRequestParams();
+        if (!requestParams) return;
+        const { linkFileIds, uploadFileIds, request, unLinkFileIds, deleteFileIds } = requestParams;
         const { name, priority, status, tags, id } = detailForm.value;
         const params: AddApiCaseParams = {
           projectId: appStore.currentProjectId,
@@ -291,40 +359,57 @@
       }
     });
   }
+
+  const { registerCatchSaveShortcut, removeCatchSaveShortcut } = useShortcutSave(() => {
+    handleDrawerConfirm(false);
+  });
+  watch(
+    () => innerVisible.value,
+    (val) => {
+      if (val) {
+        registerCatchSaveShortcut();
+      } else {
+        removeCatchSaveShortcut();
+      }
+    }
+  );
+
   const executeRef = ref<InstanceType<typeof executeButton>>();
   const reportId = ref('');
   const websocket = ref<WebSocket>();
   const temporaryResponseMap: Record<string, any> = {}; // 缓存websocket返回的报告内容，避免执行接口后切换tab导致报告丢失
   // 开启websocket监听，接收执行结果
-  function debugSocket(executeType?: 'localExec' | 'serverExec') {
-    websocket.value = getSocket(
-      reportId.value,
-      executeType === 'localExec' ? '/ws/debug' : '',
-      executeType === 'localExec' ? executeRef.value?.localExecuteUrl : ''
-    );
-    websocket.value.addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      if (data.msgType === 'EXEC_RESULT') {
-        if (detailForm.value.reportId === data.reportId) {
-          // 判断当前查看的tab是否是当前返回的报告的tab，是的话直接赋值
-          detailForm.value.response = data.taskResult; // 渲染出用例详情和创建用例抽屉的响应数据
+  async function debugSocket(executeType?: 'localExec' | 'serverExec') {
+    const { createSocket, websocket: _websocket } = useWebsocket({
+      reportId: reportId.value,
+      socketUrl: executeType === 'localExec' ? '/ws/debug' : '',
+      host: executeType === 'localExec' ? executeRef.value?.localExecuteUrl : '',
+      onMessage: (event) => {
+        const data = JSON.parse(event.data);
+        if (data.msgType === 'EXEC_RESULT') {
+          if (detailForm.value.reportId === data.reportId) {
+            // 判断当前查看的tab是否是当前返回的报告的tab，是的话直接赋值
+            detailForm.value.response = data.taskResult; // 渲染出用例详情和创建用例抽屉的响应数据
+            detailForm.value.executeLoading = false;
+          } else {
+            // 不是则需要把报告缓存起来，等切换到对应的tab再赋值
+            temporaryResponseMap[data.reportId] = data.taskResult;
+          }
+        } else if (data.msgType === 'EXEC_END') {
+          // 执行结束，关闭websocket
+          websocket.value?.close();
           detailForm.value.executeLoading = false;
-        } else {
-          // 不是则需要把报告缓存起来，等切换到对应的tab再赋值
-          temporaryResponseMap[data.reportId] = data.taskResult;
         }
-      } else if (data.msgType === 'EXEC_END') {
-        // 执行结束，关闭websocket
-        websocket.value?.close();
-        detailForm.value.executeLoading = false;
-      }
+      },
     });
+    await createSocket();
+    websocket.value = _websocket.value;
   }
   async function handleExecute(executeType?: 'localExec' | 'serverExec') {
     try {
       detailForm.value.executeLoading = true;
       detailForm.value.response = cloneDeep(defaultResponse);
-      const makeRequestParams = requestCompositionRef.value?.makeRequestParams(executeType); // 写在reportId之前，防止覆盖reportId
+      const makeRequestParams = await requestCompositionRef.value?.makeRequestParams(executeType); // 写在reportId之前，防止覆盖reportId
       reportId.value = getGenerateId();
       detailForm.value.reportId = reportId.value; // 存储报告ID
       let res;
@@ -338,7 +423,7 @@
         linkFileIds: makeRequestParams?.linkFileIds,
         uploadFileIds: makeRequestParams?.uploadFileIds,
       };
-      debugSocket(executeType); // 开启websocket
+      await debugSocket(executeType); // 开启websocket
       if (!(detailForm.value.id as string).startsWith('c') && executeType === 'serverExec') {
         // 已创建的服务端
         res = await runCase({
@@ -371,6 +456,11 @@
     detailForm.value.executeLoading = false;
   }
 
+  // 查看与定义不一致
+  function showDiffDrawer() {
+    emit('showDiff', detailForm.value as unknown as ApiCaseDetail);
+  }
+
   defineExpose({
     open,
   });
@@ -381,11 +471,12 @@
     font-weight: 400;
   }
   :deep(.ms-detail-card-title) {
-    width: 50%;
+    width: 300px;
   }
   :deep(.ms-detail-card-desc) {
     gap: 16px;
     justify-content: end;
+    flex: 1;
     & > div {
       width: auto;
       max-width: 50%;

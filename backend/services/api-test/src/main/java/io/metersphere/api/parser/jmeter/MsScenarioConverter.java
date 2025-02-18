@@ -18,10 +18,13 @@ import io.metersphere.api.parser.jmeter.processor.assertion.AssertionConverterFa
 import io.metersphere.plugin.api.dto.ParameterConfig;
 import io.metersphere.plugin.api.spi.AbstractJmeterElementConverter;
 import io.metersphere.project.api.assertion.MsAssertion;
+import io.metersphere.project.api.assertion.MsResponseCodeAssertion;
 import io.metersphere.project.api.processor.MsProcessor;
+import io.metersphere.project.api.processor.SQLProcessor;
 import io.metersphere.project.dto.environment.EnvironmentConfig;
 import io.metersphere.project.dto.environment.EnvironmentInfoDTO;
 import io.metersphere.project.dto.environment.processors.EnvProcessorConfig;
+import io.metersphere.project.dto.environment.processors.EnvScenarioSqlProcessor;
 import io.metersphere.project.dto.environment.variables.CommonVariables;
 import io.metersphere.sdk.util.BeanUtils;
 import org.apache.commons.collections.CollectionUtils;
@@ -42,6 +45,7 @@ import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static io.metersphere.api.constants.ApiConstants.ASSOCIATE_RESULT_PROCESSOR_PREFIX;
 import static io.metersphere.api.parser.jmeter.constants.JmeterAlias.COOKIE_PANEL;
 
 /**
@@ -95,7 +99,10 @@ public class MsScenarioConverter extends AbstractJmeterElementConverter<MsScenar
         if (scenarioConfig == null || scenarioConfig.getVariable() == null || CollectionUtils.isEmpty(scenarioConfig.getVariable().getCsvVariables())) {
             return;
         }
-        List<CsvVariable> csvVariables = scenarioConfig.getVariable().getCsvVariables();
+        List<CsvVariable> csvVariables = scenarioConfig.getVariable().getCsvVariables()
+                .stream()
+                .filter(csvVariable -> StringUtils.equals(csvVariable.getScope(), CsvVariable.CsvVariableScope.SCENARIO.name()))
+                .toList();
         MsCsvChildPreConverter.addCsvDataSet(tree, JmeterProperty.CSVDataSetProperty.SHARE_MODE_GROUP, csvVariables);
     }
 
@@ -235,10 +242,14 @@ public class MsScenarioConverter extends AbstractJmeterElementConverter<MsScenar
                 .getAssertionConfig()
                 .getAssertions();
 
-        boolean ignoreAssertStatus = MsCommonElementConverter.isIgnoreAssertStatus(assertions);
+        for (int i = 0; i < assertions.size(); i++) {
+            MsAssertion assertion = assertions.get(i);
 
-        assertions.forEach(assertion ->
-                AssertionConverterFactory.getConverter(assertion.getClass()).parse(tree, assertion, config, ignoreAssertStatus));
+            // 只给第一个响应码断言设置忽略状态
+            boolean isIgnoreStatus = i == 0 && assertion instanceof MsResponseCodeAssertion;
+
+            AssertionConverterFactory.getConverter(assertion.getClass()).parse(tree, assertion, config, isIgnoreStatus);
+        }
     }
 
     /**
@@ -276,6 +287,16 @@ public class MsScenarioConverter extends AbstractJmeterElementConverter<MsScenar
 
         if (CollectionUtils.isEmpty(envScenarioProcessors)) {
             return;
+        }
+
+        // 处理环境场景级别的SQL处理器
+        for (int i = 0; i < envScenarioProcessors.size(); i++) {
+            MsProcessor msProcessor = envScenarioProcessors.get(i);
+            if (msProcessor instanceof SQLProcessor) {
+                EnvScenarioSqlProcessor envScenarioSqlProcessor = BeanUtils.copyBean(new EnvScenarioSqlProcessor(), msProcessor);
+                envScenarioSqlProcessor.setName(ASSOCIATE_RESULT_PROCESSOR_PREFIX + false);
+                envScenarioProcessors.set(i, envScenarioSqlProcessor);
+            }
         }
 
         Function<Class<?>, MsProcessorConverter<MsProcessor>> getConverterFunc =

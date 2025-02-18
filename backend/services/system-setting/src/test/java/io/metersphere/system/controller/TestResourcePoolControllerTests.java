@@ -73,6 +73,9 @@ class TestResourcePoolControllerTests extends BaseTest {
 
     private static final String TEST_RESOURCE_POOL_ADD = "/test/resource/pool/add";
     private static final String TEST_RESOURCE_POOL_UPDATE = "/test/resource/pool/update";
+    private static final String TEST_RESOURCE_POOL_CAPACITY_LIST = "/test/resource/pool/capacity/task/list";
+    private static final String TEST_RESOURCE_POOL_CAPACITY_DETAIL = "/test/resource/pool/capacity/detail";
+
 
     private static final ResultMatcher ERROR_REQUEST_MATCHER = status().is5xxServerError();
 
@@ -83,7 +86,8 @@ class TestResourcePoolControllerTests extends BaseTest {
             "       \"ip\":\"192.168.20.17\",\n" +
             "       \"port\": \"1194\",\n" +
             "       \"monitor\": \"9100\",\n" +
-            "       \"concurrentNumber\": 100\n" +
+            "       \"concurrentNumber\": \"100\",\n" +
+            "      \"singleTaskConcurrentNumber\": 3\n" +
             "   }],\n" +
             "\"ip\":\"172.2.130.1\",\n" +
             "\"token\":\"dsdfssdsvgsd\",\n" +
@@ -104,7 +108,8 @@ class TestResourcePoolControllerTests extends BaseTest {
             "      \"ip\": \"172.16.200.8\",\n" +
             "      \"port\": \"8082\",\n" +
             "      \"monitor\": \"9100\",\n" +
-            "      \"concurrentNumber\": 100\n" +
+            "      \"concurrentNumber\": \"100\",\n" +
+            "      \"singleTaskConcurrentNumber\": 3\n" +
             "    }\n" +
             "  ],\n" +
             "  \"orgIds\": [\"sys_default_organization_2\",\"sys_default_organization_3\"],\n" +
@@ -194,7 +199,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Order(1)
     void addTestResourcePoolOne() throws Exception {
         // 选全部资源池，部分没值 资源池节点为NODE use： api load ui
-        this.addTestResourcePoolSuccess("test_pool_1", true, false, true, true, true, false, ResourcePoolTypeEnum.NODE.name());
+        this.addTestResourcePoolSuccess("test_pool_1", true, false, true, true, true, false, ResourcePoolTypeEnum.NODE.getName());
 
     }
 
@@ -202,7 +207,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Order(2)
     void addTestResourcePoolTwo() throws Exception {
         // 选全部资源池，部分没值 资源池节点为NODE use： api load
-        this.addTestResourcePoolSuccess("test_pool_2", true, false, true, true, false, false, ResourcePoolTypeEnum.NODE.name());
+        this.addTestResourcePoolSuccess("test_pool_2", true, false, true, true, false, false, ResourcePoolTypeEnum.NODE.getName());
 
     }
 
@@ -210,7 +215,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Order(3)
     void addTestResourcePoolThree() throws Exception {
         // 选全部资源池，部分没值 资源池节点为NODE use： api
-        this.addTestResourcePoolSuccess("test_pool_3", true, false, true, false, false, false, ResourcePoolTypeEnum.NODE.name());
+        this.addTestResourcePoolSuccess("test_pool_3", true, false, true, false, false, false, ResourcePoolTypeEnum.NODE.getName());
 
     }
 
@@ -218,7 +223,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Order(4)
     void addTestResourcePoolFour() throws Exception {
         // 选全部资源池，部分没值 资源池节点为NODE use：
-        this.addTestResourcePoolSuccess("test_pool_4", true, false, false, false, false, false, ResourcePoolTypeEnum.NODE.name());
+        this.addTestResourcePoolSuccess("test_pool_4", true, false, false, false, false, false, ResourcePoolTypeEnum.NODE.getName());
 
     }
 
@@ -227,7 +232,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     void addTestResourcePoolFive() throws Exception {
         //用途只是标记，没有实际影响所以这里每种只测一遍。其余以api为例
         // 选全部资源池，部分有值 资源池节点为NODE use： api
-        this.addTestResourcePoolSuccess("test_pool_5", true, true, true, false, false, false, ResourcePoolTypeEnum.NODE.name());
+        this.addTestResourcePoolSuccess("test_pool_5", true, true, true, false, false, false, ResourcePoolTypeEnum.NODE.getName());
 
     }
 
@@ -235,7 +240,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Order(6)
     void addTestResourcePoolSix() throws Exception {
         // 不选全部资源池，部分有值 资源池节点为NODE use： api
-        this.addTestResourcePoolSuccess("test_pool_6", false, true, true, false, false, false, ResourcePoolTypeEnum.NODE.name());
+        this.addTestResourcePoolSuccess("test_pool_6", false, true, true, false, false, false, ResourcePoolTypeEnum.NODE.getName());
 
     }
 
@@ -244,7 +249,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     void addTestResourcePoolSeven() throws Exception {
         //资源池的应用与类型无关 这里资源池正确的顺序就到此为止。换个类型只测一遍就行
         // 不选全部资源池，部分有值 资源池节点为NODE use： api
-        this.addTestResourcePoolSuccess("test_pool_7", false, true, true, false, false, false, ResourcePoolTypeEnum.K8S.name());
+        this.addTestResourcePoolSuccess("test_pool_7", false, true, true, false, false, false, ResourcePoolTypeEnum.K8S.getName());
     }
 
 
@@ -281,7 +286,7 @@ class TestResourcePoolControllerTests extends BaseTest {
         ResultHolder sortHolder = JSON.parseObject(sortData, ResultHolder.class);
         Pager<?> sortPageData = JSON.parseObject(JSON.toJSONString(sortHolder.getData()), Pager.class);
         // 返回值中取出第一条ID最大的数据, 并判断是否是default-admin
-        TestResourcePoolDTO testResourcePoolDTO = JSON.parseArray(JSON.toJSONString(sortPageData.getList()), TestResourcePoolDTO.class).get(0);
+        TestResourcePoolDTO testResourcePoolDTO = JSON.parseArray(JSON.toJSONString(sortPageData.getList()), TestResourcePoolDTO.class).getFirst();
         Assertions.assertNull(testResourcePoolDTO.getInUsed());
     }
 
@@ -297,7 +302,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Test
     @Order(11)
     void getResourcePoolsDetailWidthBlobK8s() throws Exception {
-        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob_k8s", false, true, true, true, true, false, ResourcePoolTypeEnum.K8S.name());
+        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob_k8s", false, true, true, true, true, false, ResourcePoolTypeEnum.K8S.getName());
         String id = testResourcePoolRequest1.getId();
         MvcResult mvcResult = mockMvc.perform(MockMvcRequestBuilders.get("/test/resource/pool/detail/" + id)
                         .header(SessionConstants.HEADER_TOKEN, sessionId)
@@ -321,7 +326,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Test
     @Order(12)
     void getResourcePoolsDetailWidthBlobNode() throws Exception {
-        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob_node", false, true, true, true, true, false, ResourcePoolTypeEnum.NODE.name());
+        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob_node", false, true, true, true, true, false, ResourcePoolTypeEnum.NODE.getName());
         String id = testResourcePoolRequest1.getId();
         MvcResult mvcResult = mockMvc.perform(MockMvcRequestBuilders.get("/test/resource/pool/detail/" + id)
                         .header(SessionConstants.HEADER_TOKEN, sessionId)
@@ -335,7 +340,7 @@ class TestResourcePoolControllerTests extends BaseTest {
         Assertions.assertTrue((CollectionUtils.isNotEmpty(testResourcePoolReturnDTO.getTestResourceReturnDTO().getOrgIdNameMap())));
 
 
-        Assertions.assertTrue(testResourcePoolReturnDTO.getTestResourceReturnDTO().getNodesList().size() > 0);
+        Assertions.assertFalse(testResourcePoolReturnDTO.getTestResourceReturnDTO().getNodesList().isEmpty());
         for (TestResourceNodeDTO testResourceNodeDTO : testResourcePoolReturnDTO.getTestResourceReturnDTO().getNodesList()) {
             Assertions.assertNotNull(testResourceNodeDTO.getIp());
             Assertions.assertNotNull(testResourceNodeDTO.getPort());
@@ -347,7 +352,7 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Test
     @Order(13)
     void getResourcePoolsDetailWidthBlobNoOrgIds() throws Exception {
-        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob_no_org_id", true, false, true, false, false, false, ResourcePoolTypeEnum.K8S.name());
+        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob_no_org_id", true, false, true, false, false, false, ResourcePoolTypeEnum.K8S.getName());
         String id = testResourcePoolRequest1.getId();
         QueryResourcePoolRequest request = new QueryResourcePoolRequest();
         request.setCurrent(1);
@@ -373,7 +378,7 @@ class TestResourcePoolControllerTests extends BaseTest {
         String id = "1034";
         getDetail("/test/resource/pool/detail/" + id, ERROR_REQUEST_MATCHER);
 
-        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob_no_node", true, false, true, false, false, true, ResourcePoolTypeEnum.K8S.name());
+        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob_no_node", true, false, true, false, false, true, ResourcePoolTypeEnum.K8S.getName());
         getDetail("/test/resource/pool/detail/" + testResourcePoolRequest1.getId(), status().isOk());
 
     }
@@ -395,12 +400,12 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Order(15)
     void updateTestResourcePool() throws Exception {
         createMockUrl();
-        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob2", false, true, true, false, false, false, ResourcePoolTypeEnum.K8S.name());
+        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob2", false, true, true, false, false, false, ResourcePoolTypeEnum.K8S.getName());
         String id = testResourcePoolRequest1.getId();
         TestResourcePoolRequest testResourcePoolRequest = new TestResourcePoolRequest();
         testResourcePoolRequest.setId(id);
         testResourcePoolRequest.setName("test_pool_update");
-        testResourcePoolRequest.setType(ResourcePoolTypeEnum.NODE.name());
+        testResourcePoolRequest.setType(ResourcePoolTypeEnum.NODE.getName());
         setResources(testResourcePoolRequest, false, false);
         testResourcePoolRequest.setApiTest(true);
         testResourcePoolRequest.setLoadTest(false);
@@ -420,12 +425,12 @@ class TestResourcePoolControllerTests extends BaseTest {
     @Order(16)
     void updateTestResourcePoolWithOrgIds() throws Exception {
         createMockUrl();
-        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob3", false, true, true, false, false, false, ResourcePoolTypeEnum.K8S.name());
+        TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob3", false, true, true, false, false, false, ResourcePoolTypeEnum.K8S.getName());
         String id = testResourcePoolRequest1.getId();
         TestResourcePoolRequest testResourcePoolRequest = new TestResourcePoolRequest();
         testResourcePoolRequest.setId(id);
         testResourcePoolRequest.setName("test_pool_update_1");
-        testResourcePoolRequest.setType(ResourcePoolTypeEnum.NODE.name());
+        testResourcePoolRequest.setType(ResourcePoolTypeEnum.NODE.getName());
         setResources(testResourcePoolRequest, true, false);
         testResourcePoolRequest.setApiTest(true);
         testResourcePoolRequest.setLoadTest(false);
@@ -492,7 +497,7 @@ class TestResourcePoolControllerTests extends BaseTest {
             testResourcePoolRequest.setId("");
             this.requestPost(urlType, url, id, testResourcePoolRequest, status().isBadRequest());
 
-            TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob2", false, true, true, false, false, false, ResourcePoolTypeEnum.K8S.name());
+            TestResourcePool testResourcePoolRequest1 = this.addTestResourcePoolSuccess("test_pool_blob2", false, true, true, false, false, false, ResourcePoolTypeEnum.K8S.getName());
             id = testResourcePoolRequest1.getId();
         }
 
@@ -557,7 +562,7 @@ class TestResourcePoolControllerTests extends BaseTest {
         ResultHolder sortHolder = JSON.parseObject(sortData, ResultHolder.class);
         Pager<?> sortPageData = JSON.parseObject(JSON.toJSONString(sortHolder.getData()), Pager.class);
         // 返回值中取出第一条ID最大的数据, 并判断是否是default-admin
-        TestResourcePoolDTO testResourcePoolDTO = JSON.parseArray(JSON.toJSONString(sortPageData.getList()), TestResourcePoolDTO.class).get(0);
+        TestResourcePoolDTO testResourcePoolDTO = JSON.parseArray(JSON.toJSONString(sortPageData.getList()), TestResourcePoolDTO.class).getFirst();
         Assertions.assertTrue(StringUtils.equals(testResourcePoolDTO.getName(), keyWord));
         return testResourcePoolDTO;
     }
@@ -583,7 +588,7 @@ class TestResourcePoolControllerTests extends BaseTest {
         }
         //没类型
         if (!noType) {
-            testResourcePoolDTO.setType(ResourcePoolTypeEnum.NODE.name());
+            testResourcePoolDTO.setType(ResourcePoolTypeEnum.NODE.getName());
         }
         //没资源池（用途为API 或者 性能测试的校验）
         if (!noResources) {
@@ -628,6 +633,119 @@ class TestResourcePoolControllerTests extends BaseTest {
         }
 
         return testResourcePoolDTO;
+    }
+
+
+
+    @Test
+    @Order(18)
+    public void getTestResourcePoolCapacityDetail() throws Exception {
+        TestResourcePool testResourcePool = new TestResourcePool();
+        testResourcePool.setId("gyq_pool_delete_enable");
+        testResourcePool.setType("NODE");
+        testResourcePool.setEnable(true);
+        testResourcePool.setDeleted(true);
+        testResourcePool.setAllOrg(true);
+        testResourcePool.setName("测试");
+        testResourcePool.setUpdateTime(System.currentTimeMillis());
+        testResourcePool.setCreateTime(System.currentTimeMillis());
+        testResourcePool.setCreateUser("admin");
+        testResourcePool.setServerUrl("172.06.200.15");
+        testResourcePoolMapper.insert(testResourcePool);
+        TestResourcePoolCapacityRequest  request = new TestResourcePoolCapacityRequest();
+        request.setPoolId("test_pool_1");
+        request.setIp("172.16.200.8");
+        request.setPort("8082");
+        this.requestPost(TEST_RESOURCE_POOL_CAPACITY_DETAIL, request);
+        request.setCurrent(1);
+        request.setPageSize(10);
+        MvcResult mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_DETAIL, request);
+        // 获取返回值
+        String returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        ResultHolder resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+        request.setPoolId("gyq_pool_delete_enable");
+        mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_LIST, request);
+        // 获取返回值
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+        testResourcePool.setEnable(false);
+        testResourcePool.setDeleted(false);
+        testResourcePoolMapper.updateByPrimaryKeySelective(testResourcePool);
+        request.setPoolId("gyq_pool_delete_enable");
+        mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_LIST, request);
+        // 获取返回值
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+        testResourcePool.setEnable(true);
+        testResourcePool.setDeleted(true);
+        testResourcePoolMapper.updateByPrimaryKeySelective(testResourcePool);
+        request.setPoolId("test_pool_1");
+        request.setIp(null);
+        mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_LIST, request);
+        // 获取返回值
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+
+    }
+
+    @Test
+    @Order(19)
+    public void getSystemTaskItemPage() throws Exception {
+        TestResourcePoolCapacityRequest  request = new TestResourcePoolCapacityRequest();
+        request.setPoolId("test_pool_1");
+        request.setIp("172.16.200.8");
+        request.setPort("8082");
+        request.setCurrent(1);
+        request.setPageSize(10);
+        MvcResult mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_LIST, request);
+        // 获取返回值
+        String returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        ResultHolder resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+        request.setIp(null);
+        request.setPort(null);
+        mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_LIST, request);
+        // 获取返回值
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+        request.setPoolId("null");
+        mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_LIST, request);
+        // 获取返回值
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+
+        request.setPoolId("gyq_pool_delete_enable");
+        mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_LIST, request);
+        // 获取返回值
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+        TestResourcePool testResourcePool = new TestResourcePool();
+        testResourcePool.setId("gyq_pool_delete_enable");
+        testResourcePool.setDeleted(false);
+        testResourcePoolMapper.updateByPrimaryKeySelective(testResourcePool);
+        request.setPoolId("gyq_pool_delete_enable");
+        mvcResult = this.requestPostWithOkAndReturn(TEST_RESOURCE_POOL_CAPACITY_LIST, request);
+        // 获取返回值
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
+
     }
 
 }

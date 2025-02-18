@@ -1,24 +1,26 @@
 <template>
   <div>
-    <a-select
+    <MsSelect
       v-model:model-value="currentEnv"
       :options="envOptions"
-      class="!w-[200px] pl-0 pr-[8px]"
       :loading="envLoading"
       allow-search
+      :size="props.size"
       @popup-visible-change="popupVisibleChange"
     >
       <template #prefix>
-        <div class="flex cursor-pointer p-[8px]" @click.stop="goEnv">
+        <div :class="[`flex cursor-pointer ${props.size === 'mini' ? 'p-[4px]' : 'p-[8px]'}`]" @click.stop="goEnv">
           <svg-icon width="14px" height="14px" :name="'icon_env'" class="text-[var(--color-text-4)]" />
         </div>
       </template>
-    </a-select>
+    </MsSelect>
   </div>
 </template>
 
 <script setup lang="ts">
   import { SelectOptionData } from '@arco-design/web-vue';
+
+  import MsSelect from '@/components/business/ms-select';
 
   import useOpenNewPage from '@/hooks/useOpenNewPage';
   import useAppStore from '@/store/modules/app';
@@ -27,6 +29,7 @@
 
   const props = defineProps<{
     env?: string;
+    size?: 'mini' | 'small' | 'medium' | 'large';
   }>();
 
   const appStore = useAppStore();
@@ -85,6 +88,15 @@
 </script>
 
 <style lang="less" scoped>
+  :deep(.arco-select) {
+    padding-right: 8px;
+    padding-left: 0;
+    width: 200px;
+    &.arco-select-view-size-mini {
+      width: 113px;
+    }
+  }
+
   .ms-input-group--prepend();
   :deep(.arco-select-view-prefix) {
     margin-right: 8px;

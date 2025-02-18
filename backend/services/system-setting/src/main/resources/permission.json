@@ -53,6 +53,10 @@
             "name": "permission.system_organization_project_member.add"
           },
           {
+            "id": "SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE_MEMBER",
+            "name": "permission.system_organization_project_member.update"
+          },
+          {
             "id": "SYSTEM_ORGANIZATION_PROJECT:READ+DELETE_MEMBER",
             "name": "permission.system_organization_project_member.delete"
           }
@@ -84,7 +88,8 @@
             "id": "SYSTEM_TEST_RESOURCE_POOL:READ"
           },
           {
-            "id": "SYSTEM_TEST_RESOURCE_POOL:READ+ADD"
+            "id": "SYSTEM_TEST_RESOURCE_POOL:READ+ADD",
+            "license": true
           },
           {
             "id": "SYSTEM_TEST_RESOURCE_POOL:READ+UPDATE"
@@ -126,27 +131,33 @@
           },
           {
             "id": "SYSTEM_PARAMETER_SETTING_DISPLAY:READ",
-            "name": "permission.system_parameter_setting_display.read"
+            "name": "permission.system_parameter_setting_display.read",
+            "license": true
           },
           {
             "id": "SYSTEM_PARAMETER_SETTING_DISPLAY:READ+UPDATE",
-            "name": "permission.system_parameter_setting_display.update"
+            "name": "permission.system_parameter_setting_display.update",
+            "license": true
           },
           {
             "id": "SYSTEM_PARAMETER_SETTING_AUTH:READ",
-            "name": "permission.system_parameter_setting_auth.read"
+            "name": "permission.system_parameter_setting_auth.read",
+            "license": true
           },
           {
             "id": "SYSTEM_PARAMETER_SETTING_AUTH:READ+ADD",
-            "name": "permission.system_parameter_setting_auth.add"
+            "name": "permission.system_parameter_setting_auth.add",
+            "license": true
           },
           {
             "id": "SYSTEM_PARAMETER_SETTING_AUTH:READ+UPDATE",
-            "name": "permission.system_parameter_setting_auth.update"
+            "name": "permission.system_parameter_setting_auth.update",
+            "license": true
           },
           {
             "id": "SYSTEM_PARAMETER_SETTING_AUTH:READ+DELETE",
-            "name": "permission.system_parameter_setting_auth.delete"
+            "name": "permission.system_parameter_setting_auth.delete",
+            "license": true
           },
           {
             "id": "SYSTEM_PARAMETER_SETTING_MEMORY_CLEAN:READ",
@@ -155,6 +166,16 @@
           {
             "id": "SYSTEM_PARAMETER_SETTING_MEMORY_CLEAN:READ+UPDATE",
             "name": "permission.system_parameter_setting_memory_clean.update"
+          },
+          {
+            "id": "SYSTEM_PARAMETER_SETTING_QRCODE:READ",
+            "name": "permission.system_parameter_setting_qrcode.read",
+            "license": true
+          },
+          {
+            "id": "SYSTEM_PARAMETER_SETTING_QRCODE:READ+UPDATE",
+            "name": "permission.system_parameter_setting_qrcode.update",
+            "license": true
           }
         ]
       },
@@ -168,7 +189,8 @@
           {
             "id": "SYSTEM_AUTH:READ+UPDATE"
           }
-        ]
+        ],
+        "license": true
       },
       {
         "id": "SYSTEM_LOG",
@@ -184,15 +206,33 @@
         "name": "permission.organization_task_center.name",
         "permissions": [
           {
-            "id": "SYSTEM_TASK_CENTER:READ"
+            "id": "SYSTEM_CASE_TASK_CENTER:READ",
+            "name": "permission.case_task_center.read"
           },
           {
-            "id": "SYSTEM_TASK_CENTER:READ+STOP",
-            "name": "permission.organization_task_center.stop"
+            "id": "SYSTEM_CASE_TASK_CENTER:EXEC+STOP",
+            "name": "permission.case_task_center.exec"
+          },
+          {
+            "id": "SYSTEM_CASE_TASK_CENTER:READ+DELETE",
+            "name": "permission.case_task_center.delete"
+          },
+          {
+            "id": "SYSTEM_SCHEDULE_TASK_CENTER:READ",
+            "name": "permission.schedule_task_center.read"
+          },
+          {
+            "id": "SYSTEM_SCHEDULE_TASK_CENTER:READ+UPDATE",
+            "name": "permission.schedule_task_center.update"
+          },
+          {
+            "id": "SYSTEM_SCHEDULE_TASK_CENTER:READ+DELETE",
+            "name": "permission.schedule_task_center.delete"
           }
         ]
       }
-    ]
+    ],
+    "order": 1
   },
   {
     "id": "ORGANIZATION",
@@ -229,6 +269,10 @@
             "name": "permission.organization_member.add"
           },
           {
+            "id": "ORGANIZATION_MEMBER:READ+INVITE",
+            "name": "permission.organization_member.invite"
+          },
+          {
             "id": "ORGANIZATION_MEMBER:READ+UPDATE",
             "name": "permission.organization_member.update"
           },
@@ -244,6 +288,9 @@
         "permissions": [
           {
             "id": "SYSTEM_SERVICE_INTEGRATION:READ"
+          },
+          {
+            "id": "SYSTEM_SERVICE_INTEGRATION:READ+ADD"
           },
           {
             "id": "SYSTEM_SERVICE_INTEGRATION:READ+UPDATE"
@@ -277,6 +324,10 @@
           {
             "id": "ORGANIZATION_PROJECT:READ+ADD_MEMBER",
             "name": "permission.system_organization_project_member.add"
+          },
+          {
+            "id": "ORGANIZATION_PROJECT:READ+UPDATE_MEMBER",
+            "name": "permission.system_organization_project_member.update"
           },
           {
             "id": "ORGANIZATION_PROJECT:READ+DELETE_MEMBER",
@@ -320,15 +371,33 @@
         "name": "permission.organization_task_center.name",
         "permissions": [
           {
-            "id": "ORGANIZATION_TASK_CENTER:READ"
+            "id": "ORGANIZATION_CASE_TASK_CENTER:READ",
+            "name": "permission.case_task_center.read"
           },
           {
-            "id": "ORGANIZATION_TASK_CENTER:READ+STOP",
-            "name": "permission.organization_task_center.stop"
+            "id": "ORGANIZATION_CASE_TASK_CENTER:EXEC+STOP",
+            "name": "permission.case_task_center.exec"
+          },
+          {
+            "id": "ORGANIZATION_CASE_TASK_CENTER:READ+DELETE",
+            "name": "permission.case_task_center.delete"
+          },
+          {
+            "id": "ORGANIZATION_SCHEDULE_TASK_CENTER:READ",
+            "name": "permission.schedule_task_center.read"
+          },
+          {
+            "id": "ORGANIZATION_SCHEDULE_TASK_CENTER:READ+UPDATE",
+            "name": "permission.schedule_task_center.update"
+          },
+          {
+            "id": "ORGANIZATION_SCHEDULE_TASK_CENTER:READ+DELETE",
+            "name": "permission.schedule_task_center.delete"
           }
         ]
       }
-    ]
+    ],
+    "order": 3
   },
   {
     "id": "PERSONAL",
@@ -353,6 +422,7 @@
           }
         ]
       }
-    ]
+    ],
+    "order": 2
   }
 ]

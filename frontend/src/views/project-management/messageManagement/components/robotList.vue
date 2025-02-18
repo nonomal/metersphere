@@ -18,13 +18,15 @@
       >
         <div ref="robotListRef" class="robot-list">
           <div v-for="robot of botList" :key="robot.id" class="robot-card">
-            <div class="flex items-center">
+            <div class="flex">
               <MsIcon
                 :type="IconMap[robot.platform]"
                 class="mr-[8px] h-[40px] w-[40px] bg-[var(--color-text-n9)] p-[8px] text-[rgb(var(--primary-5))]"
               />
-              <div class="flex flex-col">
-                <div class="font-medium text-[var(--color-text-1)]">{{ robot.name }}</div>
+              <div class="flex flex-1 flex-col overflow-hidden">
+                <a-tooltip position="tl" :content="robot.name">
+                  <div class="one-line-text font-medium text-[var(--color-text-1)]">{{ robot.name }}</div>
+                </a-tooltip>
                 <div
                   v-if="['IN_SITE', 'MAIL'].includes(robot.platform)"
                   class="text-[12px] leading-[16px] text-[var(--color-text-4)]"
@@ -38,22 +40,24 @@
                     mini
                     :content="robot.createUser"
                   >
-                    <span class="one-line-text" style="max-width: 200px">{{ robot.createUser }}</span></a-tooltip
-                  >
+                    <span class="one-line-text" style="max-width: 200px">{{ robot.createUser }}</span>
+                  </a-tooltip>
                   <span v-else class="one-line-text" style="max-width: 200px">{{ robot.createUser }}</span>
-                  <span class="mr-[16px]">{{
-                    `${t('project.messageManagement.createAt')} ${dayjs(robot.createTime).format(
-                      'YYYY-MM-DD HH:mm:ss'
-                    )}`
-                  }}</span>
+                  <span class="mr-[16px]">
+                    {{
+                      `${t('project.messageManagement.createAt')} ${dayjs(robot.createTime).format(
+                        'YYYY-MM-DD HH:mm:ss'
+                      )}`
+                    }}
+                  </span>
                   <a-tooltip
                     v-if="translateTextToPX(robot.updateUser) > 200"
                     position="tl"
                     mini
                     :content="robot.updateUser"
                   >
-                    <span class="one-line-text" style="max-width: 200px">{{ robot.updateUser }}</span></a-tooltip
-                  >
+                    <span class="one-line-text" style="max-width: 200px">{{ robot.updateUser }}</span>
+                  </a-tooltip>
                   <span v-else class="one-line-text" style="max-width: 200px">{{ robot.updateUser }}</span>
                   {{
                     ` ${t('project.messageManagement.updateAt')} ${dayjs(robot.updateTime).format(
@@ -475,7 +479,7 @@
   function delRobot(robot: RobotItem) {
     openModal({
       type: 'error',
-      title: t('project.messageManagement.deleteTitle', { name: robot.name }),
+      title: t('project.messageManagement.deleteTitle', { name: characterLimit(robot.name) }),
       content: t('project.messageManagement.deleteContent'),
       okText: t('common.confirmDelete'),
       cancelText: t('common.cancel'),
@@ -565,6 +569,7 @@
   .robot-list-container {
     @apply relative;
 
+    border-radius: var(--border-radius-small);
     background-color: var(--color-text-n9);
     .ms-container--shadow-y();
     .robot-list {
@@ -576,11 +581,12 @@
       border-radius: var(--border-radius-small);
       gap: 16px;
       .robot-card {
-        @apply flex flex-col bg-white;
+        @apply flex flex-col;
 
         padding: 24px;
         max-height: 128px;
         border-radius: var(--border-radius-small);
+        background-color: var(--color-text-fff);
         gap: 16px;
       }
     }

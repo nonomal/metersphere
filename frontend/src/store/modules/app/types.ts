@@ -12,16 +12,17 @@ export interface AppState {
   navbar: boolean;
   menu: boolean;
   hideMenu: boolean;
-  menuCollapse: boolean;
+  menuCollapse: boolean; // 菜单是否折叠
   footer: boolean;
   menuWidth: number;
-  collapsedWidth: number;
+  collapsedWidth: number; // 菜单折叠宽度
   globalSettings: boolean;
   device: string;
   tabBar: boolean;
   serverMenu: RouteRecordNormalized[];
   loading: boolean;
   loadingTip: string;
+  loginLoading: boolean;
   topMenus: RouteRecordRaw[];
   currentTopMenu: RouteRecordRaw;
   breadcrumbList: BreadcrumbItem[];
@@ -41,9 +42,11 @@ export interface AppState {
   currentMenuConfig: string[];
   packageType: string;
   projectList: ProjectListItem[];
-  ordList: { id: string; name: string }[];
+  orgList: { id: string; name: string }[];
   envList: EnvironmentItem[];
   currentEnvConfig?: EnvConfig; // 当前环境配置信息
+  fileMaxSize: number; // 文件上传最大限制
+  isDarkTheme: boolean; // 是否暗黑模式
 }
 
 export interface UploadFileTaskState {

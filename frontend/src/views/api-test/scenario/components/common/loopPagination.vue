@@ -9,6 +9,7 @@
     show-total
     size="mini"
     class="loop-pagination"
+    @change="() => emit('change', currentLoop)"
   >
     <template #total="{ total }">
       <div
@@ -30,6 +31,9 @@
 
   const props = defineProps<{
     loopTotal: number;
+  }>();
+  const emit = defineEmits<{
+    (e: 'change', value: number): void;
   }>();
 
   const { t } = useI18n();
@@ -59,7 +63,7 @@
           border: none;
           border-radius: var(--border-radius-mini);
           color: var(--color-text-1);
-          background-color: white;
+          background-color: var(--color-text-fff);
           line-height: 20px;
         }
         .ms-pagination-item-previous {
@@ -72,7 +76,7 @@
         .ms-pagination-item-active {
           border: 1px solid rgb(var(--primary-5)) !important;
           color: rgb(var(--primary-5)) !important;
-          background-color: white !important;
+          background-color: var(--color-text-fff) !important;
         }
       }
       .ms-pagination-jumper {
@@ -83,7 +87,7 @@
         background-color: var(--color-text-n8);
         .ms-pagination-jumper-input {
           width: 48px;
-          background-color: white;
+          background-color: var(--color-text-fff);
           input {
             height: 18px;
           }

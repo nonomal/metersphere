@@ -2,19 +2,19 @@
   <MsDrawer
     v-model:visible="visible"
     :width="680"
-    :title="t('apiScenario.quoteCsv')"
-    :ok-text="t('common.quote')"
+    :title="props.isSingle ? t('apiScenario.replaceCsv') : t('apiScenario.quoteCsv')"
+    :ok-text="props.isSingle ? t('common.replace') : t('common.quote')"
     :ok-disabled="propsRes.selectedKeys.size === 0 && !selectedKey"
     @confirm="handleConfirm"
     @close="handleClose"
   >
     <MsBaseTable v-bind="propsRes" v-model:selected-key="selectedKey" v-on="propsEvent">
       <template #scope="{ record }">
-        {{ record.scope === 'scenario' ? t('apiScenario.scenario') : t('apiScenario.step') }}
+        {{ record.scope === 'SCENARIO' ? t('apiScenario.scenario') : t('apiScenario.step') }}
       </template>
       <template #file="{ record }">
-        <a-tooltip :content="record.file?.name">
-          <div>{{ record.file?.name || '-' }}</div>
+        <a-tooltip :content="record.file?.fileAlias">
+          <div>{{ record.file?.fileAlias || '-' }}</div>
         </a-tooltip>
       </template>
     </MsBaseTable>
@@ -31,7 +31,7 @@
 
   import { CsvVariable } from '@/models/apiTest/scenario';
 
-  import { defaultCsvParamItem } from '@/views/api-test/components/config';
+  import { defaultCsvParamItem } from '../config';
   import { filterKeyValParams } from '@/views/api-test/components/utils';
 
   const props = defineProps<{

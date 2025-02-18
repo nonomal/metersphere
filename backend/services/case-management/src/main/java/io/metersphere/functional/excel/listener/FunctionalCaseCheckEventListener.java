@@ -61,7 +61,7 @@ public class FunctionalCaseCheckEventListener extends AnalysisEventListener<Map<
     protected List<ExcelErrData<FunctionalCaseExcelData>> errList = new ArrayList<>();
     private static final String ERROR_MSG_SEPARATOR = ";";
     private HashMap<String, AbstractCustomFieldValidator> customFieldValidatorMap;
-    protected static final int TAGS_COUNT = 15;
+    protected static final int TAGS_COUNT = 10;
     protected static final int TAG_LENGTH = 64;
     protected static final int STEP_LENGTH = 1000;
     private FunctionalCaseService functionalCaseService;
@@ -71,7 +71,7 @@ public class FunctionalCaseCheckEventListener extends AnalysisEventListener<Map<
         excelDataClass = clazz;
         //当前项目模板的自定义字段
         customFieldsMap = customFields.stream().collect(Collectors.toMap(TemplateCustomFieldDTO::getFieldName, i -> i));
-        customFieldValidatorMap = CustomFieldValidatorFactory.getValidatorMap();
+        customFieldValidatorMap = CustomFieldValidatorFactory.getValidatorMap(request.getProjectId());
         functionalCaseService = CommonBeanFactory.getBean(FunctionalCaseService.class);
 
     }
@@ -256,7 +256,8 @@ public class FunctionalCaseCheckEventListener extends AnalysisEventListener<Map<
         for (int i = 0; i < index; i++) {
             // 保持插入顺序，判断用例是否有相同的steps
             Map<String, Object> step = new LinkedHashMap<>();
-            step.put("num", startStepIndex + i + 1);
+            step.put("id", UUID.randomUUID().toString());
+            step.put("num", startStepIndex + i);
             if (i < stepDescList.size()) {
                 step.put("desc", stepDescList.get(i));
                 if (stepDescList.get(i).length() > STEP_LENGTH) {
@@ -309,6 +310,10 @@ public class FunctionalCaseCheckEventListener extends AnalysisEventListener<Map<
      * @param errMsg
      */
     private void validateTags(FunctionalCaseExcelData data, StringBuilder errMsg) {
+        if (StringUtils.isBlank(data.getTags())) {
+            data.setTags(StringUtils.EMPTY);
+            return;
+        }
         List<String> tags = functionalCaseService.handleImportTags(data.getTags());
         if (tags.size() > TAGS_COUNT) {
             errMsg.append(Translator.get("tags_count"))
@@ -385,13 +390,11 @@ public class FunctionalCaseCheckEventListener extends AnalysisEventListener<Map<
      * @param errMsg
      */
     private void validateModule(FunctionalCaseExcelData data, StringBuilder errMsg) {
+        if (!StringUtils.startsWith(data.getModule(), "/")) {
+            data.setModule("/" + data.getModule());
+        }
         String module = data.getModule();
         if (StringUtils.isNotEmpty(module)) {
-            if (!StringUtils.startsWith(module, "/")) {
-                errMsg.append(Translator.get("module_starts_with"))
-                        .append(ERROR_MSG_SEPARATOR);
-                return;
-            }
             String[] nodes = module.split("/");
             //模块名不能为空
             for (int i = 0; i < nodes.length; i++) {

@@ -2,12 +2,13 @@ import { Message } from '@arco-design/web-vue';
 
 import { useI18n } from '@/hooks/useI18n';
 import router from '@/router';
+import { WHITE_LIST } from '@/router/constants';
 import { useAppStore, useUserStore } from '@/store';
 
 export default function useUser() {
   const { t } = useI18n();
 
-  const logout = async (logoutTo?: string) => {
+  const logout = async (logoutTo?: string, noRedirect?: boolean) => {
     try {
       const userStore = useUserStore();
       await userStore.logout();
@@ -18,10 +19,12 @@ export default function useUser() {
       Message.success(t('message.logoutSuccess'));
       router.push({
         name: logoutTo && typeof logoutTo === 'string' ? logoutTo : 'login',
-        query: {
-          ...router.currentRoute.value.query,
-          redirect: currentRoute.name as string,
-        },
+        query: noRedirect
+          ? {}
+          : {
+              ...router.currentRoute.value.query,
+              redirect: currentRoute.name as string,
+            },
       });
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -33,8 +36,14 @@ export default function useUser() {
     return window.location.hash.indexOf('login') > -1;
   };
 
+  const isWhiteListPage = () => {
+    const currentRoute = router.currentRoute.value;
+    return WHITE_LIST.some((e) => e.path.includes(currentRoute.path));
+  };
+
   return {
     logout,
     isLoginPage,
+    isWhiteListPage,
   };
 }

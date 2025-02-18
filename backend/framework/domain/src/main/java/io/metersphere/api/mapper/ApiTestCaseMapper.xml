@@ -22,6 +22,9 @@
     <result column="delete_time" jdbcType="BIGINT" property="deleteTime" />
     <result column="delete_user" jdbcType="VARCHAR" property="deleteUser" />
     <result column="deleted" jdbcType="BIT" property="deleted" />
+    <result column="api_change" jdbcType="BIT" property="apiChange" />
+    <result column="ignore_api_change" jdbcType="BIT" property="ignoreApiChange" />
+    <result column="ignore_api_diff" jdbcType="BIT" property="ignoreApiDiff" />
   </resultMap>
   <sql id="Example_Where_Clause">
     <where>
@@ -122,7 +125,8 @@
   <sql id="Base_Column_List">
     id, `name`, priority, num, tags, `status`, last_report_status, last_report_id, pos, 
     project_id, api_definition_id, version_id, environment_id, create_time, create_user, 
-    update_time, update_user, delete_time, delete_user, deleted
+    update_time, update_user, delete_time, delete_user, deleted, api_change, ignore_api_change, 
+    ignore_api_diff
   </sql>
   <select id="selectByExample" parameterType="io.metersphere.api.domain.ApiTestCaseExample" resultMap="BaseResultMap">
     select
@@ -161,7 +165,8 @@
       pos, project_id, api_definition_id, 
       version_id, environment_id, create_time, 
       create_user, update_time, update_user, 
-      delete_time, delete_user, deleted
+      delete_time, delete_user, deleted, 
+      api_change, ignore_api_change, ignore_api_diff
       )
     values (#{id,jdbcType=VARCHAR}, #{name,jdbcType=VARCHAR}, #{priority,jdbcType=VARCHAR}, 
       #{num,jdbcType=BIGINT}, #{tags,jdbcType=VARCHAR,typeHandler=io.metersphere.handler.ListTypeHandler}, 
@@ -169,7 +174,8 @@
       #{pos,jdbcType=BIGINT}, #{projectId,jdbcType=VARCHAR}, #{apiDefinitionId,jdbcType=VARCHAR}, 
       #{versionId,jdbcType=VARCHAR}, #{environmentId,jdbcType=VARCHAR}, #{createTime,jdbcType=BIGINT}, 
       #{createUser,jdbcType=VARCHAR}, #{updateTime,jdbcType=BIGINT}, #{updateUser,jdbcType=VARCHAR}, 
-      #{deleteTime,jdbcType=BIGINT}, #{deleteUser,jdbcType=VARCHAR}, #{deleted,jdbcType=BIT}
+      #{deleteTime,jdbcType=BIGINT}, #{deleteUser,jdbcType=VARCHAR}, #{deleted,jdbcType=BIT}, 
+      #{apiChange,jdbcType=BIT}, #{ignoreApiChange,jdbcType=BIT}, #{ignoreApiDiff,jdbcType=BIT}
       )
   </insert>
   <insert id="insertSelective" parameterType="io.metersphere.api.domain.ApiTestCase">
@@ -235,6 +241,15 @@
       <if test="deleted != null">
         deleted,
       </if>
+      <if test="apiChange != null">
+        api_change,
+      </if>
+      <if test="ignoreApiChange != null">
+        ignore_api_change,
+      </if>
+      <if test="ignoreApiDiff != null">
+        ignore_api_diff,
+      </if>
     </trim>
     <trim prefix="values (" suffix=")" suffixOverrides=",">
       <if test="id != null">
@@ -296,6 +311,15 @@
       </if>
       <if test="deleted != null">
         #{deleted,jdbcType=BIT},
+      </if>
+      <if test="apiChange != null">
+        #{apiChange,jdbcType=BIT},
+      </if>
+      <if test="ignoreApiChange != null">
+        #{ignoreApiChange,jdbcType=BIT},
+      </if>
+      <if test="ignoreApiDiff != null">
+        #{ignoreApiDiff,jdbcType=BIT},
       </if>
     </trim>
   </insert>
@@ -368,6 +392,15 @@
       <if test="record.deleted != null">
         deleted = #{record.deleted,jdbcType=BIT},
       </if>
+      <if test="record.apiChange != null">
+        api_change = #{record.apiChange,jdbcType=BIT},
+      </if>
+      <if test="record.ignoreApiChange != null">
+        ignore_api_change = #{record.ignoreApiChange,jdbcType=BIT},
+      </if>
+      <if test="record.ignoreApiDiff != null">
+        ignore_api_diff = #{record.ignoreApiDiff,jdbcType=BIT},
+      </if>
     </set>
     <if test="_parameter != null">
       <include refid="Update_By_Example_Where_Clause" />
@@ -394,7 +427,10 @@
       update_user = #{record.updateUser,jdbcType=VARCHAR},
       delete_time = #{record.deleteTime,jdbcType=BIGINT},
       delete_user = #{record.deleteUser,jdbcType=VARCHAR},
-      deleted = #{record.deleted,jdbcType=BIT}
+      deleted = #{record.deleted,jdbcType=BIT},
+      api_change = #{record.apiChange,jdbcType=BIT},
+      ignore_api_change = #{record.ignoreApiChange,jdbcType=BIT},
+      ignore_api_diff = #{record.ignoreApiDiff,jdbcType=BIT}
     <if test="_parameter != null">
       <include refid="Update_By_Example_Where_Clause" />
     </if>
@@ -459,6 +495,15 @@
       <if test="deleted != null">
         deleted = #{deleted,jdbcType=BIT},
       </if>
+      <if test="apiChange != null">
+        api_change = #{apiChange,jdbcType=BIT},
+      </if>
+      <if test="ignoreApiChange != null">
+        ignore_api_change = #{ignoreApiChange,jdbcType=BIT},
+      </if>
+      <if test="ignoreApiDiff != null">
+        ignore_api_diff = #{ignoreApiDiff,jdbcType=BIT},
+      </if>
     </set>
     where id = #{id,jdbcType=VARCHAR}
   </update>
@@ -482,14 +527,18 @@
       update_user = #{updateUser,jdbcType=VARCHAR},
       delete_time = #{deleteTime,jdbcType=BIGINT},
       delete_user = #{deleteUser,jdbcType=VARCHAR},
-      deleted = #{deleted,jdbcType=BIT}
+      deleted = #{deleted,jdbcType=BIT},
+      api_change = #{apiChange,jdbcType=BIT},
+      ignore_api_change = #{ignoreApiChange,jdbcType=BIT},
+      ignore_api_diff = #{ignoreApiDiff,jdbcType=BIT}
     where id = #{id,jdbcType=VARCHAR}
   </update>
   <insert id="batchInsert" parameterType="map">
     insert into api_test_case
     (id, `name`, priority, num, tags, `status`, last_report_status, last_report_id, pos, 
       project_id, api_definition_id, version_id, environment_id, create_time, create_user, 
-      update_time, update_user, delete_time, delete_user, deleted)
+      update_time, update_user, delete_time, delete_user, deleted, api_change, ignore_api_change, 
+      ignore_api_diff)
     values
     <foreach collection="list" item="item" separator=",">
       (#{item.id,jdbcType=VARCHAR}, #{item.name,jdbcType=VARCHAR}, #{item.priority,jdbcType=VARCHAR}, 
@@ -498,7 +547,8 @@
         #{item.pos,jdbcType=BIGINT}, #{item.projectId,jdbcType=VARCHAR}, #{item.apiDefinitionId,jdbcType=VARCHAR}, 
         #{item.versionId,jdbcType=VARCHAR}, #{item.environmentId,jdbcType=VARCHAR}, #{item.createTime,jdbcType=BIGINT}, 
         #{item.createUser,jdbcType=VARCHAR}, #{item.updateTime,jdbcType=BIGINT}, #{item.updateUser,jdbcType=VARCHAR}, 
-        #{item.deleteTime,jdbcType=BIGINT}, #{item.deleteUser,jdbcType=VARCHAR}, #{item.deleted,jdbcType=BIT}
+        #{item.deleteTime,jdbcType=BIGINT}, #{item.deleteUser,jdbcType=VARCHAR}, #{item.deleted,jdbcType=BIT}, 
+        #{item.apiChange,jdbcType=BIT}, #{item.ignoreApiChange,jdbcType=BIT}, #{item.ignoreApiDiff,jdbcType=BIT}
         )
     </foreach>
   </insert>
@@ -571,6 +621,15 @@
         </if>
         <if test="'deleted'.toString() == column.value">
           #{item.deleted,jdbcType=BIT}
+        </if>
+        <if test="'api_change'.toString() == column.value">
+          #{item.apiChange,jdbcType=BIT}
+        </if>
+        <if test="'ignore_api_change'.toString() == column.value">
+          #{item.ignoreApiChange,jdbcType=BIT}
+        </if>
+        <if test="'ignore_api_diff'.toString() == column.value">
+          #{item.ignoreApiDiff,jdbcType=BIT}
         </if>
       </foreach>
       )

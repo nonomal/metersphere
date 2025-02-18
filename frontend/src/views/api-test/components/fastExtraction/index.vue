@@ -21,10 +21,20 @@
       />
     </div>
     <div v-else-if="expressionForm.extractType === RequestExtractExpressionEnum.JSON_PATH" class="code-container">
-      <MsJsonPathPicker :data="props.response || ''" class="bg-white" @init="initJsonPath" @pick="handlePathPick" />
+      <MsJsonPathPicker
+        :data="props.response || ''"
+        class="bg-[var(--color-text-fff)]"
+        @init="initJsonPath"
+        @pick="handlePathPick"
+      />
     </div>
     <div v-else-if="expressionForm.extractType === RequestExtractExpressionEnum.X_PATH" class="code-container">
-      <MsXPathPicker :xml-string="props.response || ''" class="bg-white" @init="initXpath" @pick="handlePathPick" />
+      <MsXPathPicker
+        :xml-string="props.response || ''"
+        class="bg-[var(--color-text-fff)]"
+        @init="initXpath"
+        @pick="handlePathPick"
+      />
     </div>
     <a-form ref="expressionFormRef" :model="expressionForm" layout="vertical" class="mt-[16px]">
       <a-form-item
@@ -119,7 +129,12 @@
       </div>
       <div class="match-result">
         <div v-if="isMatched && matchResult.length === 0">{{ t('apiTestDebug.noMatchResult') }}</div>
-        <pre v-for="(e, i) of matchResult" :key="i">{{ `${e}` }}</pre>
+        <template v-else-if="props.config.extractType === RequestExtractExpressionEnum.JSON_PATH">
+          <pre>{{ matchResult }}</pre>
+        </template>
+        <template v-else>
+          <pre v-for="(e, i) of matchResult" :key="i">{{ `${e}` }}</pre>
+        </template>
       </div>
     </div>
     <a-collapse
@@ -167,10 +182,12 @@
   import type { JSONPathExtract, RegexExtract, XPathExtract } from '@/models/apiTest/common';
   import { RequestExtractExpressionEnum, RequestExtractExpressionRuleType } from '@/enums/apiEnum';
 
+  export type ExtractParamConfig = (RegexExtract | JSONPathExtract | XPathExtract) & Record<string, any>;
+
   const props = withDefaults(
     defineProps<{
       visible: boolean;
-      config: (RegexExtract | JSONPathExtract | XPathExtract) & Record<string, any>;
+      config: ExtractParamConfig;
       response?: string; // 响应内容
       isShowMoreSetting?: boolean; // 是否展示更多设置
     }>(),
@@ -180,11 +197,7 @@
   );
   const emit = defineEmits<{
     (e: 'update:visible', value: boolean): void;
-    (
-      e: 'apply',
-      config: (RegexExtract | JSONPathExtract | XPathExtract) & Record<string, any>,
-      matchResult: any[]
-    ): void;
+    (e: 'apply', config: ExtractParamConfig, matchResult: any[] | string): void;
   }>();
 
   const { t } = useI18n();
@@ -194,7 +207,7 @@
   const expressionFormRef = ref<FormInstance | null>(null);
   const parseJson = ref<string | Record<string, any>>({});
   const isHtml = ref(false);
-  const matchResult = ref<any[]>([]); // 当前匹配结果
+  const matchResult = ref<any[] | string>([]); // 当前匹配结果
   const isMatched = ref(false); // 是否执行过匹配
 
   watch(
@@ -220,6 +233,26 @@
     expressionForm.value.expression = path;
     parseJson.value = _parseJson;
     expressionFormRef.value?.clearValidate();
+  }
+
+  /**
+   * 遍历 JSON 对象，将 Number() 转换为数字
+   * @param obj JSON 对象
+   */
+  function traverseJSONObject(obj: Record<string, any>) {
+    Object.keys(obj).forEach((key) => {
+      const val = obj[key];
+      if (Object.prototype.hasOwnProperty.call(obj, key)) {
+        if (typeof val === 'object' && val !== null) {
+          traverseJSONObject(val);
+        } else if (val.includes('Number(')) {
+          obj[key] = val.replace(/Number\(([^)]+)\)/g, '$1');
+          if (!Number.isNaN(Number(obj[key]))) {
+            obj[key] = Number(obj[key]);
+          }
+        }
+      }
+    });
   }
 
   /*
@@ -248,15 +281,38 @@
         break;
       case RequestExtractExpressionEnum.JSON_PATH:
         try {
-          matchResult.value =
-            JSONPath({
-              json: parseJson.value,
-              path: expressionForm.value.expression,
-            })?.map((e: any) =>
-              JSON.stringify(e)
-                .replace(/Number\(([^)]+)\)/g, '$1')
-                .replace(/^"|"$/g, '')
-            ) || [];
+          const results = JSONPath({
+            json: parseJson.value,
+            path: expressionForm.value.expression,
+            wrap: false,
+          });
+          if (Array.isArray(results)) {
+            matchResult.value = results.map((e: any) => {
+              let res;
+              if (typeof e === 'object' && e !== null && e !== undefined) {
+                res = JSON.parse(
+                  JSON.stringify(e)
+                    .replace(/Number\(([^)]+)\)/g, '$1')
+                    .replace(/^"|"$/g, '')
+                );
+              } else {
+                res = JSON.stringify(e)
+                  .replace(/Number\(([^)]+)\)/g, '$1')
+                  .replace(/^"|"$/g, '');
+                if (!Number.isNaN(Number(res))) {
+                  res = Number(res);
+                }
+              }
+              return res;
+            });
+          } else if (typeof results === 'object' && results !== null) {
+            traverseJSONObject(results);
+            matchResult.value = results;
+          } else if (typeof results === 'string' && results.includes('Number(')) {
+            matchResult.value = results.replace(/Number\(([^)]+)\)/g, '$1');
+          } else {
+            matchResult.value = results === null || results === false ? `${results}` : results || [];
+          }
         } catch (error) {
           matchResult.value = JSONPath({ json: props.response || '', path: expressionForm.value.expression }) || [];
         }
@@ -303,7 +359,11 @@
   function confirmHandler() {
     expressionFormRef.value?.validate(async (errors: undefined | Record<string, ValidatedError>) => {
       if (!errors) {
-        emit('apply', expressionForm.value, matchResult.value);
+        emit(
+          'apply',
+          expressionForm.value,
+          typeof matchResult.value === 'object' ? JSON.stringify(matchResult.value) : matchResult.value
+        );
       }
     });
   }
@@ -329,7 +389,7 @@
     background-color: var(--color-text-n9);
   }
   .match-result {
-    @apply overflow-y-auto bg-white;
+    @apply overflow-y-auto;
     .ms-scroll-bar();
 
     margin-top: 12px;
@@ -338,5 +398,6 @@
     max-height: 300px;
     border-radius: var(--border-radius-small);
     color: rgb(var(--primary-5));
+    background-color: var(--color-text-fff);
   }
 </style>

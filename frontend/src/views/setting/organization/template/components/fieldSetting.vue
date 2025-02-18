@@ -52,7 +52,7 @@
           />
           <a-tooltip :content="record.name">
             <div
-              class="ellipsis max-w-[200px]"
+              class="ellipsis ml-[8px] max-w-[200px]"
               :class="{
                 'text-[rgb(var(--primary-5))]': isEnableTemplate,
                 'cursor-pointer': isEnableTemplate,
@@ -78,10 +78,10 @@
               v-if="!record.internal && hasAnyPermission(props.updatePermission)"
               :disabled="record.internal"
               class="!mr-0"
-              >{{ t('system.orgTemplate.edit') }}</MsButton
-            ></MsPopConfirm
-          >
-
+            >
+              {{ t('system.orgTemplate.edit') }}
+            </MsButton>
+          </MsPopConfirm>
           <a-divider
             v-if="
               !record.internal && hasAnyPermission(props.updatePermission) && hasAnyPermission(props.deletePermission)
@@ -125,7 +125,7 @@
           </a-tooltip>
         </div>
         <div class="flex">
-          <span class="label">{{ t('system.orgTemplate.description') }}</span>
+          <span class="label">{{ t('common.desc') }}</span>
           <a-tooltip mini position="lt" :content="detailInfo?.remark">
             <span class="content ellipsis">{{ detailInfo?.remark || '-' }}</span>
           </a-tooltip>

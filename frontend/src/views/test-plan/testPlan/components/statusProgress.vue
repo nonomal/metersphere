@@ -2,11 +2,11 @@
   <MsColorLine :color-data="colorData" :height="props.height" :radius="props.radius">
     <template #popoverContent>
       <table class="min-w-[144px]">
-        <tr>
-          <td class="popover-label-td">
+        <tr v-if="props.type === testPlanTypeEnum.TEST_PLAN">
+          <td class="popover-label-td !pt-0">
             <div>{{ t('testPlan.testPlanIndex.threshold') }}</div>
           </td>
-          <td class="popover-value-td"> {{ detailCount.passThreshold }}% </td>
+          <td class="popover-value-td !pt-0"> {{ detailCount.passThreshold }}% </td>
         </tr>
         <tr>
           <td class="popover-label-td">
@@ -43,7 +43,7 @@
         </tr>
         <tr>
           <td class="popover-label-td">
-            <div class="mb-[2px] mr-[4px] h-[6px] w-[6px] rounded-full bg-[rgb(var(--link-6))]"></div>
+            <div class="mb-[2px] mr-[4px] h-[6px] w-[6px] rounded-full bg-[var(--color-fill-p-3)]"></div>
             <div>{{ t('common.block') }}</div>
           </td>
           <td class="popover-value-td">
@@ -73,10 +73,12 @@
   import { useI18n } from '@/hooks/useI18n';
 
   import type { PassRateCountDetail } from '@/models/testPlan/testPlan';
+  import { testPlanTypeEnum } from '@/enums/testPlanEnum';
 
   const props = defineProps<{
     statusDetail: PassRateCountDetail | undefined;
     height: string;
+    type: testPlanTypeEnum;
     radius?: string;
   }>();
   const { t } = useI18n();
@@ -99,14 +101,6 @@
         },
       ];
     }
-    if (detailCount.value.passRate > detailCount.value.passThreshold) {
-      return [
-        {
-          percentage: 100,
-          color: 'rgb(var(--success-6))',
-        },
-      ];
-    }
     return [
       {
         percentage: (successCount / caseTotal) * 100,
@@ -118,7 +112,7 @@
       },
       {
         percentage: (blockCount / caseTotal) * 100,
-        color: 'rgb(var(--link-6))',
+        color: 'var(--color-fill-p-3)',
       },
       {
         percentage: (fakeErrorCount / caseTotal) * 100,
@@ -140,7 +134,7 @@
     color: var(--color-text-4);
   }
   .popover-value-td {
-    @apply font-medium;
+    @apply text-right font-medium;
 
     padding-top: 8px;
     color: var(--color-text-1);

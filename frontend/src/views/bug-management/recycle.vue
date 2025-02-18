@@ -5,10 +5,8 @@
         v-model:keyword="keyword"
         :search-placeholder="t('bugManagement.recycle.searchPlaceholder')"
         :filter-config-list="filterConfigList"
-        :row-count="filterRowCount"
         @keyword-search="fetchData"
-        @adv-search="handleAdvSearch"
-        @refresh="handleAdvSearch"
+        @refresh="searchData"
       >
         <template #left>
           <div></div>
@@ -33,11 +31,13 @@
         </template>
         <template #operation="{ record }">
           <div class="flex flex-row flex-nowrap">
-            <MsButton class="!mr-0" @click="handleRecover(record)">{{ t('bugManagement.recycle.recover') }}</MsButton>
+            <MsButton v-permission="['PROJECT_BUG:READ+DELETE']" class="!mr-0" @click="handleRecover(record)">
+              {{ t('bugManagement.recycle.recover') }}
+            </MsButton>
             <a-divider direction="vertical" />
-            <MsButton class="!mr-0" @click="handleDelete(record)">{{
-              t('bugManagement.recycle.permanentlyDelete')
-            }}</MsButton>
+            <MsButton v-permission="['PROJECT_BUG:READ+DELETE']" class="!mr-0" @click="handleDelete(record)">
+              {{ t('bugManagement.recycle.permanentlyDelete') }}
+            </MsButton>
           </div>
         </template>
 
@@ -57,7 +57,7 @@
   import dayjs from 'dayjs';
 
   import { MsAdvanceFilter } from '@/components/pure/ms-advance-filter';
-  import { BackEndEnum, FilterFormItem, FilterResult, FilterType } from '@/components/pure/ms-advance-filter/type';
+  import { FilterFormItem } from '@/components/pure/ms-advance-filter/type';
   import MsButton from '@/components/pure/ms-button/index.vue';
   import MsCard from '@/components/pure/ms-card/index.vue';
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
@@ -79,6 +79,7 @@
   import { characterLimit, customFieldDataToTableData, customFieldToColumns } from '@/utils';
 
   import { BugEditCustomField, BugListItem, BugOptionItem } from '@/models/bug-management';
+  import { FilterType } from '@/enums/advancedFilterEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
 
   import { makeColumns } from '@/views/case-management/caseManagementFeature/components/utils';
@@ -88,8 +89,6 @@
   const tableStore = useTableStore();
   const appStore = useAppStore();
   const projectId = computed(() => appStore.currentProjectId);
-  const filterVisible = ref(false);
-  const filterRowCount = ref(0);
   const keyword = ref('');
   // 自定义字段
   const customFields = ref<BugEditCustomField[]>([]);
@@ -103,7 +102,6 @@
       title: 'bugManagement.bugName',
       dataIndex: 'title',
       type: FilterType.INPUT,
-      backendType: BackEndEnum.STRING,
     },
     {
       title: 'bugManagement.createTime',
@@ -113,10 +111,7 @@
   ]);
 
   const severityFilterOptions = ref<BugOptionItem[]>([]);
-  const filterResult = ref<FilterResult>({ accordBelow: 'AND', combine: {} });
   const currentSelectParams = ref<BatchActionQueryParams>({ selectAll: false, currentSelectCount: 0 });
-
-  const heightUsed = computed(() => 286 + (filterVisible.value ? 160 + (filterRowCount.value - 1) * 60 : 0));
 
   let columns: MsTableColumn = [
     {
@@ -283,7 +278,7 @@
     return customFieldToColumns(res);
   };
 
-  const { propsRes, propsEvent, loadList, setKeyword, setLoadListParams, setProps } = useTable(
+  const { propsRes, propsEvent, loadList, setKeyword, setLoadListParams, resetSelector, resetFilterParams } = useTable(
     getRecycleList,
     {
       tableKey: TableKeyEnum.BUG_MANAGEMENT_RECYCLE,
@@ -307,7 +302,7 @@
       {
         eventTag: 'recover',
         label: t('bugManagement.recycle.recover'),
-        permission: ['PROJECT_BUG:READ+UPDATE'],
+        permission: ['PROJECT_BUG:READ+DELETE'],
       },
       {
         eventTag: 'delete',
@@ -316,10 +311,6 @@
       },
     ],
   };
-
-  watchEffect(() => {
-    setProps({ heightUsed: heightUsed.value });
-  });
 
   function initTableParams() {
     return {
@@ -342,16 +333,13 @@
     searchData();
   };
 
-  const handleAdvSearch = (filter: FilterResult) => {
-    filterResult.value = filter;
-    fetchData();
-  };
-
   // 单个恢复
   const handleRecover = async (record: BugListItem) => {
     try {
       await recoverSingleByRecycle(record.id);
       Message.success(t('bugManagement.recycle.recoverSuccess'));
+      resetSelector();
+      resetFilterParams();
       fetchData();
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -368,6 +356,8 @@
       appStore.hideLoading();
       Message.success(t('bugManagement.recycle.recoverSuccess'));
       keyword.value = '';
+      resetSelector();
+      resetFilterParams();
       fetchData();
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -384,6 +374,8 @@
         try {
           await deleteSingleByRecycle(record.id);
           Message.success(t('common.deleteSuccess'));
+          resetSelector();
+          resetFilterParams();
           fetchData();
         } catch (error) {
           // eslint-disable-next-line no-console
@@ -403,6 +395,8 @@
           await deleteBatchByRecycle(tmpObj);
           Message.success(t('common.deleteSuccess'));
           keyword.value = '';
+          resetSelector();
+          resetFilterParams();
           fetchData();
         } catch (error) {
           // eslint-disable-next-line no-console
@@ -421,9 +415,7 @@
     }
     const condition = {
       keyword: keyword.value,
-      searchMode: filterResult.value.accordBelow,
       filter: params.condition.filter,
-      combine: filterResult.value.combine,
     };
     currentSelectParams.value = {
       excludeIds: params.excludeIds,

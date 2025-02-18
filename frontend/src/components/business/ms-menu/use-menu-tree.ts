@@ -4,23 +4,32 @@ import { cloneDeep } from 'lodash-es';
 
 import usePermission from '@/hooks/usePermission';
 import appClientMenus from '@/router/app-menus';
+import { featureRouteMap } from '@/router/constants';
+import useAppStore from '@/store/modules/app';
 
 /**
  * 获取菜单树
  * @returns
  */
 export default function useMenuTree() {
+  const appStore = useAppStore();
   const permission = usePermission();
   const menuTree = computed(() => {
     const copyRouter = cloneDeep(appClientMenus) as RouteRecordNormalized[];
     copyRouter.sort((a: RouteRecordNormalized, b: RouteRecordNormalized) => {
-      return (a.meta.order || 0) - (b.meta.order || 0);
+      return (a.meta?.order || 0) - (b.meta?.order || 0);
     });
     function travel(_routes: RouteRecordRaw[], layer: number) {
       if (!_routes) return null;
 
       const collector = _routes.map((element) => {
         if (element.meta?.hideInMenu === true) {
+          return null;
+        }
+
+        // 如果是隐藏的模块，则不显示菜单
+        const moduleId = Object.keys(featureRouteMap).find((key) => (element.name as string)?.includes(key));
+        if (moduleId && featureRouteMap[moduleId] && !appStore.currentMenuConfig.includes(featureRouteMap[moduleId])) {
           return null;
         }
 

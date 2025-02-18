@@ -3,9 +3,10 @@
     <MsEmpty v-if="commentList.length === 0" />
     <MsComment
       v-else
-      :preview-url="EditorPreviewFileUrl"
+      :preview-url="`${EditorPreviewFileUrl}/${appStore.currentProjectId}`"
       :comment-list="commentList"
       :upload-image="handleUploadImage"
+      :permissions="['PROJECT_BUG:READ+COMMENT']"
       @delete="handleDelete"
       @update-or-add="handleUpdate"
     />
@@ -26,6 +27,7 @@
   import { EditorPreviewFileUrl } from '@/api/requrls/bug-management';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
+  import { useAppStore } from '@/store';
 
   import message from '@arco-design/web-vue/es/message';
 
@@ -35,6 +37,7 @@
     bugId: string;
   }>();
   const { t } = useI18n();
+  const appStore = useAppStore();
 
   const commentList = ref<CommentItem[]>([]);
 
@@ -99,12 +102,17 @@
     }
   });
 
+  watch(
+    () => props.bugId,
+    (val) => {
+      if (val) {
+        initData(props.bugId);
+      }
+    }
+  );
+
   defineExpose({
     initData,
-  });
-
-  watchEffect(() => {
-    initData(props.bugId);
   });
 </script>
 

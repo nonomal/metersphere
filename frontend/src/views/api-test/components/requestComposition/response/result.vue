@@ -1,9 +1,12 @@
 <template>
   <div v-show="props.requestResult?.responseResult.responseCode" class="h-full">
-    <a-tabs v-model:active-key="activeTab" class="no-content border-b border-[var(--color-text-n8)]">
-      <a-tab-pane v-for="item of responseCompositionTabList" :key="item.value" :title="item.label" />
-    </a-tabs>
-    <div class="response-container">
+    <div class="flex items-center" :class="$slots.tabRight ? 'border-b border-[var(--color-text-n8)]' : ''">
+      <a-tabs v-model:active-key="activeTab" class="no-content flex-1">
+        <a-tab-pane v-for="item of responseCompositionTabList" :key="item.value" :title="item.label" />
+      </a-tabs>
+      <slot name="tabRight"></slot>
+    </div>
+    <div v-if="!props.loading" class="response-container">
       <ResBody
         v-if="activeTab === ResponseComposition.BODY"
         ref="resBodyRef"
@@ -76,6 +79,7 @@
       isHttpProtocol?: boolean;
       isDefinition?: boolean;
       showEmpty?: boolean;
+      loading?: boolean;
     }>(),
     {
       showEmpty: true,
@@ -138,7 +142,7 @@
 <style lang="less" scoped>
   .response-container {
     margin-top: 8px;
-    height: calc(100% - 48px);
+    height: calc(100% - 58px);
   }
   :deep(.arco-table-th) {
     background-color: var(--color-text-n9);

@@ -97,4 +97,35 @@
         SET password = MD5(#{password})
         WHERE id = #{userId}
     </update>
+
+    <select id="gaInstalledTime" resultType="java.lang.Long">
+        SELECT
+            UNIX_TIMESTAMP(installed_on) * 1000  as installed_on
+        FROM metersphere_version
+        WHERE version ='3.0.1.2' and description = 'ga ddl'
+    </select>
+
+    <select id="updateInstalled">
+        update metersphere_version SET description ='ga'
+        WHERE version ='3.0.1.2' and description = 'ga ddl'
+    </select>
+
+    <select id="getMemberList" resultType="io.metersphere.system.dto.user.UserExtendDTO" parameterType="io.metersphere.system.dto.request.MemberRequest">
+        select distinct u.*, count(urr.id) > 0 as memberFlag
+        from `user` u left join user_role_relation urr on urr.user_id = u.id and urr.source_id = #{request.sourceId}
+        where u.deleted = 0
+        <if test="request.keyword != null and request.keyword != ''">
+            and (u.name like concat('%', #{request.keyword}, '%') or u.email like concat('%', #{request.keyword}, '%'))
+        </if>
+        group by u.id
+    </select>
+    <select id="selectSimpleUser" resultType="io.metersphere.system.domain.User">
+        select id,
+        `name` from user
+        where deleted = 0 and enable = 1 and id in
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
 </mapper>

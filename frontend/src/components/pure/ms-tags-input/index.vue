@@ -35,7 +35,10 @@
         </template>
       </a-input-tag>
     </div>
-    <div v-if="isError" class="ml-[1px] flex justify-start text-[12px] text-[rgb(var(--danger-6))]">
+    <div
+      v-if="isError && (!props.emptyPriorityHighest || innerModelValue.length)"
+      class="ml-[1px] mr-[4px] flex justify-start text-[12px] text-[rgb(var(--danger-6))]"
+    >
       {{ t('common.tagInputMaxLength', { number: props.maxLength }) }}
     </div>
   </a-tooltip>
@@ -64,6 +67,8 @@
       size?: 'small' | 'large' | 'medium' | 'mini';
       disabled?: boolean;
       noTooltip?: boolean;
+      inputValidator?: (value: string) => boolean;
+      emptyPriorityHighest?: boolean; // 是否是空优先级最高
     }>(),
     {
       retainInputValue: true,
@@ -84,7 +89,7 @@
   const innerInputValue = defineModel<string>('inputValue', {
     default: '',
   });
-  const tagsLength = ref(0); // 记录每次回车或失去焦点前的tags长度，以判断是否有新的tag被添加，新标签添加时需要判断是否重复的标签
+  const tagsLength = ref((props.modelValue || []).length); // 记录每次回车或失去焦点前的tags长度，以判断是否有新的tag被添加，新标签添加时需要判断是否重复的标签
 
   const isError = computed(
     () =>
@@ -153,11 +158,16 @@
       validateTagsCountBlur() &&
       (innerInputValue.value || '').trim().length <= props.maxLength
     ) {
-      innerModelValue.value.push(innerInputValue.value.trim());
-      innerInputValue.value = '';
-      tagsLength.value += 1;
-      emit('update:modelValue', innerModelValue.value);
-      emit('change', innerModelValue.value);
+      if (props.inputValidator && !props.inputValidator(innerInputValue.value.trim())) {
+        innerModelValue.value.splice(-1, 1);
+        emit('update:modelValue', innerModelValue.value);
+      } else {
+        innerModelValue.value.push(innerInputValue.value.trim());
+        innerInputValue.value = '';
+        tagsLength.value += 1;
+        emit('update:modelValue', innerModelValue.value);
+        emit('change', innerModelValue.value);
+      }
     }
     emit('blur');
   }
@@ -169,8 +179,13 @@
       innerInputValue.value &&
       innerInputValue.value.trim().length <= props.maxLength
     ) {
-      innerInputValue.value = '';
-      tagsLength.value += 1;
+      if (props.inputValidator && !props.inputValidator(innerInputValue.value.trim())) {
+        innerModelValue.value.splice(-1, 1);
+        emit('update:modelValue', innerModelValue.value);
+      } else {
+        innerInputValue.value = '';
+        tagsLength.value += 1;
+      }
     } else {
       innerModelValue.value = innerModelValue.value.filter((item: any) => item.length <= props.maxLength);
       innerInputValue.value = '';

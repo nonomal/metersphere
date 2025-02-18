@@ -11,14 +11,7 @@ import type { CommonList, TableQueryParams } from '@/models/common';
 import { SelectAllEnum } from '@/enums/tableEnum';
 
 import { FilterResult } from '../ms-advance-filter/type';
-import type {
-  CombineParams,
-  MsTableColumn,
-  MsTableDataItem,
-  MsTableErrorStatus,
-  MsTableProps,
-  SetPaginationPrams,
-} from './type';
+import type { MsTableColumn, MsTableDataItem, MsTableErrorStatus, MsTableProps, SetPaginationPrams } from './type';
 import type { TableData } from '@arco-design/web-vue';
 
 export interface Pagination {
@@ -56,7 +49,7 @@ export default function useTableProps<T>(
     columns: [] as MsTableColumn,
     rowKey: 'id', // 表格行的key
     /** 选择器相关 */
-    rowSelection: null, // 禁用表格默认的选择器
+    rowSelection: undefined, // 禁用表格默认的选择器
     selectable: false, // 是否显示选择器
     selectorType: 'checkbox', // 选择器类型
     selectedKeys: new Set<string>(), // 选中的key, 多选
@@ -65,7 +58,6 @@ export default function useTableProps<T>(
     selectorStatus: SelectAllEnum.NONE, // 选择器状态
     showSelectorAll: true, // 是否显示全选
     /** end */
-    enableDrag: false, // 是否可拖拽
     showSetting: false, // 是否展示列选择器
     columnResizable: true,
     pagination: false, // 禁用 arco-table 的分页
@@ -80,22 +72,25 @@ export default function useTableProps<T>(
     showJumpMethod: false, // 是否显示跳转方法
     isSimpleSetting: false, // 是否是简易column设置
     filterIconAlignLeft: true, // 筛选图标是否靠左
+    filter: {}, // 筛选条件
     ...props,
   };
 
   // 属性组
-  const propsRes = ref<MsTableProps<T>>(defaultProps);
+  const propsRes = ref<MsTableProps<T>>(cloneDeep(defaultProps));
 
   // 排序
   const sortItem = ref<object>({});
 
   // 筛选
-  const filterItem = ref<object>({});
+  const filterItem = ref<Record<string, any>>({});
 
   // keyword
   const keyword = ref('');
   // 高级筛选
-  const advanceFilter = reactive<FilterResult>({ accordBelow: 'AND', combine: {} });
+  const advanceFilter = reactive<FilterResult>({ searchMode: 'AND', conditions: [] });
+  // 视图Id
+  const viewId = ref('');
   // 表格请求参数集合
   const tableQueryParams = ref<TableQueryParams>({});
 
@@ -111,11 +106,6 @@ export default function useTableProps<T>(
       hideOnSinglePage: appStore.hideOnSinglePage,
       simple: defaultProps.pageSimple,
     };
-  }
-
-  // 是否可拖拽
-  if (propsRes.value.enableDrag) {
-    propsRes.value.draggable = { type: 'handle' };
   }
 
   // 加载效果
@@ -151,6 +141,12 @@ export default function useTableProps<T>(
     }
   };
 
+  // 重置表头筛选
+  const resetFilterParams = () => {
+    filterItem.value = {};
+    propsRes.value.filter = cloneDeep(filterItem.value);
+  };
+
   // 单独设置默认属性
   const setProps = (params: Partial<MsTableProps<T>>) => {
     const tmpProps = propsRes.value;
@@ -171,9 +167,14 @@ export default function useTableProps<T>(
   };
 
   // 设置 advanceFilter
-  const setAdvanceFilter = (v: CombineParams) => {
-    advanceFilter.accordBelow = v.accordBelow;
-    advanceFilter.combine = v.combine;
+  const setAdvanceFilter = (v: FilterResult, id: string) => {
+    advanceFilter.searchMode = v.searchMode;
+    advanceFilter.conditions = v.conditions;
+    viewId.value = id;
+    // 基础筛选都清空
+    loadListParams.value.filter = {};
+    keyword.value = '';
+    resetFilterParams();
   };
   // 给表格设置选中项 - add rowKey to selectedKeys
   const setTableSelected = (key: string) => {
@@ -183,12 +184,46 @@ export default function useTableProps<T>(
     }
     propsRes.value.selectedKeys = selectedKeys;
   };
+  // 处理全选状态下切换分页也要处理下边的子节点
+  const processRecordItem = (item: MsTableDataItem<T>): MsTableDataItem<T> => {
+    const { rowKey, selectorStatus, excludeKeys } = propsRes.value;
+
+    if (item.updateTime) {
+      item.updateTime = dayjs(item.updateTime).format('YYYY-MM-DD HH:mm:ss');
+    }
+    if (item.createTime) {
+      item.createTime = dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss');
+    }
+    if (dataTransform) {
+      item = dataTransform(item);
+    }
+
+    if (selectorStatus === SelectAllEnum.ALL && !excludeKeys.has(item[rowKey])) {
+      setTableSelected(item[rowKey]);
+
+      const selectChildren = (children: MsTableDataItem<T>[]) => {
+        children.forEach((child) => {
+          if (!excludeKeys.has(child[rowKey])) {
+            setTableSelected(child[rowKey]);
+          }
+          if (child.children && child.children.length) {
+            selectChildren(child.children);
+          }
+        });
+      };
+
+      if (item.children && item.children.length) {
+        selectChildren(item.children);
+      }
+    }
+
+    return item;
+  };
 
   // 加载分页列表数据
   const loadList = async () => {
     if (propsRes.value.showPagination) {
       const { current, pageSize } = propsRes.value.msPagination as Pagination;
-      const { rowKey, selectorStatus, excludeKeys } = propsRes.value;
       let currentPageSize = pageSize;
       if (propsRes.value.tableKey) {
         // 如果表格设置了tableKey，缓存分页大小
@@ -201,10 +236,9 @@ export default function useTableProps<T>(
             current,
             pageSize: currentPageSize,
             sort: sortItem.value,
-
             keyword: keyword.value,
-            combine: advanceFilter.combine,
-            searchMode: advanceFilter.accordBelow,
+            viewId: viewId.value,
+            combineSearch: advanceFilter,
             ...loadListParams.value,
             filter: {
               ...filterItem.value,
@@ -214,21 +248,7 @@ export default function useTableProps<T>(
           const data = await loadListFunc(tableQueryParams.value);
           const tmpArr = data.list || data.data.list;
           propsRes.value.data = tmpArr.map((item: MsTableDataItem<T>) => {
-            if (item.updateTime) {
-              item.updateTime = dayjs(item.updateTime).format('YYYY-MM-DD HH:mm:ss');
-            }
-            if (item.createTime) {
-              item.createTime = dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss');
-            }
-            if (dataTransform) {
-              item = dataTransform(item);
-            }
-            if (selectorStatus === SelectAllEnum.ALL) {
-              if (!excludeKeys.has(item[rowKey])) {
-                setTableSelected(item[rowKey]);
-              }
-            }
-            return item;
+            return processRecordItem(item);
           });
           if (data.total === 0) {
             setTableErrorStatus('empty');
@@ -236,13 +256,14 @@ export default function useTableProps<T>(
             setTableErrorStatus(false);
           }
           setPagination({ current: data.current, total: data.total });
-          return data;
         }
       } catch (err) {
         setTableErrorStatus('error');
         propsRes.value.data = [];
         // eslint-disable-next-line no-console
         console.log(err);
+
+        throw err; // 将错误抛出
       } finally {
         setLoading(false);
         // debug 模式下打印属性
@@ -295,6 +316,22 @@ export default function useTableProps<T>(
       propsRes.value.msPagination.pageSize = appStore.pageSize;
     }
   };
+  // 非全选级取消包含或者不包含子级别
+  const processChildren = (data: MsTableDataItem<T>[], rowKey: string) => {
+    data.forEach((item: MsTableDataItem<T>) => {
+      propsRes.value.selectedKeys.delete(item[rowKey]);
+
+      if (propsRes.value.selectorStatus === SelectAllEnum.ALL) {
+        propsRes.value.excludeKeys.add(item[rowKey]);
+      } else {
+        propsRes.value.excludeKeys.delete(item[rowKey]);
+      }
+
+      if (item.children && item.children.length > 0 && !props?.rowSelectionDisabledConfig?.disabledChildren) {
+        processChildren(item.children as MsTableDataItem<T>[], rowKey);
+      }
+    });
+  };
 
   // 重置选择器
   const resetSelector = (isNone = true) => {
@@ -306,10 +343,7 @@ export default function useTableProps<T>(
       propsRes.value.excludeKeys.clear();
     } else {
       // 取消当前页的选中项
-      propsRes.value.data.forEach((item) => {
-        propsRes.value.selectedKeys.delete(item[rowKey]);
-        propsRes.value.excludeKeys.delete(item[rowKey]);
-      });
+      processChildren(propsRes.value.data as MsTableDataItem<T>[], rowKey);
     }
   };
 
@@ -332,31 +366,116 @@ export default function useTableProps<T>(
   };
   const collectIds = (data: MsTableDataItem<T>[], rowKey: string) => {
     data.forEach((item: MsTableDataItem<T>) => {
-      if (item[rowKey] && !propsRes.value.selectedKeys.has(item[rowKey])) {
+      // 有数据没有勾选上，且该数据没有被禁用
+      if (
+        item[rowKey] &&
+        !propsRes.value.selectedKeys.has(item[rowKey]) &&
+        !(props?.rowSelectionDisabledConfig?.disabledKey && item[props?.rowSelectionDisabledConfig?.disabledKey])
+      ) {
         propsRes.value.selectedKeys.add(item[rowKey]);
+        propsRes.value.excludeKeys.delete(item[rowKey]);
       }
-      if (item.children) {
+      if (item.children && !props?.rowSelectionDisabledConfig?.disabledChildren) {
         collectIds(item.children, rowKey);
       }
     });
+  };
+
+  // 处理父节点半选
+  const handleParentSelection = (record: MsTableDataItem<T>) => {
+    const { rowKey, selectedKeys, excludeKeys, rowSelectionDisabledConfig } = propsRes.value;
+    const key = record[rowKey || 'id'];
+    const parentKey = record[rowSelectionDisabledConfig?.parentKey || 'parent'];
+    if (!record[rowSelectionDisabledConfig?.parentKey || 'parent']) return;
+
+    const allChildrenSelected =
+      record.children && record.children.length
+        ? record.children.every((child: any) => selectedKeys.has(child[key]))
+        : false;
+
+    const someChildrenSelected =
+      record.children && record.children.length
+        ? record.children.some((child: any) => selectedKeys.has(child[key]))
+        : false;
+
+    if (allChildrenSelected) {
+      selectedKeys.add(parentKey);
+      excludeKeys.delete(parentKey);
+    } else if (someChildrenSelected) {
+      selectedKeys.add(parentKey);
+      excludeKeys.delete(parentKey);
+    } else {
+      selectedKeys.delete(parentKey);
+      excludeKeys.add(parentKey);
+    }
+
+    handleParentSelection(record[rowSelectionDisabledConfig?.parentKey || 'parent']);
+  };
+
+  // 选择/取消当前节点下边的子节点
+  const handleSelectChildren = (record: MsTableDataItem<T>, select: boolean) => {
+    const { rowKey, selectedKeys, excludeKeys, rowSelectionDisabledConfig } = propsRes.value;
+    const key = record[rowKey || 'id'];
+    const parentKey = record[rowSelectionDisabledConfig?.parentKey || 'parent'];
+    if (select) {
+      selectedKeys.add(key);
+      excludeKeys.delete(key);
+    } else {
+      selectedKeys.delete(key);
+      excludeKeys.add(key);
+    }
+
+    if (record.children && record.children.length) {
+      record.children.forEach((childRecord: any) => handleSelectChildren(childRecord, select));
+    }
+    // 处理父节点的选中状态
+    if (!select && parentKey && rowSelectionDisabledConfig?.checkStrictly) {
+      handleParentSelection(record);
+    }
   };
 
   // 获取表格请求参数
   const getTableQueryParams = () => {
     return tableQueryParams.value;
   };
-  // 重置表头筛选
-  const resetFilterParams = () => {
-    filterItem.value = {};
-    propsRes.value.filter = cloneDeep(filterItem.value);
+
+  /**
+   * 设置表格是否可拖拽
+   * @param otherCondition 其他条件，如果为false，则不设置
+   */
+  const setTableDraggable = (otherCondition?: boolean) => {
+    if (otherCondition === false || props?.draggableCondition === false) {
+      propsRes.value.draggable = undefined;
+    } else {
+      propsRes.value.draggable = props?.draggable;
+    }
   };
+
+  watch(
+    () => props?.draggableCondition,
+    () => {
+      setTableDraggable(Object.keys(sortItem.value).length === 0 && Object.keys(filterItem.value).length === 0);
+    },
+    {
+      immediate: true,
+    }
+  );
+
+  watch(
+    () => props?.showSelectorAll,
+    (val) => {
+      propsRes.value.showSelectorAll = val;
+    }
+  );
 
   // 事件触发组
   const propsEvent = ref({
     // 排序触发
     sorterChange: (sortObj: { [key: string]: string }) => {
       sortItem.value = sortObj;
+      setTableDraggable(Object.keys(sortItem.value).length === 0);
       loadList();
+      propsRes.value.sorter = sortObj;
     },
 
     // 筛选触发
@@ -370,8 +489,13 @@ export default function useTableProps<T>(
         filterItem.value = { [`custom_${multiple ? 'multiple' : 'single'}_${dataIndex}`]: filteredValues };
       } else {
         filterItem.value = { ...getTableQueryParams().filter, [dataIndex]: filteredValues };
+        loadListParams.value.filter = {
+          ...loadListParams.value.filter,
+          [dataIndex]: filteredValues,
+        };
       }
       propsRes.value.filter = cloneDeep(filterItem.value);
+      setTableDraggable((filterItem.value[dataIndex] || []).length === 0);
       loadList();
     },
     // 分页触发
@@ -405,6 +529,7 @@ export default function useTableProps<T>(
     // 重置排序
     resetSort: () => {
       sortItem.value = {};
+      propsRes.value.sorter = {};
     },
     // 重置筛选
     clearSelector: () => {
@@ -413,36 +538,66 @@ export default function useTableProps<T>(
     },
 
     // 表格SelectAll change
-    selectAllChange: (v: SelectAllEnum) => {
-      const { data, rowKey } = propsRes.value;
-      if (v === SelectAllEnum.NONE) {
+    selectAllChange: (v: SelectAllEnum, onlyCurrent: boolean) => {
+      const { data, rowKey, selectorStatus } = propsRes.value;
+      if (v === SelectAllEnum.CANCEL_ALL) {
+        // 清空全选
+        resetSelector(true);
+      } else if (v === SelectAllEnum.NONE) {
         // 清空选中项
         resetSelector(false);
       } else if (v === SelectAllEnum.CURRENT) {
-        // 选中当前页面所有数据
+        // 如果是全选先清空选中项选和排除项，再选中当前页面所有数据,
+        if (selectorStatus === SelectAllEnum.ALL) {
+          propsRes.value.selectedKeys.clear();
+          propsRes.value.excludeKeys.clear();
+        }
+
         collectIds(data as MsTableDataItem<T>[], rowKey);
       } else if (v === SelectAllEnum.ALL) {
         // 全选所有页的时候先清空排除项，再选中所有数据
         propsRes.value.excludeKeys.clear();
         collectIds(data as MsTableDataItem<T>[], rowKey);
       }
-      propsRes.value.selectorStatus = v;
+      if (
+        (propsRes.value.selectorStatus === SelectAllEnum.ALL &&
+          v === SelectAllEnum.NONE &&
+          propsRes.value.msPagination &&
+          propsRes.value.excludeKeys.size < propsRes.value.msPagination.total) ||
+        (propsRes.value.selectorStatus === SelectAllEnum.ALL && v === SelectAllEnum.CURRENT && !onlyCurrent)
+      ) {
+        // 如果当前是全选所有页状态，且是取消选中当前页操作，且排除项小于总数，则保持跨页全选状态
+        // 如果当前是全选所有页状态，且是选中当前页操作(是点击全选的多选框，非下拉菜单全选当前页)，则保持跨页全选状态
+        propsRes.value.selectorStatus = SelectAllEnum.ALL;
+      } else {
+        propsRes.value.selectorStatus = v;
+      }
     },
-
     // 表格行的选中/取消事件
-    rowSelectChange: (key: string) => {
+    rowSelectChange: (record: MsTableDataItem<T>) => {
+      const { rowKey, rowSelectionDisabledConfig } = propsRes.value;
+      const key = record[rowKey || 'id'];
       const { selectedKeys, excludeKeys } = propsRes.value;
       if (selectedKeys.has(key)) {
         // 当前已选中，取消选中
         selectedKeys.delete(key);
         excludeKeys.add(key);
+        if (rowSelectionDisabledConfig?.checkStrictly) {
+          // 取消当前节点的所有子节点
+          handleSelectChildren(record, false);
+        }
       } else {
         // 当前未选中，选中
         selectedKeys.add(key);
         if (excludeKeys.has(key)) {
           excludeKeys.delete(key);
         }
+        if (rowSelectionDisabledConfig?.checkStrictly) {
+          // 选择当前节点的所有子节点
+          handleSelectChildren(record, true);
+        }
       }
+
       if (selectedKeys.size === 0 && propsRes.value.selectorStatus === SelectAllEnum.CURRENT) {
         propsRes.value.selectorStatus = SelectAllEnum.NONE;
       } else if (selectedKeys.size > 0 && propsRes.value.selectorStatus === SelectAllEnum.NONE) {
@@ -464,6 +619,8 @@ export default function useTableProps<T>(
   return {
     propsRes,
     propsEvent,
+    advanceFilter,
+    viewId,
     setProps,
     setLoading,
     loadList,

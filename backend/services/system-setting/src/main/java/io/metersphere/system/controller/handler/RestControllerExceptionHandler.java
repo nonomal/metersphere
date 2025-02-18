@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.shiro.authz.UnauthorizedException;
 import org.apache.shiro.lang.ShiroException;
+import org.eclipse.jetty.io.EofException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -113,7 +114,21 @@ public class RestControllerExceptionHandler {
     }
 
     @ExceptionHandler({Exception.class})
-    public ResponseEntity<ResultHolder> handlerException(Exception e) {
+    public ResponseEntity<ResultHolder> handleException(Exception e) {
+        return ResponseEntity.internalServerError()
+                .body(ResultHolder.error(MsHttpResultCode.FAILED.getCode(),
+                        e.getMessage(), getStackTraceAsString(e)));
+    }
+
+    @ExceptionHandler({EofException.class})
+    public ResponseEntity<Object> handleEofException(HttpServletRequest request, Exception e) {
+        String requestURI = request.getRequestURI();
+        if (StringUtils.startsWith(requestURI, "/assets")
+                || StringUtils.startsWith(requestURI, "/fonts")
+                || StringUtils.startsWith(requestURI, "/images")
+                || StringUtils.startsWith(requestURI, "/templates")) {
+            return ResponseEntity.internalServerError().body(null);
+        }
         return ResponseEntity.internalServerError()
                 .body(ResultHolder.error(MsHttpResultCode.FAILED.getCode(),
                         e.getMessage(), getStackTraceAsString(e)));

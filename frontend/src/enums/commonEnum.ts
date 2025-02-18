@@ -19,6 +19,7 @@ export enum MenuEnum {
   caseManagement = 'caseManagement',
   apiTest = 'apiTest',
   uiTest = 'uiTest',
+  taskCenter = 'taskCenter',
 }
 
 export enum ShapeFlags {
@@ -33,4 +34,14 @@ export enum ShapeFlags {
   SUSPENSE = 128,
   COMPONENT_SHOULD_KEEP_ALIVE = 256,
   COMPONENT_KEPT_ALIVE = 512,
+}
+
+export enum TagUpdateTypeEnum {
+  UPDATE = 'UPDATE',
+  APPEND = 'APPEND',
+  CLEAR = 'CLEAR',
+}
+
+export enum GlobalEventNameEnum {
+  OPEN_TASK_CENTER = 'openTaskCenter',
 }

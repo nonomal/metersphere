@@ -5,6 +5,7 @@
     :default-param-item="defaultCsvParamItem"
     :draggable="false"
     :selectable="false"
+    :height-used="410"
     :delete-intercept="deleteIntercept"
     :type-change-intercept="typeChangeIntercept"
     :enable-change-intercept="enableChangeIntercept"
@@ -12,16 +13,17 @@
     :file-save-as-source-id="props.scenarioId"
     :file-save-as-api="transferFile"
     :file-module-options-api="getTransferOptions"
-    @change="handleCsvVariablesChange"
+    @change="(data) => handleCsvVariablesChange(data as CsvVariable[])"
   >
     <template #operationPre="{ record }">
       <a-trigger
         v-model:popup-visible="record.settingVisible"
         trigger="click"
-        position="br"
+        position="left"
         class="scenario-csv-trigger"
+        :popup-translate="[-2, 244]"
       >
-        <MsButton type="text" class="!mr-0" @click="handleRecordConfig(record)">
+        <MsButton type="text" class="!mr-0" size="mini" @click="handleRecordConfig(record)">
           {{ t('apiScenario.params.config') }}
         </MsButton>
         <template #content>
@@ -72,12 +74,6 @@
                     <a-radio :value="true">True</a-radio>
                   </a-radio-group>
                 </a-form-item>
-                <a-form-item field="random" :label="t('apiScenario.params.csvIsRandom')" class="mb-[16px]">
-                  <a-radio-group v-model:model-value="paramForm.random">
-                    <a-radio :value="false">False</a-radio>
-                    <a-radio :value="true">True</a-radio>
-                  </a-radio-group>
-                </a-form-item>
                 <a-form-item field="allowQuotedData" :label="t('apiScenario.params.csvQuoteAllow')" class="mb-[16px]">
                   <a-radio-group v-model:model-value="paramForm.allowQuotedData">
                     <a-radio :value="false">False</a-radio>
@@ -123,7 +119,7 @@
 
   import { CsvVariable } from '@/models/apiTest/scenario';
 
-  import { defaultCsvParamItem } from '@/views/api-test/components/config';
+  import { defaultCsvParamItem } from '../config';
   import { filterKeyValParams } from '@/views/api-test/components/utils';
 
   const props = defineProps<{
@@ -151,7 +147,7 @@
       title: 'apiScenario.params.csvScoped',
       dataIndex: 'scope',
       slotName: 'scope',
-      typeOptions: [
+      options: [
         {
           label: t('apiScenario.scenario'),
           value: 'SCENARIO',
@@ -209,8 +205,8 @@
     },
   ];
 
-  function handleCsvVariablesChange(resultArr: any[], isInit?: boolean) {
-    csvVariables.value = resultArr.map((e) => ({ ...e, enable: e.name && e.fileId }));
+  function handleCsvVariablesChange(resultArr: CsvVariable[], isInit?: boolean) {
+    csvVariables.value = resultArr.map((e) => ({ ...e, enable: e.name && e.file.fileId ? e.enable : false }));
     if (!isInit) {
       emit('change');
     }
@@ -309,6 +305,7 @@
         Message.warning(t('apiScenario.csvFileNotNull'));
         return false;
       }
+      return true;
     }
     return true;
   }
@@ -328,7 +325,7 @@
 
 <style lang="less">
   .scenario-csv-trigger {
-    @apply bg-white;
+    background-color: var(--color-text-fff);
     .scenario-csv-trigger-content {
       padding: 16px;
       width: 400px;

@@ -82,7 +82,7 @@ public class FunctionalCaseDemandService {
                 if (functionalCaseDemandMap.containsKey(demand.getParent())) {
                     FunctionalDemandDTO functionalDemandDTO = new FunctionalDemandDTO();
                     BeanUtils.copyBean(functionalDemandDTO, demand);
-                    functionalCaseDemandMap.get(demand.getParent()).stream().filter(t -> StringUtils.equalsIgnoreCase(t.getDemandPlatform(), demand.getDemandPlatform())).toList().get(0).addChild(functionalDemandDTO);
+                    functionalCaseDemandMap.get(demand.getParent()).stream().filter(t -> StringUtils.equalsIgnoreCase(t.getDemandPlatform(), demand.getDemandPlatform())).toList().getFirst().addChild(functionalDemandDTO);
                     resetMap(demand, functionalCaseDemandMap, functionalDemandDTO);
                 } else {
                     notMatchedList.add(demand);
@@ -196,7 +196,7 @@ public class FunctionalCaseDemandService {
         if (functionalCaseDemand == null) {
             throw new MSException(Translator.get("case.demand.not.exist"));
         }
-        dealWithDemand(request.getDemandList().get(0), functionalCaseDemand);
+        dealWithDemand(request.getDemandList().getFirst(), functionalCaseDemand);
         functionalCaseDemand.setCreateTime(null);
         functionalCaseDemand.setCreateUser(null);
         functionalCaseDemand.setUpdateUser(userId);
@@ -210,6 +210,23 @@ public class FunctionalCaseDemandService {
      * @param id 需求关系ID
      */
     public void deleteDemand(String id) {
+        FunctionalCaseDemand functionalCaseDemandInDb = functionalCaseDemandMapper.selectByPrimaryKey(id);
+        if (functionalCaseDemandInDb == null) {
+            return;
+        }
+        FunctionalCaseDemandExample functionalCaseDemandExample = new FunctionalCaseDemandExample();
+        functionalCaseDemandExample.createCriteria().andParentEqualTo(functionalCaseDemandInDb.getDemandId());
+        List<FunctionalCaseDemand> functionalCaseDemands = functionalCaseDemandMapper.selectByExample(functionalCaseDemandExample);
+        if (CollectionUtils.isNotEmpty(functionalCaseDemands)) {
+            SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH);
+            FunctionalCaseDemandMapper updateMapper = sqlSession.getMapper(FunctionalCaseDemandMapper.class);
+            for (FunctionalCaseDemand functionalCaseDemand : functionalCaseDemands) {
+                functionalCaseDemand.setWithParent(false);
+                updateMapper.updateByPrimaryKey(functionalCaseDemand);
+            }
+            sqlSession.flushStatements();
+            SqlSessionUtils.closeSqlSession(sqlSession, sqlSessionFactory);
+        }
         functionalCaseDemandMapper.deleteByPrimaryKey(id);
     }
 
@@ -240,29 +257,28 @@ public class FunctionalCaseDemandService {
             functionalCaseDemandRequest.setCaseId(t);
             functionalCaseDemandRequest.setDemandPlatform(request.getDemandPlatform());
             //过滤已存在的
-            insertDemand(demandDTOList, functionalCaseDemandRequest, userId, existDemands,  functionalCaseDemandMapper);
+            insertDemand(demandDTOList, functionalCaseDemandRequest, userId, existDemands, functionalCaseDemandMapper);
         });
         sqlSession.flushStatements();
         SqlSessionUtils.closeSqlSession(sqlSession, sqlSessionFactory);
     }
 
     private void insertDemand(List<DemandDTO> demandDTOList, FunctionalCaseDemandRequest request, String userId, List<FunctionalCaseDemand> existDemands, FunctionalCaseDemandMapper functionalCaseDemandMapper) {
-        Map<String, List<FunctionalCaseDemand>> existMap = existDemands.stream().filter(t->StringUtils.isNotBlank(t.getDemandId())).collect(Collectors.groupingBy(FunctionalCaseDemand::getDemandId));
-        Map<String, List<FunctionalCaseDemand>> existParentMap = existDemands.stream().filter(t->StringUtils.isNotBlank(t.getDemandId())).collect(Collectors.groupingBy(FunctionalCaseDemand::getParent));
-        Map<String, List<DemandDTO>> insertMap = demandDTOList.stream().filter(t->StringUtils.isNotBlank(t.getDemandId())).collect(Collectors.groupingBy(DemandDTO::getDemandId));
+        Map<String, List<FunctionalCaseDemand>> existMap = existDemands.stream().filter(t -> StringUtils.isNotBlank(t.getDemandId())).collect(Collectors.groupingBy(FunctionalCaseDemand::getDemandId));
+        Map<String, List<FunctionalCaseDemand>> existParentMap = existDemands.stream().filter(t -> StringUtils.isNotBlank(t.getDemandId())).collect(Collectors.groupingBy(FunctionalCaseDemand::getParent));
+        Map<String, List<DemandDTO>> insertMap = demandDTOList.stream().filter(t -> StringUtils.isNotBlank(t.getDemandId())).collect(Collectors.groupingBy(DemandDTO::getDemandId));
 
         for (DemandDTO demandDTO : demandDTOList) {
             FunctionalCaseDemand functionalCaseDemand = buildFunctionalCaseDemand(request.getCaseId(), request.getDemandPlatform(), userId, demandDTO);
             //校验重复
-            List<FunctionalCaseDemand> list = existDemands.stream().filter(t -> StringUtils.equalsIgnoreCase(t.getDemandId(), functionalCaseDemand.getDemandId()) && StringUtils.equalsIgnoreCase(t.getParent(), functionalCaseDemand.getParent())
-                    && StringUtils.equalsIgnoreCase(t.getDemandName(), functionalCaseDemand.getDemandName()) && StringUtils.equalsIgnoreCase(t.getDemandUrl(), functionalCaseDemand.getDemandUrl())).toList();
-            if (CollectionUtils.isNotEmpty(list)) {
+            List<FunctionalCaseDemand> functionalCaseDemands = existMap.get(demandDTO.getDemandId());
+            if (CollectionUtils.isNotEmpty(functionalCaseDemands)) {
                 continue;
             }
             //校验当前关联的需求在系统或传入的数据结构中是否带有父节点，如果有置为true,用来做查询的root节点
-            List<FunctionalCaseDemand> functionalCaseDemands = existMap.get(demandDTO.getParent());
+            List<FunctionalCaseDemand> functionalCaseDemandParents = existMap.get(demandDTO.getParent());
             List<DemandDTO> demandDTOList1 = insertMap.get(demandDTO.getParent());
-            if (CollectionUtils.isNotEmpty(functionalCaseDemands) || CollectionUtils.isNotEmpty(demandDTOList1)) {
+            if (CollectionUtils.isNotEmpty(functionalCaseDemandParents) || CollectionUtils.isNotEmpty(demandDTOList1)) {
                 functionalCaseDemand.setWithParent(Boolean.TRUE);
             } else {
                 functionalCaseDemand.setWithParent(Boolean.FALSE);
@@ -333,13 +349,37 @@ public class FunctionalCaseDemandService {
     }
 
     public PluginPager<PlatformDemandDTO> pageDemand(FunctionalThirdDemandPageRequest request) {
+        String platformId = projectApplicationService.getDemandPlatformId(request.getProjectId());
+        List<String> demandIds = new ArrayList<>();
+        if (StringUtils.isNotBlank(request.getCaseId())) {
+            demandIds = extFunctionalCaseDemandMapper.selectDemandIdsByCaseId(request.getCaseId(), platformId);
+        }
         DemandPageRequest demandPageRequest = new DemandPageRequest();
-        demandPageRequest.setQuery(StringUtils.replace(request.getKeyword(),"\\",""));
+        demandPageRequest.setQuery(StringUtils.replace(request.getKeyword(), "\\", ""));
         demandPageRequest.setFilter(request.getFilter());
         demandPageRequest.setStartPage(request.getCurrent());
         demandPageRequest.setPageSize(request.getPageSize());
         demandPageRequest.setProjectConfig(projectApplicationService.getProjectDemandThirdPartConfig(request.getProjectId()));
         Platform platform = projectApplicationService.getPlatform(request.getProjectId(), false);
-        return platform.pageDemand(demandPageRequest);
+        PluginPager<PlatformDemandDTO> platformDemandDTOPluginPager = platform.pageDemand(demandPageRequest);
+        if (CollectionUtils.isNotEmpty(demandIds)) {
+            PlatformDemandDTO data = platformDemandDTOPluginPager.getData();
+            List<PlatformDemandDTO.Demand> list = data.getList();
+            setDisabled(list, demandIds);
+            data.setList(list);
+            platformDemandDTOPluginPager.setData(data);
+        }
+        return platformDemandDTOPluginPager;
+    }
+
+    private static void setDisabled(List<PlatformDemandDTO.Demand> list, List<String> demandIds) {
+        for (PlatformDemandDTO.Demand demand : list) {
+            if (demandIds.contains(demand.getDemandId())) {
+                demand.setDisabled(true);
+            }
+            if (CollectionUtils.isNotEmpty(demand.getChildren())) {
+                setDisabled(demand.getChildren(), demandIds);
+            }
+        }
     }
 }

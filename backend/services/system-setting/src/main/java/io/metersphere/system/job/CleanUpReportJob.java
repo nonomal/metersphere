@@ -57,7 +57,7 @@ public class CleanUpReportJob {
                 List<ProjectApplication> testPlan = projectApplicationMapper.selectByExample(applicationExample);
                 Map<String, String> map = new HashMap<>();
                 if (CollectionUtils.isNotEmpty(testPlan)) {
-                    map.put(ProjectApplicationType.TEST_PLAN.TEST_PLAN_CLEAN_REPORT.name(), testPlan.get(0).getTypeValue());
+                    map.put(ProjectApplicationType.TEST_PLAN.TEST_PLAN_CLEAN_REPORT.name(), testPlan.getFirst().getTypeValue());
                 } else {
                     map.put(ProjectApplicationType.TEST_PLAN.TEST_PLAN_CLEAN_REPORT.name(), "3M");
                 }
@@ -67,9 +67,29 @@ public class CleanUpReportJob {
                 applicationExample.createCriteria().andProjectIdEqualTo(project.getId()).andTypeEqualTo(ProjectApplicationType.API.API_CLEAN_REPORT.name());
                 List<ProjectApplication> api = projectApplicationMapper.selectByExample(applicationExample);
                 if (CollectionUtils.isNotEmpty(api)) {
-                    map.put(ProjectApplicationType.API.API_CLEAN_REPORT.name(), api.get(0).getTypeValue());
+                    map.put(ProjectApplicationType.API.API_CLEAN_REPORT.name(), api.getFirst().getTypeValue());
                 } else {
                     map.put(ProjectApplicationType.API.API_CLEAN_REPORT.name(), "3M");
+                }
+
+                // task
+                applicationExample.clear();
+                applicationExample.createCriteria().andProjectIdEqualTo(project.getId()).andTypeEqualTo(ProjectApplicationType.TASK.TASK_CLEAN_REPORT.name());
+                List<ProjectApplication> task = projectApplicationMapper.selectByExample(applicationExample);
+                if (CollectionUtils.isNotEmpty(task)) {
+                    map.put(ProjectApplicationType.TASK.TASK_CLEAN_REPORT.name(), task.getFirst().getTypeValue());
+                } else {
+                    map.put(ProjectApplicationType.TASK.TASK_CLEAN_REPORT.name(), "3M");
+                }
+
+                // task record
+                applicationExample.clear();
+                applicationExample.createCriteria().andProjectIdEqualTo(project.getId()).andTypeEqualTo(ProjectApplicationType.TASK.TASK_RECORD.name());
+                List<ProjectApplication> taskRecord = projectApplicationMapper.selectByExample(applicationExample);
+                if (CollectionUtils.isNotEmpty(taskRecord)) {
+                    map.put(ProjectApplicationType.TASK.TASK_RECORD.name(), taskRecord.getFirst().getTypeValue());
+                } else {
+                    map.put(ProjectApplicationType.TASK.TASK_RECORD.name(), "3M");
                 }
 
                 Map<String, BaseCleanUpReport> beansOfType = applicationContext.getBeansOfType(BaseCleanUpReport.class);

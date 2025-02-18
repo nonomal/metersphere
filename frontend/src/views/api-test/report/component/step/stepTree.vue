@@ -5,6 +5,7 @@
         ref="treeRef"
         v-model:selected-keys="selectedKeys"
         v-model:expanded-keys="innerExpandedKeys"
+        v-model:focus-node-key="focusStepKey"
         v-model:data="steps"
         :expand-all="props.expandAll"
         :field-names="{ title: 'name', key: 'stepId', children: 'children' }"
@@ -33,10 +34,10 @@
               <div
                 class="flex h-[16px] min-w-[16px] items-center justify-center rounded-full bg-[var(--color-text-brand)] px-[2px] !text-white"
               >
-                {{ step.sort }}
+                {{ step.index }}
               </div>
-              <div class="step-node-content flex justify-between">
-                <div class="flex flex-1 items-center">
+              <div class="step-node-content">
+                <div class="flex max-w-[calc(100%-580px)] flex-1 items-center">
                   <!-- 步骤展开折叠按钮 -->
                   <a-tooltip
                     v-if="step.children?.length > 0"
@@ -66,22 +67,15 @@
                   <div v-if="props.showType === 'API' && showCondition.includes(step.stepType)" class="flex-shrink-0">
                     <ConditionStatus class="mx-1" :status="step.stepType || ''" />
                   </div>
-
-                  <a-tooltip :content="step.name" position="tl">
-                    <div
-                      class="step-name-container"
-                      :class="{
-                        'w-full flex-grow': showApiType.includes(step.stepType),
-                      }"
-                      @click="showDetail($event, step)"
-                    >
-                      <div class="one-line-text mx-[4px] max-w-[300px] text-[var(--color-text-1)]">
+                  <a-tooltip :content="step.name" :disabled="!step.name">
+                    <div class="step-name-container" @click="showDetail($event, step)">
+                      <div class="step-name-text one-line-text ml-[4px] font-normal">
                         {{ step.name }}
                       </div>
                     </div>
                   </a-tooltip>
                 </div>
-                <div class="flex">
+                <div class="flex flex-1 flex-nowrap justify-end">
                   <stepStatus :status="step.status || 'PENDING'" />
                   <!-- 脚本报错 -->
                   <a-popover position="left" content-class="response-popover-content">
@@ -104,7 +98,7 @@
                     </template>
                   </a-popover>
                   <div v-show="showStatus(step)" class="flex">
-                    <span class="statusCode mx-2">
+                    <span class="statusCode">
                       <div v-show="step.code" class="mr-2"> {{ t('report.detail.api.statusCode') }}</div>
                       <a-popover position="left" content-class="response-popover-content">
                         <div
@@ -128,25 +122,21 @@
                     <span v-show="step.requestTime !== null" class="resTime">
                       {{ t('report.detail.api.responseTime') }}
                       <a-popover position="left" content-class="response-popover-content">
-                        <span class="resTimeCount ml-2"
-                          >{{ step.requestTime !== null ? formatDuration(step.requestTime).split('-')[0] : '-'
-                          }}{{
-                            step.requestTime !== null ? formatDuration(step.requestTime).split('-')[1] : 'ms'
-                          }}</span
-                        >
+                        <span class="resTimeCount ml-2">
+                          {{ step.requestTime !== null ? formatDuration(step.requestTime).split('-')[0] : '-' }}
+                          {{ step.requestTime !== null ? formatDuration(step.requestTime).split('-')[1] : 'ms' }}
+                        </span>
                         <template #content>
                           <span v-show="step.requestTime !== null" class="resTime">
                             {{ t('report.detail.api.responseTime') }}
-                            <span class="resTimeCount ml-2"
-                              >{{ step.requestTime !== null ? formatDuration(step.requestTime).split('-')[0] : '-'
-                              }}{{
-                                step.requestTime !== null ? formatDuration(step.requestTime).split('-')[1] : 'ms'
-                              }}</span
-                            ></span
-                          >
+                            <span class="resTimeCount ml-2">
+                              {{ step.requestTime !== null ? formatDuration(step.requestTime).split('-')[0] : '-' }}
+                              {{ step.requestTime !== null ? formatDuration(step.requestTime).split('-')[1] : 'ms' }}
+                            </span>
+                          </span>
                         </template>
-                      </a-popover></span
-                    >
+                      </a-popover>
+                    </span>
                     <span v-show="step.responseSize !== null" class="resSize">
                       {{ t('report.detail.api.responseSize') }}
                       <a-popover position="left" content-class="response-popover-content">
@@ -157,26 +147,27 @@
                             <span class="resTimeCount ml-2">{{ step.responseSize || 0 }} bytes</span></span
                           >
                         </template>
-                      </a-popover></span
-                    >
+                      </a-popover>
+                    </span>
                   </div>
                 </div>
               </div>
               <div v-if="!step.fold" class="line"></div>
             </div>
             <!-- 折叠展开内容 -->
-            <div v-if="showResContent(step)" class="foldContent mt-4 pl-2">
+            <div v-if="showResContent(step)" class="foldContent mt-[18px] pl-2">
               <Suspense>
                 <StepDetailContent
                   :mode="props.activeType"
                   :step-item="step"
                   :console="props.console"
                   :is-definition="true"
-                  :environment-name="props.environmentName"
                   :show-type="props.showType"
                   :is-response-model="true"
                   :report-id="props?.reportId"
                   :steps="steps"
+                  :get-report-step-detail="props.getReportStepDetail"
+                  hide-response-time
                 />
               </Suspense>
             </div>
@@ -221,9 +212,9 @@
     showType: 'API' | 'CASE';
     activeType: 'tiled' | 'tab';
     console?: string;
-    environmentName?: string;
     reportId?: string;
     expandedKeys: (string | number)[];
+    getReportStepDetail?: (...args: any) => Promise<any>; // 获取步骤的详情内容接口
   }>();
   const loading = ref(false);
 
@@ -242,22 +233,22 @@
     ScenarioStepType.API_CASE,
     ScenarioStepType.CUSTOM_REQUEST,
     ScenarioStepType.SCRIPT,
+    ScenarioStepType.TEST_PLAN_API_CASE,
   ]);
-
-  const innerNumber = ref<number>(0);
 
   /**
    * 处理步骤展开折叠
    */
   function handleStepExpand(data: MsTreeExpandedData) {
+    const realStep = findNodeByKey<ScenarioItemType>(steps.value, data.node?.stepId, 'stepId');
     const isNotAllowExpand =
       data.node?.children && data.node?.children.length && showApiType.value.includes(data.node?.stepType);
-    if (isNotAllowExpand && data.node && data.node.children) {
-      data.node.stepChildren = cloneDeep(data.node.children);
-      data.node.children = [];
-    }
-    const realStep = findNodeByKey<ScenarioItemType>(steps.value, data.node?.stepId, 'stepId');
-    if (realStep) {
+    if (isNotAllowExpand && data.node && data.node.children?.length) {
+      if (realStep) {
+        realStep.stepChildren = cloneDeep(realStep.children);
+        realStep.children = [];
+      }
+    } else if (realStep) {
       realStep.expanded = !realStep.expanded;
     }
   }
@@ -298,6 +289,10 @@
     ScenarioStepType.LOOP_CONTROLLER,
     ScenarioStepType.IF_CONTROLLER,
     ScenarioStepType.ONCE_ONLY_CONTROLLER,
+    ScenarioStepType.TEST_PLAN_API_CASE,
+    ScenarioStepType.API_SCENARIO,
+    ScenarioStepType.CONSTANT_TIMER,
+    ScenarioStepType.SCRIPT,
   ]);
   function getShowExpand(item: ScenarioItemType) {
     if (props.showType === 'API') {
@@ -320,7 +315,6 @@
     }
     activeItem.value = cloneDeep(item);
     emit('detail', activeItem.value);
-    event.stopPropagation();
   }
 
   // 响应状态码对应颜色
@@ -377,26 +371,26 @@
       margin-top: 4px;
     }
     &:hover {
-      background-color: white !important;
+      background-color: var(--color-text-fff) !important;
       .arco-tree-node-title {
-        background-color: white !important;
+        background-color: var(--color-text-fff) !important;
       }
     }
     .arco-tree-node-title {
-      @apply !cursor-pointer bg-white;
+      @apply !cursor-pointer;
 
-      padding: 12px 4px;
+      padding: 8px 4px;
+      background-color: var(--color-text-fff);
       &:hover {
-        background-color: white !important;
+        background-color: var(--color-text-fff) !important;
       }
       .step-node-content {
-        @apply flex w-full flex-1 items-center;
-
+        width: calc(100% - 20px);
         gap: 8px;
-        margin-right: 6px;
+        @apply flex items-center justify-between;
       }
       .step-name-container {
-        @apply flex items-center;
+        @apply flex flex-1 items-center overflow-hidden;
 
         margin-right: 16px;
         &:hover {
@@ -425,7 +419,7 @@
     }
     .ms-tree-node-extra {
       gap: 4px;
-      background-color: white !important;
+      background-color: var(--color-text-n9) !important;
     }
   }
   :deep(.arco-tree-node-selected) {
@@ -436,11 +430,8 @@
       }
     }
   }
-  :deep(.step-tree-node-focus) {
-    background-color: white !important;
-    .arco-tree-node-title {
-      background-color: white;
-    }
+  :deep(.step-tree-node-title) {
+    @apply w-full;
   }
   .resTime,
   .resSize,
@@ -470,7 +461,7 @@
     height: 16px;
     border-radius: 50%;
     background: var(--color-text-n8) !important;
-    @apply bg-white;
+    background-color: var(--color-text-fff);
   }
   :deep(.arco-table-expand-btn) {
     width: 16px;
@@ -481,17 +472,22 @@
   }
   .resContentWrapper {
     border-radius: 0 0 6px 6px;
-    @apply mb-4 bg-white p-4;
+    @apply mb-4 p-4;
+
+    background-color: var(--color-text-fff);
     .resContent {
       height: 38px;
       border-radius: 6px;
     }
   }
-  :deep(.ms-tree-container .ms-tree .arco-tree-node .arco-tree-node-title) {
-    background: white;
-  }
-  :deep(.ms-tree-container .ms-tree .arco-tree-node-selected) {
-    background: white;
+  :deep(.step-tree-node-focus) {
+    background-color: var(--color-text-n9) !important;
+    .arco-tree-node-title {
+      background-color: var(--color-text-n9) !important;
+    }
+    .ms-tree-node-extra {
+      @apply !visible !w-auto;
+    }
   }
   .line {
     position: absolute;
@@ -499,8 +495,5 @@
     width: 100%;
     height: 1px;
     background: var(--color-text-n8);
-  }
-  :deep(.step-tree-node-title) {
-    width: 100%;
   }
 </style>

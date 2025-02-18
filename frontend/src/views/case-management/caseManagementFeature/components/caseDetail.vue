@@ -16,14 +16,16 @@
     />
     <template #footerRight>
       <div class="flex justify-end gap-[16px]">
-        <a-button type="secondary" @click="cancelHandler">{{ t('mscard.defaultCancelText') }}</a-button>
-        <a-button v-if="!isEdit" type="secondary" @click="saveHandler(true)">
+        <a-button :disabled="loading" type="secondary" @click="cancelHandler">{{
+          t('mscard.defaultCancelText')
+        }}</a-button>
+        <a-button v-if="!isEdit" :loading="loading" type="secondary" @click="saveHandler(true)">
           {{ t('mscard.defaultSaveAndContinueText') }}
         </a-button>
-        <a-button v-if="!isFormReviewCase" type="primary" @click="saveHandler(false)">
+        <a-button v-if="!isFormReviewCase" :loading="loading" type="primary" @click="saveHandler(false)">
           {{ okText }}
         </a-button>
-        <a-button v-if="isFormReviewCase" type="primary" @click="saveHandler(false, true)">
+        <a-button v-if="isFormReviewCase" :loading="loading" type="primary" @click="saveHandler(false, true)">
           {{ t('caseManagement.featureCase.createAndLink') }}
         </a-button>
       </div>
@@ -41,6 +43,7 @@
   import { createCaseRequest, updateCaseRequest } from '@/api/modules/case-management/featureCase';
   import { useI18n } from '@/hooks/useI18n';
   import useLeaveUnSaveTip from '@/hooks/useLeaveUnSaveTip';
+  import useShortcutSave from '@/hooks/useShortcutSave';
   import useVisit from '@/hooks/useVisit';
   import useFeatureCaseStore from '@/store/modules/case/featureCase';
   import { scrollIntoView } from '@/utils/dom';
@@ -177,6 +180,17 @@
       title.value = t('caseManagement.featureCase.creatingCase');
       okText.value = t('mscard.defaultConfirm');
     }
+  });
+
+  const { registerCatchSaveShortcut, removeCatchSaveShortcut } = useShortcutSave(() => {
+    saveHandler();
+  });
+  onMounted(() => {
+    registerCatchSaveShortcut();
+  });
+
+  onBeforeUnmount(() => {
+    removeCatchSaveShortcut();
   });
 </script>
 

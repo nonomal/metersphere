@@ -24,7 +24,6 @@
             <div class="folder-count">({{ modulesCount['all'] }})</div>
           </div>
         </div>
-        <a-divider class="my-[8px]" />
         <a-spin class="w-full" :loading="moduleLoading">
           <MsTree
             v-model:focus-node-key="focusNodeKey"
@@ -141,7 +140,6 @@
   import { ref } from 'vue';
   import { useRouter } from 'vue-router';
   import { Message } from '@arco-design/web-vue';
-  import { filter } from 'lodash-es';
 
   import MsButton from '@/components/pure/ms-button/index.vue';
   import MsDrawer from '@/components/pure/ms-drawer/index.vue';
@@ -153,7 +151,6 @@
   import MsTree from '@/components/business/ms-tree/index.vue';
   import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
   import TableFilter from '../../tableFilter.vue';
-  import conditionStatus from '@/views/api-test/report/component/conditionStatus.vue';
 
   import {
     addPrepositionRelation,
@@ -167,7 +164,7 @@
   import useFeatureCaseStore from '@/store/modules/case/featureCase';
   import { mapTree } from '@/utils';
 
-  import type { CaseManagementTable, CaseModuleQueryParams, OptionsFieldId } from '@/models/caseManagement/featureCase';
+  import type { CaseManagementTable, CaseModuleQueryParams, OptionsField } from '@/models/caseManagement/featureCase';
   import type { ModuleTreeNode, TableQueryParams } from '@/models/common';
   import { CaseManagementRouteEnum } from '@/enums/routeEnum';
 
@@ -337,11 +334,6 @@
     }
   );
 
-  // 用例等级
-  function getCaseLevel(record: CaseManagementTable) {
-    return (record.customFields.find((item: any) => item.name === '用例等级')?.value as CaseLevel) || 'P1';
-  }
-
   const loading = ref(false);
 
   function cancel() {
@@ -386,7 +378,7 @@
   // 用例等级表头检索
   const caseLevelFields = ref<Record<string, any>>({});
   const caseFilterVisible = ref(false);
-  const caseLevelList = ref<OptionsFieldId[]>([]);
+  const caseLevelList = ref<OptionsField[]>([]);
   const caseFilters = ref<string[]>([]);
 
   // 获取用例参数
@@ -545,13 +537,15 @@
   .folder {
     @apply flex cursor-pointer items-center justify-between;
 
-    padding: 8px 4px;
+    padding: 4px;
     border-radius: var(--border-radius-small);
     &:hover {
       background-color: rgb(var(--primary-1));
     }
     .folder-text {
       @apply flex cursor-pointer items-center;
+
+      height: 26px;
       .folder-icon {
         margin-right: 4px;
         color: var(--color-text-4);

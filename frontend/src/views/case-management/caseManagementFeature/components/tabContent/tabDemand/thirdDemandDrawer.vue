@@ -13,27 +13,27 @@
     @cancel="handleDrawerCancel"
   >
     <div class="flex items-center justify-between">
-      <div
-        ><span class="font-medium">{{ getPlatName() }}</span
-        ><span class="ml-1 text-[var(--color-text-4)]">({{ propsRes?.msPagination?.total || 0 }})</span></div
-      >
+      <div>
+        <span class="font-medium">{{ platName }}</span>
+        <span class="ml-1 text-[var(--color-text-4)]">({{ propsRes?.msPagination?.total || 0 }})</span>
+      </div>
       <a-input-search
         v-model="platformKeyword"
         :max-length="255"
-        :placeholder="t('project.member.searchMember')"
+        :placeholder="t('caseManagement.featureCase.searchByIdAndName')"
         allow-clear
         class="mx-[8px] w-[240px]"
         @search="searchHandler"
         @press-enter="searchHandler"
         @clear="searchHandler"
-      ></a-input-search>
+      />
     </div>
     <ms-base-table ref="tableRef" v-bind="propsRes" v-on="propsEvent">
       <template #demandName="{ record }">
         <span class="ml-1 text-[rgb(var(--primary-5))]">
           {{ record.demandName }}
-          <span>({{ (record.children || []).length || 0 }})</span></span
-        >
+          <span v-if="(record.children || []).length">({{ (record.children || []).length || 0 }})</span>
+        </span>
       </template>
       <template v-for="item in customFields" :key="item.slotName" #[item.dataIndex]="{ record }">
         <span> {{ getSlotName(record, item) }} </span>
@@ -58,12 +58,14 @@
   import type { CreateOrUpdateDemand, DemandItem } from '@/models/caseManagement/featureCase';
   import { TableKeyEnum } from '@/enums/tableEnum';
 
+  import { getPlatName } from '@/views/case-management/caseManagementFeature/components/utils';
+
   const { t } = useI18n();
   const appStore = useAppStore();
   const currentProjectId = computed(() => appStore.currentProjectId);
   const props = defineProps<{
     visible: boolean;
-    caseId: string;
+    caseId?: string; // 批量关联需求不需要用例id
     drawerLoading: boolean;
     platformInfo: Record<string, any>;
   }>();
@@ -91,19 +93,18 @@
       width: 300,
       showTooltip: true,
     },
+    // TODO 平台需求状态暂时不上
     // {
     //   title: 'caseManagement.featureCase.platformDemandState',
     //   width: 300,
     //   dataIndex: 'status',
     //   showTooltip: true,
-    //   ellipsis: true,
     // },
     // {
     //   title: 'caseManagement.featureCase.platformDemandHandler',
     //   width: 300,
     //   dataIndex: 'handler',
     //   showTooltip: true,
-    //   ellipsis: true,
     // },
   ];
 
@@ -116,7 +117,13 @@
     rowKey: 'demandId',
     scroll: { x: '100%' },
     selectable: true,
+    heightUsed: 290,
     showSetting: false,
+    showSelectorAll: false,
+    rowSelectionDisabledConfig: {
+      checkStrictly: false,
+      disabledKey: props.caseId ? 'disabled' : '',
+    },
   });
 
   const tableSelected = computed(() => {
@@ -138,16 +145,9 @@
     return filteredData;
   });
 
-  function getPlatName() {
-    switch (props.platformInfo.platform_key) {
-      case 'zentao':
-        return t('caseManagement.featureCase.zentao');
-      case 'jira':
-        return t('caseManagement.featureCase.jira');
-      default:
-        break;
-    }
-  }
+  const platName = computed(() => {
+    return getPlatName(props.platformInfo.platform_key);
+  });
 
   async function handleDrawerConfirm() {
     const demandList = tableSelected.value.map((item) => {
@@ -193,7 +193,7 @@
   }
 
   const initData = async () => {
-    setLoadListParams({ keyword: platformKeyword.value, projectId: currentProjectId.value });
+    setLoadListParams({ keyword: platformKeyword.value, projectId: currentProjectId.value, caseId: props.caseId });
     loadList();
   };
 
@@ -225,31 +225,17 @@
 
       fullColumns = [...columns, ...customFields.value];
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     }
   }
-
-  // watch(
-  //   () => props.platformInfo.demand_platform_config,
-  //   (val) => {
-  //     if (val) {
-  //       console.log(val);
-  //       initColumn();
-  //     }
-  //   }
-  // );
-
-  // watchEffect(() => {
-  //   if (props.platformInfo.demand_platform_config) {
-
-  //   }
-  // });
 
   watch(
     () => innerLinkDemandVisible.value,
     async (val) => {
       if (val) {
         resetSelector();
+        platformKeyword.value = '';
         if (props.platformInfo.demand_platform_config) {
           nextTick(() => {
             tableRef.value?.initColumn(fullColumns);
@@ -261,4 +247,13 @@
   );
 </script>
 
-<style scoped></style>
+<style scoped lang="less">
+  :deep(.arco-table-cell-align-left) > span:first-child {
+    padding-left: 0 !important;
+  }
+  :deep(.arco-table-cell-align-left) {
+    .arco-table-cell-inline-icon + .arco-table-td-content {
+      padding-right: 18px !important;
+    }
+  }
+</style>

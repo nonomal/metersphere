@@ -1,16 +1,19 @@
 <template>
-  <VCharts v-if="renderChart" :option="options" :autoresize="autoResize" :style="{ width, height }" />
+  <VCharts v-if="chartId" ref="chartRef" :option="options" :autoresize="autoResize" :style="{ width, height }" />
 </template>
 
 <script lang="ts" setup>
-  import { nextTick, ref } from 'vue';
+  import { ref } from 'vue';
 
-  import { BarChart, LineChart, PieChart, RadarChart } from 'echarts/charts';
+  import { getGenerateId } from '@/utils';
+
+  import { BarChart, CustomChart, LineChart, PieChart, RadarChart } from 'echarts/charts';
   import {
     DataZoomComponent,
     GraphicComponent,
     GridComponent,
     LegendComponent,
+    TitleComponent,
     TooltipComponent,
   } from 'echarts/components';
   import { use } from 'echarts/core';
@@ -20,6 +23,7 @@
   use([
     CanvasRenderer,
     BarChart,
+    CustomChart,
     LineChart,
     PieChart,
     RadarChart,
@@ -28,6 +32,7 @@
     LegendComponent,
     DataZoomComponent,
     GraphicComponent,
+    TitleComponent,
   ]);
 
   defineProps({
@@ -51,8 +56,18 @@
     },
   });
 
-  const renderChart = ref(false);
-  nextTick(() => {
-    renderChart.value = true;
+  const chartRef = ref<InstanceType<typeof VCharts>>();
+
+  const chartId = ref('');
+  onMounted(() => {
+    chartId.value = getGenerateId();
+  });
+
+  onUnmounted(() => {
+    chartId.value = '';
+  });
+
+  defineExpose({
+    chartRef,
   });
 </script>

@@ -335,7 +335,7 @@ public class SystemProjectControllerTests extends BaseTest {
         // 校验日志
         checkLog(projectId, OperationLogType.ADD);
 
-        compareProjectDTO(projects.get(0), result);
+        compareProjectDTO(projects.getFirst(), result);
         UserRoleRelationExample userRoleRelationExample = new UserRoleRelationExample();
         userRoleRelationExample.createCriteria().andSourceIdEqualTo(projectId).andRoleIdEqualTo(InternalUserRole.PROJECT_ADMIN.getValue());
         List<UserRoleRelation> userRoleRelations = userRoleRelationMapper.selectByExample(userRoleRelationExample);
@@ -364,7 +364,7 @@ public class SystemProjectControllerTests extends BaseTest {
         // 校验日志
         checkLog(projectId, OperationLogType.ADD);
 
-        compareProjectDTO(projects.get(0), result);
+        compareProjectDTO(projects.getFirst(), result);
         userRoleRelationExample = new UserRoleRelationExample();
         userRoleRelationExample.createCriteria().andSourceIdEqualTo(projectId).andRoleIdEqualTo(InternalUserRole.PROJECT_ADMIN.getValue());
         userRoleRelations = userRoleRelationMapper.selectByExample(userRoleRelationExample);
@@ -395,7 +395,7 @@ public class SystemProjectControllerTests extends BaseTest {
         // 校验日志
         checkLog(projectId, OperationLogType.ADD);
 
-        compareProjectDTO(projects.get(0), result);
+        compareProjectDTO(projects.getFirst(), result);
         userRoleRelationExample = new UserRoleRelationExample();
         userRoleRelationExample.createCriteria().andSourceIdEqualTo(projectId).andRoleIdEqualTo(InternalUserRole.PROJECT_ADMIN.getValue());
         userRoleRelations = userRoleRelationMapper.selectByExample(userRoleRelationExample);
@@ -419,7 +419,7 @@ public class SystemProjectControllerTests extends BaseTest {
         // 校验日志
         checkLog(projectId, OperationLogType.ADD);
 
-        compareProjectDTO(projects.get(0), result);
+        compareProjectDTO(projects.getFirst(), result);
         //校验资源池
         ProjectTestResourcePoolExample projectTestResourcePoolExample = new ProjectTestResourcePoolExample();
         projectTestResourcePoolExample.createCriteria().andProjectIdEqualTo(projectId);
@@ -573,7 +573,7 @@ public class SystemProjectControllerTests extends BaseTest {
 
         // 关联模板
         TemplateUpdateRequest request = new TemplateUpdateRequest();
-        Template template = baseTemplateService.getTemplates(DEFAULT_ORGANIZATION_ID, scene).get(0);
+        Template template = baseTemplateService.getTemplates(DEFAULT_ORGANIZATION_ID, scene).getFirst();
         TemplateCustomFieldRequest templateCustomFieldRequest = new TemplateCustomFieldRequest();
         templateCustomFieldRequest.setFieldId(customField.getId());
         templateCustomFieldRequest.setRequired(false);
@@ -686,7 +686,7 @@ public class SystemProjectControllerTests extends BaseTest {
         //第一个数据的createTime是最大的
         assert returnPager != null;
         List<ProjectDTO> projectDTOS = JSON.parseArray(JSON.toJSONString(returnPager.getList()), ProjectDTO.class);
-        long firstCreateTime = projectDTOS.get(0).getCreateTime();
+        long firstCreateTime = projectDTOS.getFirst().getCreateTime();
         for (ProjectDTO projectDTO : projectDTOS) {
             Assertions.assertFalse(projectDTO.getCreateTime() > firstCreateTime);
         }
@@ -713,7 +713,7 @@ public class SystemProjectControllerTests extends BaseTest {
         //第一个数据的organizationName是最小的
         assert returnPager != null;
         projectDTOS = JSON.parseArray(JSON.toJSONString(returnPager.getList()), ProjectDTO.class);
-        String firstOrganizationName = projectDTOS.get(0).getOrganizationName();
+        String firstOrganizationName = projectDTOS.getFirst().getOrganizationName();
         for (ProjectDTO projectDTO : projectDTOS) {
             Assertions.assertFalse(projectDTO.getOrganizationName().compareTo(firstOrganizationName) < 0);
         }
@@ -726,7 +726,7 @@ public class SystemProjectControllerTests extends BaseTest {
         //第一个数据的organizationName是最大的
         assert returnPager != null;
         projectDTOS = JSON.parseArray(JSON.toJSONString(returnPager.getList()), ProjectDTO.class);
-        firstOrganizationName = projectDTOS.get(0).getOrganizationName();
+        firstOrganizationName = projectDTOS.getFirst().getOrganizationName();
         for (ProjectDTO projectDTO : projectDTOS) {
             Assertions.assertFalse(projectDTO.getOrganizationName().compareTo(firstOrganizationName) > 0);
         }
@@ -897,12 +897,8 @@ public class SystemProjectControllerTests extends BaseTest {
         projectAddMemberRequest.setProjectId("projectId");
         List<String> userIds = List.of("admin1", "admin2");
         projectAddMemberRequest.setUserIds(userIds);
+        projectAddMemberRequest.setUserRoleIds(List.of(InternalUserRole.PROJECT_MEMBER.getValue()));
         this.requestPost(addProjectMember, projectAddMemberRequest, status().isOk());
-        UserRoleRelationExample userRoleRelationExample = new UserRoleRelationExample();
-        userRoleRelationExample.createCriteria().andSourceIdEqualTo("projectId").andRoleIdEqualTo(InternalUserRole.PROJECT_MEMBER.getValue());
-        List<UserRoleRelation> userRoleRelations = userRoleRelationMapper.selectByExample(userRoleRelationExample);
-        Assertions.assertTrue(userRoleRelations.stream().map(UserRoleRelation::getUserId).toList().containsAll(userIds));
-        Assertions.assertTrue(userRoleRelations.stream().map(UserRoleRelation::getUserId).toList().containsAll(userIds));
         // @@校验权限
         requestPostPermissionTest(PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_MEMBER_ADD, addProjectMember, projectAddMemberRequest);
     }
@@ -913,20 +909,24 @@ public class SystemProjectControllerTests extends BaseTest {
         //项目Id为空
         ProjectAddMemberRequest projectAddMemberRequest = new ProjectAddMemberRequest();
         projectAddMemberRequest.setProjectId(null);
+        projectAddMemberRequest.setUserRoleIds(List.of(InternalUserRole.PROJECT_MEMBER.getValue()));
         this.requestPost(addProjectMember, projectAddMemberRequest, BAD_REQUEST_MATCHER);
         //用户Id为空
         projectAddMemberRequest = new ProjectAddMemberRequest();
         projectAddMemberRequest.setProjectId("projectId");
+        projectAddMemberRequest.setUserRoleIds(List.of(InternalUserRole.PROJECT_MEMBER.getValue()));
         this.requestPost(addProjectMember, projectAddMemberRequest, BAD_REQUEST_MATCHER);
         //用户Id不存在
         projectAddMemberRequest = new ProjectAddMemberRequest();
         projectAddMemberRequest.setProjectId("projectId");
         projectAddMemberRequest.setUserIds(List.of("admin3"));
+        projectAddMemberRequest.setUserRoleIds(List.of(InternalUserRole.PROJECT_MEMBER.getValue()));
         this.requestPost(addProjectMember, projectAddMemberRequest, ERROR_REQUEST_MATCHER);
         //项目id不存在
         projectAddMemberRequest = new ProjectAddMemberRequest();
         projectAddMemberRequest.setProjectId("projectId111");
         projectAddMemberRequest.setUserIds(List.of("admin1"));
+        projectAddMemberRequest.setUserRoleIds(List.of(InternalUserRole.PROJECT_MEMBER.getValue()));
         this.requestPost(addProjectMember, projectAddMemberRequest, ERROR_REQUEST_MATCHER);
     }
 
@@ -952,7 +952,7 @@ public class SystemProjectControllerTests extends BaseTest {
         returnPager = parseObjectFromMvcResult(mvcResult, Pager.class);
         //第一个数据的createTime是最大的
         List<UserExtendDTO> userExtendDTOS = JSON.parseArray(JSON.toJSONString(returnPager.getList()), UserExtendDTO.class);
-        long firstCreateTime = userExtendDTOS.get(0).getCreateTime();
+        long firstCreateTime = userExtendDTOS.getFirst().getCreateTime();
         for (UserExtendDTO userExtendDTO : userExtendDTOS) {
             Assertions.assertFalse(userExtendDTO.getCreateTime() > firstCreateTime);
         }

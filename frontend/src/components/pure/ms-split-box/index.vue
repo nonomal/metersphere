@@ -35,14 +35,20 @@
       </div>
     </template>
     <template #resize-trigger>
-      <div :class="props.direction === 'horizontal' ? 'horizontal-expand-line' : 'vertical-expand-line'">
+      <div v-if="props.notShowFirst"></div>
+      <div v-else :class="props.direction === 'horizontal' ? 'horizontal-expand-line' : 'vertical-expand-line'">
         <div v-if="isExpanded" class="expand-color-line"></div>
       </div>
     </template>
     <template #second>
       <div class="ms-split-box-second">
         <div
-          v-if="props.direction === 'horizontal' && props.expandDirection === 'left' && !props.disabled"
+          v-if="
+            !props.notShowFirst &&
+            props.direction === 'horizontal' &&
+            props.expandDirection === 'left' &&
+            !props.disabled
+          "
           class="absolute h-full w-[12px]"
         >
           <div class="expand-icon" @click="() => changeExpand()">
@@ -82,10 +88,11 @@
       disabled?: boolean; // 是否禁用
       firstContainerClass?: string; // first容器类名
       secondContainerClass?: string; // second容器类名
+      notShowFirst?: boolean;
     }>(),
     {
       size: '300px',
-      min: '250px',
+      min: '300px',
       max: 0.5,
       direction: 'horizontal',
       expandDirection: 'left',
@@ -145,6 +152,18 @@
     }
   }
 
+  watch(
+    () => props.notShowFirst,
+    (val) => {
+      if (val) {
+        collapse();
+      } else {
+        expand();
+      }
+    },
+    { immediate: true }
+  );
+
   defineExpose({
     expand,
     collapse,
@@ -184,13 +203,14 @@
     width: calc(v-bind(innerSize) + 7px);
   }
   .expand-icon {
-    @apply invisible relative z-20 flex cursor-pointer justify-center;
+    @apply invisible relative flex cursor-pointer justify-center;
 
     top: 25%;
-    transform: translateY(50%);
+    z-index: 999;
     padding: 12px 2px;
     border-radius: 0 var(--border-radius-small) var(--border-radius-small) 0;
     background-color: var(--color-text-n9);
+    transform: translateY(50%);
   }
   .ms-split-box-second {
     @apply h-full;
@@ -229,7 +249,9 @@
   }
   .ms-split-box--vertical {
     .ms-split-box--bottom {
-      @apply h-full bg-white;
+      @apply h-full;
+
+      background-color: var(--color-text-fff);
     }
     .vertical-expand-line {
       @apply relative flex items-center justify-center bg-transparent;

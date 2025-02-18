@@ -50,6 +50,7 @@
           v-model="condition.enableCommonScript"
           class="mb-[8px]"
           :disabled="props.disabled"
+          type="button"
           @change="emit('change')"
         >
           <a-radio :value="false">{{ t('apiTestDebug.manual') }}</a-radio>
@@ -75,10 +76,7 @@
         </div>
       </div>
 
-      <div
-        v-if="!condition.enableCommonScript"
-        class="relative flex-1 rounded-[var(--border-radius-small)] bg-[var(--color-text-n9)]"
-      >
+      <div v-if="!condition.enableCommonScript" class="manual-script-container">
         <div v-if="isShowEditScriptNameInput" class="absolute left-[12px] top-[12px] z-10 w-[calc(100%-24px)]">
           <a-input
             ref="scriptNameInputRef"
@@ -92,7 +90,7 @@
             @change="() => emit('change')"
           />
         </div>
-        <div class="flex items-center justify-between px-[12px] pt-[12px]">
+        <div class="flex items-center justify-between p-[12px]">
           <div class="flex items-center">
             <a-tooltip v-if="condition.name" :content="condition.name">
               <div class="script-name-container">
@@ -127,7 +125,7 @@
                   <MsCodeEditor
                     v-model:model-value="scriptEx"
                     theme="vs"
-                    :language="LanguageEnum.BEANSHELL_JSR233"
+                    :language="condition.scriptLanguage || LanguageEnum.BEANSHELL_JSR233"
                     width="500px"
                     height="388px"
                     :show-full-screen="false"
@@ -186,7 +184,7 @@
             </a-button>
           </div>
         </div>
-        <div class="h-[calc(100%-24px)] min-h-[300px]">
+        <div class="ms-script-defined h-[calc(100%-46px)] min-h-[300px] border-t border-[var(--color-text-n8)]">
           <MsScriptDefined
             v-if="condition.script !== undefined && condition.scriptLanguage !== undefined"
             ref="scriptDefinedRef"
@@ -230,14 +228,21 @@
               :disabled-param-value="props.disabled"
               :scroll="{ x: '100%' }"
               :columns="scriptColumns"
+              :default-param-item="{
+                key: '',
+                value: '',
+                description: '',
+                required: false,
+              }"
               :selectable="false"
+              :show-quick-copy="props.showQuickCopy"
               @change="() => emit('change')"
             />
             <MsCodeEditor
               v-else-if="commonScriptShowType === 'scriptContent' && condition.commonScriptInfo"
               v-model:model-value="condition.commonScriptInfo.script"
               theme="vs"
-              :height="props.sqlCodeEditorHeight || '100%'"
+              :height="props.sqlCodeEditorHeight || '300px'"
               :language="condition.commonScriptInfo.scriptLanguage || LanguageEnum.BEANSHELL_JSR233"
               :show-full-screen="false"
               :show-theme-change="false"
@@ -249,7 +254,6 @@
     </template>
     <!-- SQL操作 -->
     <template v-else-if="condition.processorType === RequestConditionProcessor.SQL">
-      <div class="mb-[8px] text-[var(--color-text-1)]">{{ t('ms.paramsInput.sqlOperationNameDesc') }}</div>
       <div class="mb-[8px]">
         <a-input
           v-model:model-value="condition.name"
@@ -318,6 +322,7 @@
             :columns="sqlSourceColumns"
             :selectable="false"
             :default-param-item="defaultKeyValueParamItem"
+            :show-quick-copy="props.showQuickCopy"
             @change="handleSqlSourceParamTableChange"
           />
         </div>
@@ -368,11 +373,12 @@
         :params="condition.extractors"
         :disabled-except-param="props.disabled"
         :disabled-param-value="props.disabled"
-        :default-param-item="defaultExtractParamItem"
+        :default-param-item="defaultItem"
         :columns="extractParamsColumns"
         :selectable="false"
         :scroll="{ x: '700px' }"
         :response="props.response"
+        :show-quick-copy="props.showQuickCopy"
         @change="handleExtractParamTableChange"
         @more-action-select="(e,r)=> handleExtractParamMoreActionSelect(e,r as ExpressionConfig)"
       >
@@ -383,10 +389,10 @@
             class="ms-params-input-popover"
           >
             <template #content>
-              <div class="param-popover-title">
+              <div class="ms-params-popover-title">
                 {{ t('apiTestDebug.expression') }}
               </div>
-              <div class="param-popover-value">
+              <div class="ms-params-popover-value">
                 {{ record.expression }}
               </div>
             </template>
@@ -395,7 +401,6 @@
               class="ms-params-input"
               :max-length="255"
               :placeholder="t('ms.paramsInput.commonPlaceholder')"
-              size="mini"
               :disabled="props.disabled"
               @input="() => handleExpressionChange(rowIndex)"
               @change="() => handleExpressionChange(rowIndex)"
@@ -411,7 +416,7 @@
                     type="icon-icon_flashlamp"
                     :size="15"
                     :class="!props.response ? 'ms-params-input-suffix-icon--disabled' : 'ms-params-input-suffix-icon'"
-                    @click.stop="() => showFastExtraction(record)"
+                    @click.stop="() => showFastExtraction(record as ExpressionConfig)"
                   />
                 </a-tooltip>
               </template>
@@ -432,7 +437,7 @@
                 <a-button type="secondary" size="mini" @click="record.moreSettingPopoverVisible = false">
                   {{ t('common.cancel') }}
                 </a-button>
-                <a-button type="primary" size="mini" @click="() => applyMoreSetting(record)">
+                <a-button type="primary" size="mini" @click="() => applyMoreSetting(record as ExpressionConfig)">
                   {{ t('common.confirm') }}
                 </a-button>
               </div>
@@ -490,10 +495,11 @@
   import quoteSqlSourceDrawer from '../quoteSqlSourceDrawer.vue';
 
   import { getProtocolList } from '@/api/modules/api-test/common';
+  import { getCommonScript } from '@/api/modules/project-management/commonScript';
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import useAppStore from '@/store/modules/app';
-  import { characterLimit } from '@/utils';
+  import { characterLimit, getGenerateId } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import {
@@ -506,17 +512,14 @@
   } from '@/models/apiTest/common';
   import { ParamsRequestType } from '@/models/projectManagement/commonScript';
   import { DataSourceItem } from '@/models/projectManagement/environmental';
-  import {
-    RequestConditionProcessor,
-    RequestExtractEnvType,
-    RequestExtractExpressionEnum,
-    RequestExtractExpressionRuleType,
-    RequestExtractResultMatchingRule,
-    RequestExtractScope,
-    ResponseBodyXPathAssertionFormat,
-  } from '@/enums/apiEnum';
+  import { RequestConditionProcessor, RequestExtractExpressionEnum, RequestExtractScope } from '@/enums/apiEnum';
 
-  import { defaultKeyValueParamItem, extractTypeOptions } from '@/views/api-test/components/config';
+  import {
+    defaultExtractParamItem,
+    defaultKeyValueParamItem,
+    extractTypeOptions,
+    scriptExampleMap,
+  } from '@/views/api-test/components/config';
 
   const { openModal } = useModal();
 
@@ -524,6 +527,7 @@
   const appStore = useAppStore();
   const props = withDefaults(
     defineProps<{
+      conditionType: 'preOperation' | 'postOperation' | 'assertion' | 'scenario'; // 前置、后置、断言、场景
       disabled?: boolean;
       response?: string; // 响应内容
       isBuildIn?: boolean; // 是否是内置的条件
@@ -533,6 +537,7 @@
       totalList?: ExecuteConditionProcessor[]; // 总列表
       sqlCodeEditorHeight?: string; // sql脚本编辑器高度
       scriptCodeEditorHeight?: string; // 脚本的高度
+      showQuickCopy?: boolean; // 显示快捷复制icon
     }>(),
     {
       showAssociatedScene: false,
@@ -541,7 +546,7 @@
   );
   const emit = defineEmits<{
     (e: 'copy'): void;
-    (e: 'delete', id: number): void;
+    (e: 'delete', id: number | string): void;
     (e: 'change'): void;
   }>();
 
@@ -573,6 +578,19 @@
     }
   }
 
+  async function getCommonScriptLatest() {
+    if (!condition.value.commonScriptInfo?.id) {
+      return;
+    }
+    try {
+      const res = await getCommonScript(condition.value.commonScriptInfo.id);
+      condition.value.commonScriptInfo = res;
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  }
+
   watch(
     () => appStore.currentEnvConfig?.id,
     () => {
@@ -588,6 +606,7 @@
     () => condition.value.id,
     () => {
       filterDataSource();
+      getCommonScriptLatest();
     }
   );
 
@@ -602,18 +621,16 @@
     });
   }
 
-  const scriptEx = ref(`// 这里可以输入脚本注释
-value = vars.get("variable_name");
-result = "variable_name".equals(value);
-if (!result){
-  msg = "assertion [" + value + " == 'variable_name']: false;";
-  AssertionResult.setFailureMessage(msg);
-  AssertionResult.setFailure(true);
-}`);
   const { copy, isSupported } = useClipboard({ legacy: true });
 
+  const scriptEx = computed(() => {
+    if (condition.value.scriptLanguage) {
+      return scriptExampleMap[condition.value.scriptLanguage][props.conditionType];
+    }
+  });
+
   function copyScriptEx() {
-    if (isSupported) {
+    if (isSupported && scriptEx.value) {
       copy(scriptEx.value);
       Message.success(t('apiTestDebug.scriptExCopySuccess'));
     } else {
@@ -681,7 +698,7 @@ if (!result){
       addLineDisabled: true,
     },
     {
-      title: 'project.commonScript.description',
+      title: 'common.desc',
       slotName: 'description',
       dataIndex: 'description',
       addLineDisabled: true,
@@ -778,10 +795,16 @@ if (!result){
       width: 150,
     },
     {
+      title: 'common.desc',
+      dataIndex: 'description',
+      slotName: 'description',
+      width: 150,
+    },
+    {
       title: 'apiTestDebug.paramType',
       dataIndex: 'variableType',
       slotName: 'variableType',
-      typeOptions: extractTypeOptions.map((item) => {
+      options: extractTypeOptions.map((item) => {
         return {
           label: t(item.label),
           value: item.value,
@@ -793,7 +816,7 @@ if (!result){
       title: 'apiTestDebug.mode',
       dataIndex: 'extractType',
       slotName: 'extractType',
-      typeOptions: [
+      options: [
         {
           label: 'JSONPath',
           value: RequestExtractExpressionEnum.JSON_PATH,
@@ -813,7 +836,7 @@ if (!result){
       title: 'apiTestDebug.range',
       dataIndex: 'extractScope',
       slotName: 'extractScope',
-      typeOptions: [
+      options: [
         {
           label: 'Body',
           value: RequestExtractScope.BODY,
@@ -873,6 +896,17 @@ if (!result){
       width: 80,
     },
   ];
+  const defaultItem = ref(
+    cloneDeep(
+      condition.value.extractors?.length
+        ? {
+            ...defaultExtractParamItem,
+            variableType: condition.value.extractors[condition.value.extractors.length - 1].variableType,
+            extractType: condition.value.extractors[condition.value.extractors.length - 1].extractType,
+          }
+        : defaultExtractParamItem
+    )
+  );
 
   function handleExtractParamTableChange(resultArr: any[], isInit?: boolean) {
     condition.value.extractors = [...resultArr];
@@ -882,19 +916,6 @@ if (!result){
   }
 
   const extractParamsTableRef = ref<InstanceType<typeof paramTable>>();
-  const defaultExtractParamItem: ExpressionConfig = {
-    enable: true,
-    variableName: '',
-    variableType: RequestExtractEnvType.TEMPORARY,
-    extractScope: RequestExtractScope.BODY,
-    expression: '',
-    extractType: RequestExtractExpressionEnum.JSON_PATH,
-    expressionMatchingRule: RequestExtractExpressionRuleType.EXPRESSION,
-    resultMatchingRule: RequestExtractResultMatchingRule.RANDOM,
-    resultMatchingRuleNum: 1,
-    responseFormat: ResponseBodyXPathAssertionFormat.XML,
-    moreSettingPopoverVisible: false,
-  };
   const fastExtractionVisible = ref(false);
   const activeRecord = ref({ ...defaultExtractParamItem }); // 用于暂存当前操作的提取参数表格项
 
@@ -916,7 +937,7 @@ if (!result){
       if (currentIndex > -1) {
         condition.value.extractors.splice(currentIndex, 0, {
           ...currentExtractorsItem,
-          id: new Date().getTime().toString(),
+          id: getGenerateId(),
         });
         const temList = cloneDeep(condition.value?.extractors);
         condition.value.extractors = temList;
@@ -1011,6 +1032,9 @@ if (!result){
       }
     }
   });
+  onMounted(() => {
+    getCommonScriptLatest();
+  });
   watch(
     () => condition.value.commonScriptInfo,
     (info) => {
@@ -1021,6 +1045,7 @@ if (!result){
     },
     { deep: true, immediate: true }
   );
+
   const hasPreAndPost = computed(() => {
     if (props.showPrePostRequest) {
       return (
@@ -1063,20 +1088,16 @@ if (!result){
       }
     }
   }
-  .param-popover-title {
-    @apply font-medium;
+  .manual-script-container {
+    @apply relative flex-1;
 
-    margin-bottom: 4px;
-    font-size: 12px;
-    font-weight: 500;
-    line-height: 16px;
-    color: var(--color-text-1);
+    min-height: 500px;
+    border: 1px solid var(--color-text-n8);
+    border-radius: var(--border-radius-small);
   }
-  .param-popover-value {
-    min-width: 100px;
-    max-width: 280px;
-    font-size: 12px;
-    line-height: 16px;
-    color: var(--color-text-1);
+  .ms-script-defined {
+    :deep(.ms-code-editor-container) {
+      @apply border-none;
+    }
   }
 </style>

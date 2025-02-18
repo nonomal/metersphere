@@ -2,6 +2,7 @@ export default {
   msTable: {
     current: '全选当前页',
     all: '全选所有页',
+    cancelAll: '取消全选所有页',
     enable: '启用',
     disable: '禁用',
     batch: {
@@ -18,6 +19,7 @@ export default {
       clear: '清空',
     },
     columnSetting: {
+      default: '已为默认',
       display: '表格设置',
       mode: '模式设置',
       drawer: '抽屉',

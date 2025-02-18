@@ -3,21 +3,23 @@ package io.metersphere.system.service;
 import io.metersphere.project.domain.Project;
 import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.dto.*;
-import io.metersphere.system.dto.request.ProjectAddMemberBatchRequest;
-import io.metersphere.system.dto.request.ProjectMemberRequest;
-import io.metersphere.system.dto.request.ProjectPoolRequest;
-import io.metersphere.system.dto.request.ProjectRequest;
+import io.metersphere.system.dto.request.*;
 import io.metersphere.system.dto.sdk.OptionDTO;
 import io.metersphere.system.dto.user.UserExtendDTO;
+import io.metersphere.system.dto.user.UserRoleOptionDto;
 import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.mapper.ExtSystemProjectMapper;
+import io.metersphere.system.mapper.ExtUserRoleRelationMapper;
 import jakarta.annotation.Resource;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional(rollbackFor = Exception.class)
@@ -27,6 +29,8 @@ public class SystemProjectService {
     private ExtSystemProjectMapper extSystemProjectMapper;
     @Resource
     private CommonProjectService commonProjectService;
+    @Resource
+    private ExtUserRoleRelationMapper extUserRoleRelationMapper;
 
     private final static String PREFIX = "/system/project";
     private final static String ADD_PROJECT = PREFIX + "/add";
@@ -60,7 +64,18 @@ public class SystemProjectService {
     }
 
     public List<UserExtendDTO> getProjectMember(ProjectMemberRequest request) {
-        return extSystemProjectMapper.getProjectMemberList(request);
+        List<UserExtendDTO> memberList = extSystemProjectMapper.getProjectMemberList(request);
+        if (CollectionUtils.isNotEmpty(memberList)) {
+            List<String> userIds = memberList.stream().map(UserExtendDTO::getId).toList();
+            List<UserRoleOptionDto> userRole = extUserRoleRelationMapper.selectProjectUserRoleByUserIds(userIds, request.getProjectId());
+            Map<String, List<UserRoleOptionDto>> roleMap = userRole.stream().collect(Collectors.groupingBy(UserRoleOptionDto::getUserId));
+            memberList.forEach(user -> {
+                if (roleMap.containsKey(user.getId())) {
+                    user.setUserRoleList(roleMap.get(user.getId()));
+                }
+            });
+        }
+        return memberList;
     }
 
     /***
@@ -109,5 +124,10 @@ public class SystemProjectService {
     public List<OptionDTO> list(String keyword) {
         return extSystemProjectMapper.getSystemProject(keyword);
 
+    }
+
+    public void addMemberByProject(ProjectAddMemberRequest request, String createUser) {
+        commonProjectService.addProjectUser(request, createUser, ADD_MEMBER,
+                OperationLogType.ADD.name(), Translator.get("add"), OperationLogModule.SETTING_SYSTEM_ORGANIZATION);
     }
 }

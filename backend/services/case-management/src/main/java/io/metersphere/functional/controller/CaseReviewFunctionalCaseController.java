@@ -6,6 +6,7 @@ import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
 import io.metersphere.functional.domain.CaseReviewFunctionalCaseUser;
 import io.metersphere.functional.dto.ReviewFunctionalCaseDTO;
+import io.metersphere.functional.dto.ReviewerAndStatusDTO;
 import io.metersphere.functional.request.*;
 import io.metersphere.functional.service.CaseReviewFunctionalCaseService;
 import io.metersphere.functional.service.CaseReviewLogService;
@@ -57,17 +58,13 @@ public class CaseReviewFunctionalCaseController {
     @Operation(summary = "用例管理-用例评审-评审列表-评审详情-已关联用例列表")
     @RequiresPermissions(PermissionConstants.CASE_REVIEW_READ)
     public Pager<List<ReviewFunctionalCaseDTO>> page(@Validated @RequestBody ReviewFunctionalCasePageRequest request) {
-        String userId = StringUtils.EMPTY;
-        if (request.isViewFlag()) {
-            userId = SessionUtils.getUserId();
-        }
         String viewStatusUserId = StringUtils.EMPTY;
         if (request.isViewStatusFlag()) {
             viewStatusUserId = SessionUtils.getUserId();
         }
 
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize());
-        return PageUtils.setPageInfo(page, caseReviewFunctionalCaseService.page(request, false, userId, viewStatusUserId));
+        return PageUtils.setPageInfo(page, caseReviewFunctionalCaseService.page(request, false, viewStatusUserId));
     }
 
 
@@ -85,11 +82,7 @@ public class CaseReviewFunctionalCaseController {
     @RequiresPermissions(PermissionConstants.CASE_REVIEW_READ)
     @CheckOwner(resourceId = "#request.getReviewId()", resourceType = "case_review")
     public Map<String, Long> moduleCount(@Validated @RequestBody ReviewFunctionalCasePageRequest request) {
-        String userId = StringUtils.EMPTY;
-        if (request.isViewFlag()) {
-            userId = SessionUtils.getUserId();
-        }
-        return caseReviewFunctionalCaseService.moduleCount(request, false, userId);
+        return caseReviewFunctionalCaseService.moduleCount(request, false);
     }
 
 
@@ -119,6 +112,15 @@ public class CaseReviewFunctionalCaseController {
     }
 
 
+    @PostMapping("/mind/multiple/review")
+    @Operation(summary = "评审详情-脑图-多人评审返回评审结果")
+    @RequiresPermissions(value = {PermissionConstants.CASE_REVIEW_REVIEW, PermissionConstants.CASE_REVIEW_READ_UPDATE}, logical = Logical.OR)
+    @CheckOwner(resourceId = "#request.getReviewId()", resourceType = "case_review")
+    public String mindReview(@Validated @RequestBody MindReviewFunctionalCaseRequest request) {
+       return caseReviewFunctionalCaseService.mindReview(request, SessionUtils.getUserId());
+    }
+
+
     @PostMapping("/batch/edit/reviewers")
     @Operation(summary = "用例管理-用例评审-评审列表-评审详情-列表-批量修改评审人")
     @CheckOwner(resourceId = "#request.getReviewId()", resourceType = "case_review")
@@ -145,6 +147,17 @@ public class CaseReviewFunctionalCaseController {
                                          @PathVariable("reviewId") String reviewId, @Schema(description = "用例id", requiredMode = Schema.RequiredMode.REQUIRED)
                                          @PathVariable("caseId") String caseId) {
         return caseReviewFunctionalCaseService.getReviewerList(reviewId, caseId);
+    }
+
+
+    @GetMapping("/reviewer/status/total/{reviewId}/{caseId}")
+    @Operation(summary = "用例管理-用例评审-评审列表-评审详情-评审总结过结果和每个评审人最后结果气泡数据")
+    @RequiresPermissions(PermissionConstants.CASE_REVIEW_READ)
+    @CheckOwner(resourceId = "#reviewId", resourceType = "case_review")
+    public ReviewerAndStatusDTO getUserAndStatus(@Schema(description = "评审id", requiredMode = Schema.RequiredMode.REQUIRED)
+                                         @PathVariable("reviewId") String reviewId, @Schema(description = "用例id", requiredMode = Schema.RequiredMode.REQUIRED)
+                                         @PathVariable("caseId") String caseId) {
+        return caseReviewFunctionalCaseService.getUserAndStatus(reviewId, caseId);
     }
 
 }

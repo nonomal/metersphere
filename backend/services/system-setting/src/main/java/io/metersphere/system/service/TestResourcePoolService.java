@@ -1,13 +1,13 @@
 package io.metersphere.system.service;
 
+import io.metersphere.engine.EngineFactory;
 import io.metersphere.sdk.constants.HttpMethodConstants;
 import io.metersphere.sdk.constants.OperationLogConstants;
 import io.metersphere.sdk.constants.ResourcePoolTypeEnum;
+import io.metersphere.sdk.dto.pool.ResourcePoolNodeMetric;
 import io.metersphere.sdk.exception.MSException;
-import io.metersphere.sdk.util.BeanUtils;
-import io.metersphere.sdk.util.CommonBeanFactory;
-import io.metersphere.sdk.util.JSON;
-import io.metersphere.sdk.util.Translator;
+import io.metersphere.sdk.util.*;
+import io.metersphere.system.controller.handler.ResultHolder;
 import io.metersphere.system.domain.*;
 import io.metersphere.system.dto.pool.*;
 import io.metersphere.system.dto.sdk.OptionDTO;
@@ -17,6 +17,7 @@ import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.log.dto.LogDTO;
 import io.metersphere.system.mapper.*;
 import io.metersphere.system.uid.IDGenerator;
+import io.metersphere.system.utils.TaskRunnerClient;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.BooleanUtils;
@@ -48,6 +49,8 @@ public class TestResourcePoolService {
     @Resource
     private ExtResourcePoolMapper extResourcePoolMapper;
 
+    private final static String poolControllerUrl = "http://%s:%s/metric";
+
 
     public void checkAndSaveOrgRelation(TestResourcePool testResourcePool, String id, TestResourceDTO testResourceDTO) {
         //防止前端传入的应用组织为空
@@ -78,7 +81,7 @@ public class TestResourcePoolService {
     }
 
     private static boolean checkNodeOrK8s(TestResourceDTO testResourceDTO, String type) {
-        if (StringUtils.equalsIgnoreCase(type, ResourcePoolTypeEnum.NODE.name())) {
+        if (StringUtils.equalsIgnoreCase(type, ResourcePoolTypeEnum.NODE.getName())) {
             NodeResourcePoolService resourcePoolService = CommonBeanFactory.getBean(NodeResourcePoolService.class);
             if (resourcePoolService != null) {
                 return resourcePoolService.validate(testResourceDTO);
@@ -86,11 +89,7 @@ public class TestResourcePoolService {
                 return false;
             }
         } else {
-            KubernetesResourcePoolService resourcePoolService = CommonBeanFactory.getBean(KubernetesResourcePoolService.class);
-            if (resourcePoolService == null) {
-                return false;
-            }
-            return resourcePoolService.validate(testResourceDTO);
+            return EngineFactory.validateNamespaceExists(testResourceDTO);
         }
     }
 
@@ -111,9 +110,11 @@ public class TestResourcePoolService {
         if (CollectionUtils.isEmpty(testResourceDTO.getNodesList())) {
             testResourceDTO.setNodesList(new ArrayList<>());
         }
-        TestResourcePoolValidateService testResourcePoolValidateService = CommonBeanFactory.getBean(TestResourcePoolValidateService.class);
-        if (testResourcePoolValidateService != null) {
-            testResourcePoolValidateService.validateNodeList(testResourceDTO.getNodesList());
+        if (StringUtils.equalsIgnoreCase(testResourcePool.getType(), ResourcePoolTypeEnum.NODE.getName())) {
+            TestResourcePoolValidateService testResourcePoolValidateService = CommonBeanFactory.getBean(TestResourcePoolValidateService.class);
+            if (testResourcePoolValidateService != null) {
+                testResourcePoolValidateService.validateNodeList(testResourceDTO.getNodesList());
+            }
         }
         String configuration = JSON.toJSONString(testResourceDTO);
         TestResourcePoolBlob testResourcePoolBlob = new TestResourcePoolBlob();
@@ -141,9 +142,50 @@ public class TestResourcePoolService {
             if (pool.getAllOrg() || CollectionUtils.isNotEmpty(testResourcePoolOrganizations)) {
                 testResourcePoolDTO.setInUsed(true);
             }
+            //增加组织名称
+            if (pool.getAllOrg()) {
+                testResourcePoolDTO.setOrgNames(List.of(Translator.get("all_organization")));
+            } else if (CollectionUtils.isNotEmpty(testResourcePoolOrganizations)) {
+                List<String> orgIds = testResourcePoolOrganizations.stream().map(TestResourcePoolOrganization::getOrgId).distinct().toList();
+                OrganizationExample organizationExample = new OrganizationExample();
+                organizationExample.createCriteria().andIdIn(orgIds);
+                List<Organization> organizations = organizationMapper.selectByExample(organizationExample);
+                List<String> orgNameList = organizations.stream().map(Organization::getName).distinct().toList();
+                testResourcePoolDTO.setOrgNames(orgNameList);
+            }
+            //获取最大并发
+            if (StringUtils.equalsIgnoreCase(pool.getType(), ResourcePoolTypeEnum.NODE.getName())) {
+                int maxConcurrentNumber = 0;
+                for (TestResourceNodeDTO testResourceNodeDTO : testResourceDTO.getNodesList()) {
+                    maxConcurrentNumber = maxConcurrentNumber + testResourceNodeDTO.getConcurrentNumber();
+                }
+                testResourcePoolDTO.setMaxConcurrentNumber(maxConcurrentNumber);
+            } else {
+                //处理k8s资源池
+                testResourcePoolDTO.setMaxConcurrentNumber(testResourceDTO.getConcurrentNumber());
+            }
             testResourcePoolDTOS.add(testResourcePoolDTO);
         });
+
         return testResourcePoolDTOS;
+    }
+
+    public ResourcePoolNodeMetric getNodeMetric(String ip, String port) {
+        ResourcePoolNodeMetric resourcePoolNodeMetric = new ResourcePoolNodeMetric();
+        try {
+            ResultHolder body = TaskRunnerClient.get(String.format(poolControllerUrl, ip, port));
+            if (body == null) {
+                return null;
+            }
+            if (body.getData() != null && StringUtils.equalsIgnoreCase("OK", body.getData().toString())) {
+                return null;
+            }
+            resourcePoolNodeMetric = JSON.parseObject(JSON.toJSONString(body.getData()), ResourcePoolNodeMetric.class);
+        } catch (Exception e) {
+            LogUtils.error(e.getMessage(), e);
+        }
+
+        return resourcePoolNodeMetric;
     }
 
     public void checkTestResourcePool(TestResourcePool testResourcePool) {
@@ -182,6 +224,12 @@ public class TestResourcePoolService {
         TestResourceDTO testResourceDTO = JSON.parseObject(testResourceDTOStr, TestResourceDTO.class);
         if (CollectionUtils.isEmpty(testResourceDTO.getNodesList())) {
             testResourceDTO.setNodesList(new ArrayList<>());
+        } else {
+            for (TestResourceNodeDTO testResourceNodeDTO : testResourceDTO.getNodesList()) {
+                if (testResourceNodeDTO.getSingleTaskConcurrentNumber() == null) {
+                    testResourceNodeDTO.setSingleTaskConcurrentNumber(3);
+                }
+            }
         }
         TestResourceReturnDTO testResourceReturnDTO = new TestResourceReturnDTO();
         BeanUtils.copyBean(testResourceReturnDTO, testResourceDTO);
@@ -234,7 +282,7 @@ public class TestResourcePoolService {
      * 校验该组织是否有权限使用该资源池
      *
      * @param resourcePool 资源池对象
-     * @param orgId 组织id
+     * @param orgId        组织id
      * @return boolean
      */
     public boolean validateOrgResourcePool(TestResourcePool resourcePool, String orgId) {
@@ -248,4 +296,38 @@ public class TestResourcePoolService {
         return testResourcePoolOrganizationMapper.countByExample(example) >= 1;
     }
 
+    public ResourcePoolNodeMetric getTestResourcePoolCapacityDetail(TestResourcePoolCapacityRequest request) {
+        ResourcePoolNodeMetric resourcePoolNodeMetric = new ResourcePoolNodeMetric();
+        TestResourcePool testResourcePool = testResourcePoolMapper.selectByPrimaryKey(request.getPoolId());
+        if (testResourcePool == null || !testResourcePool.getEnable() || testResourcePool.getDeleted()) {
+            return new ResourcePoolNodeMetric();
+        }
+        TestResourcePoolBlob testResourcePoolBlob = testResourcePoolBlobMapper.selectByPrimaryKey(request.getPoolId());
+        byte[] configuration = testResourcePoolBlob.getConfiguration();
+        String testResourceDTOStr = new String(configuration);
+        TestResourceDTO testResourceDTO = JSON.parseObject(testResourceDTOStr, TestResourceDTO.class);
+        if (CollectionUtils.isEmpty(testResourceDTO.getNodesList())) {
+            return new ResourcePoolNodeMetric();
+        }
+        if (StringUtils.isBlank(request.getIp())) {
+            int concurrentNumber = 0;
+            int occupiedConcurrentNumber = 0;
+            for (TestResourceNodeDTO testResourceNodeDTO : testResourceDTO.getNodesList()) {
+                ResourcePoolNodeMetric nodeMetric = getNodeMetric(testResourceNodeDTO.getIp(), testResourceNodeDTO.getPort());
+                concurrentNumber = concurrentNumber + testResourceNodeDTO.getConcurrentNumber();
+                occupiedConcurrentNumber = occupiedConcurrentNumber + nodeMetric.getOccupiedConcurrentNumber();
+            }
+            resourcePoolNodeMetric.setConcurrentNumber(concurrentNumber);
+            resourcePoolNodeMetric.setOccupiedConcurrentNumber(occupiedConcurrentNumber);
+        } else {
+            resourcePoolNodeMetric = getNodeMetric(request.getIp(), request.getPort());
+            for (TestResourceNodeDTO testResourceNodeDTO : testResourceDTO.getNodesList()) {
+                if (StringUtils.equals(testResourceNodeDTO.getIp(), request.getIp()) && StringUtils.equals(testResourceNodeDTO.getPort(), request.getPort())) {
+                    resourcePoolNodeMetric.setConcurrentNumber(testResourceNodeDTO.getConcurrentNumber());
+                    break;
+                }
+            }
+        }
+        return resourcePoolNodeMetric;
+    }
 }

@@ -1,7 +1,8 @@
 package io.metersphere.project.api.assertion.body;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.metersphere.sdk.constants.MsAssertionCondition;
-import io.metersphere.system.valid.EnumValue;
+import io.metersphere.sdk.valid.EnumValue;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import org.apache.commons.lang3.BooleanUtils;
@@ -31,6 +32,7 @@ public class MsJSONPathAssertionItem extends MsBodyAssertionItem {
      */
     private String expectedValue;
 
+    @JsonIgnore
     public boolean isValid() {
         return StringUtils.isNotBlank(expression)
                 && StringUtils.isNotBlank(condition)

@@ -16,6 +16,9 @@ export enum UploadAcceptEnum {
   none = 'none',
   unknown = 'unknown',
   json = '.json',
+  jmx = '.jmx',
+  har = '.har',
+  ms = '.ms',
 }
 
 export enum UploadStatus {

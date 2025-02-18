@@ -1,31 +1,22 @@
 <template>
-  <a-input
+  <a-input-password
     v-model="inputValue"
-    :max-length="255"
-    :type="isShowPassword ? 'password' : 'text'"
     :placeholder="placeholder"
-    style="width: 100%"
-    autocomplete="username"
+    :default-visibility="true"
+    :disabled="props.disabled"
     allow-clear
     @clear="clearHandler"
-  >
-    <template #suffix>
-      <span v-if="!isShowPassword" @click="togglePasswordVisibility">
-        <icon-eye />
-      </span>
-      <span v-else>
-        <icon-eye-invisible @click="togglePasswordVisibility" />
-      </span>
-    </template>
-  </a-input>
+    @input="inputHandler"
+  />
 </template>
 
 <script setup lang="ts">
   import { ref, watch } from 'vue';
 
-  defineProps<{
+  const props = defineProps<{
     placeholder?: string;
     value?: string;
+    disabled?: boolean;
   }>();
   const inputValue = ref('');
   const emits = defineEmits<{
@@ -44,10 +35,10 @@
     emits('update:modelValue', inputValue.value);
   }
 
-  const isShowPassword = ref<boolean>(true);
-  const togglePasswordVisibility = () => {
-    isShowPassword.value = !isShowPassword.value;
-  };
+  function inputHandler(value: string) {
+    inputValue.value = value;
+    emits('update:modelValue', inputValue.value);
+  }
 </script>
 
 <style scoped></style>

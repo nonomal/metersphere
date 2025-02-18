@@ -2,10 +2,11 @@ package io.metersphere.project.controller;
 
 import io.metersphere.project.controller.param.ProjectApplicationDefinition;
 import io.metersphere.project.controller.param.ProjectApplicationRequestDefinition;
+import io.metersphere.project.domain.Project;
 import io.metersphere.project.domain.ProjectApplication;
 import io.metersphere.project.domain.ProjectApplicationExample;
 import io.metersphere.project.mapper.ProjectApplicationMapper;
-import io.metersphere.project.mapper.ProjectTestResourcePoolMapper;
+import io.metersphere.project.mapper.ProjectMapper;
 import io.metersphere.project.request.ProjectApplicationRequest;
 import io.metersphere.project.service.ProjectApplicationService;
 import io.metersphere.sdk.constants.ProjectApplicationType;
@@ -18,7 +19,6 @@ import io.metersphere.system.domain.*;
 import io.metersphere.system.dto.request.ServiceIntegrationUpdateRequest;
 import io.metersphere.system.mapper.ServiceIntegrationMapper;
 import io.metersphere.system.mapper.TestResourcePoolMapper;
-import io.metersphere.system.mapper.TestResourcePoolOrganizationMapper;
 import jakarta.annotation.Resource;
 import lombok.Getter;
 import lombok.Setter;
@@ -59,9 +59,7 @@ public class ProjectApplicationControllerTests extends BaseTest {
     @Resource
     private TestResourcePoolMapper testResourcePoolMapper;
     @Resource
-    private ProjectTestResourcePoolMapper projectTestResourcePoolMapper;
-    @Resource
-    private TestResourcePoolOrganizationMapper testResourcePoolOrganizationMapper;
+    private ProjectMapper projectMapper;
 
     public static final String PROJECT_ID = "project_application_test_id";
     public static final String TIME_TYPE_VALUE = "3M";
@@ -76,7 +74,9 @@ public class ProjectApplicationControllerTests extends BaseTest {
     //测试计划 - 清理报告配置
     @Test
     @Order(1)
+    @Sql(scripts = {"/dml/init_project_application_test.sql"}, config = @SqlConfig(encoding = "utf-8", transactionMode = SqlConfig.TransactionMode.ISOLATED))
     public void testTestPlanClean() throws Exception {
+
         this.testGetTestPlan();
         //新增
         ProjectApplication request = creatRequest(ProjectApplicationType.TEST_PLAN.TEST_PLAN_CLEAN_REPORT.name(), TIME_TYPE_VALUE);
@@ -116,6 +116,25 @@ public class ProjectApplicationControllerTests extends BaseTest {
      * ==========测试计划配置 end==========
      */
 
+    /**
+     * ========== 任务中心 start==========
+     */
+    public static final String TASK_UPDATE_URL = "/project/application/update/task";
+    public static final String GET_TASK_URL = "/project/application/task";
+    // 任务中心 - 获取配置
+    @Test
+    @Order(4)
+    public void testGetTask() throws Exception {
+        ProjectApplicationRequest request = this.getRequest("TASK");
+        this.requestPostWithOkAndReturn(GET_TASK_URL, request);
+    }
+    // 任务中心 - 获取配置
+    @Test
+    @Order(5)
+    public void testUpdateTask() throws Exception {
+        ProjectApplication request = creatRequest(ProjectApplicationType.TASK.TASK_CLEAN_REPORT.name(), "1D");
+        this.requestPostWithOkAndReturn(TASK_UPDATE_URL, request);
+    }
 
 
     /**
@@ -189,6 +208,22 @@ public class ProjectApplicationControllerTests extends BaseTest {
     public void testGetApi() throws Exception {
         ProjectApplicationRequest request = this.getRequest("API");
         this.requestPostWithOkAndReturn(GET_API_URL, request);
+        Project initProject = new Project();
+        initProject.setId("GYQALL");
+        initProject.setNum(null);
+        initProject.setOrganizationId(DEFAULT_ORGANIZATION_ID);
+        initProject.setName("测试项目版本");
+        initProject.setDescription("测试项目版本");
+        initProject.setCreateUser("admin");
+        initProject.setUpdateUser("admin");
+        initProject.setCreateTime(System.currentTimeMillis());
+        initProject.setUpdateTime(System.currentTimeMillis());
+        initProject.setEnable(true);
+        initProject.setModuleSetting("[\"apiTest\",\"uiTest\"]");
+        initProject.setAllResourcePool(true);
+        projectMapper.insertSelective(initProject);
+        request.setProjectId("GYQALL");
+        this.requestPostWithOkAndReturn(GET_API_URL, request);
     }
 
     //接口测试 - 获取项目成员
@@ -246,7 +281,6 @@ public class ProjectApplicationControllerTests extends BaseTest {
     //用例管理 - 获取平台下拉列表
     @Test
     @Order(40)
-    @Sql(scripts = {"/dml/init_project_application_test.sql"}, config = @SqlConfig(encoding = "utf-8", transactionMode = SqlConfig.TransactionMode.ISOLATED))
     public void testGetPlatform() throws Exception {
         this.requestGetWithOkAndReturn(GET_PLATFORM_URL + "/100002");
         MvcResult mvcResult = this.requestGetWithOkAndReturn(GET_PLATFORM_URL + "/100001");
@@ -452,6 +486,13 @@ public class ProjectApplicationControllerTests extends BaseTest {
         Assertions.assertNotNull(updateResultHolder);
         ProjectApplication afterRequest = creatRequest(ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED.name() + "_" + ProjectApplicationType.CASE_RELATED_CONFIG.CASE_ENABLE.name(), "true");
         this.requestPost(CASE_UPDATE_URL, afterRequest);
+        Map<String, String> falseConfigs = mockCaseFalseRelatedTestData();
+        mvcResult = this.requestPostWithOkAndReturn(UPDATE_CASE_RELATED_CONFIG_URL + "/project_application_test_id", falseConfigs);
+        // 获取返回值
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        // 返回请求正常
+        Assertions.assertNotNull(resultHolder);
     }
 
     private Map<String, String> mockRelatedTestData() {
@@ -459,6 +500,16 @@ public class ProjectApplicationControllerTests extends BaseTest {
         Map<String, String> configs = new HashMap<>();
         configs.put("DEMAND_PLATFORM_CONFIG", jsonConfig);
         configs.put("CASE_ENABLE", "true");
+        configs.put("CRON_EXPRESSION", "0 0 0 * * ?");
+        return configs;
+    }
+
+    private Map<String, String> mockCaseFalseRelatedTestData() {
+        String jsonConfig = "{\"jiraKey\":\"111\",\"jiraIssueTypeId\":\"10086\",\"jiraStoryTypeId\":\"10010\"}";
+        Map<String, String> configs = new HashMap<>();
+        configs.put("DEMAND_PLATFORM_CONFIG", jsonConfig);
+        configs.put("CASE_ENABLE", "false");
+        configs.put("CRON_EXPRESSION", "0 0 0/1 * * ?");
         return configs;
     }
 

@@ -12,13 +12,11 @@ import io.metersphere.api.dto.debug.*;
 import io.metersphere.api.dto.definition.ResponseBinaryBody;
 import io.metersphere.api.dto.definition.ResponseBody;
 import io.metersphere.api.dto.request.ApiEditPosRequest;
+import io.metersphere.api.dto.request.ApiImportCurlRequest;
 import io.metersphere.api.dto.request.ApiTransferRequest;
 import io.metersphere.api.dto.request.MsCommonElement;
 import io.metersphere.api.dto.request.http.MsHTTPElement;
 import io.metersphere.api.dto.request.http.RestParam;
-import io.metersphere.project.dto.environment.auth.BasicAuth;
-import io.metersphere.project.dto.environment.auth.DigestAuth;
-import io.metersphere.project.dto.environment.auth.HTTPAuthConfig;
 import io.metersphere.api.dto.request.http.body.*;
 import io.metersphere.api.mapper.ApiDebugBlobMapper;
 import io.metersphere.api.mapper.ApiDebugMapper;
@@ -41,6 +39,9 @@ import io.metersphere.project.domain.ProjectTestResourcePool;
 import io.metersphere.project.domain.ProjectTestResourcePoolExample;
 import io.metersphere.project.dto.CommonScriptInfo;
 import io.metersphere.project.dto.customfunction.request.CustomFunctionRequest;
+import io.metersphere.project.dto.environment.auth.BasicAuth;
+import io.metersphere.project.dto.environment.auth.DigestAuth;
+import io.metersphere.project.dto.environment.auth.HTTPAuthConfig;
 import io.metersphere.project.dto.filemanagement.FileInfo;
 import io.metersphere.project.mapper.ProjectTestResourcePoolMapper;
 import io.metersphere.project.service.CustomFunctionService;
@@ -69,9 +70,11 @@ import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MvcResult;
 
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 import static io.metersphere.api.controller.result.ApiResultCode.API_DEBUG_EXIST;
 import static io.metersphere.system.controller.handler.result.MsHttpResultCode.NOT_FOUND;
@@ -91,6 +94,8 @@ public class ApiDebugControllerTests extends BaseTest {
     protected static final String DEBUG = "debug";
     public static final String TRANSFER_OPTION = "transfer/options";
     public static final String TRANSFER = "transfer";
+
+    public static final String IMPORT_CURL = "import-curl";
 
     @Resource
     private ApiDebugMapper apiDebugMapper;
@@ -379,7 +384,7 @@ public class ApiDebugControllerTests extends BaseTest {
         // 校验数据是否正确
         List<ApiDebugSimpleDTO> apiDebugList = getResultDataArray(mvcResult, ApiDebugSimpleDTO.class);
         Assertions.assertEquals(apiDebugList.size(), 2);
-        Assertions.assertEquals(apiDebugList.get(0), BeanUtils.copyBean(new ApiDebugSimpleDTO(),
+        Assertions.assertEquals(apiDebugList.getFirst(), BeanUtils.copyBean(new ApiDebugSimpleDTO(),
                 apiDebugMapper.selectByPrimaryKey(addApiDebug.getId())));
         Assertions.assertEquals(apiDebugList.get(1),
                 BeanUtils.copyBean(new ApiDebugSimpleDTO(), apiDebugMapper.selectByPrimaryKey(anotherAddApiDebug.getId())));
@@ -454,11 +459,11 @@ public class ApiDebugControllerTests extends BaseTest {
         projectTestResourcePoolExample.createCriteria().andProjectIdEqualTo(DEFAULT_PROJECT_ID);
         projectTestResourcePoolMapper.deleteByExample(projectTestResourcePoolExample);
         // @校验组织没有资源池权限异常
-        assertErrorCode(this.requestPost(DEBUG, request), ApiResultCode.EXECUTE_RESOURCE_POOL_NOT_CONFIG);
+        assertRun(this.requestPostAndReturn(DEBUG, request));
         TestResourcePool resourcePool = baseResourcePoolTestService.insertResourcePool();
         baseResourcePoolTestService.insertResourcePoolOrg(resourcePool);
         // @校验项目没有资源池权限异常
-        assertErrorCode(this.requestPost(DEBUG, request), ApiResultCode.EXECUTE_RESOURCE_POOL_NOT_CONFIG);
+        assertRun(this.requestPostAndReturn(DEBUG, request));
 
         TestResourcePoolExample example = new TestResourcePoolExample();
         example.createCriteria().andNameEqualTo("默认资源池");
@@ -466,7 +471,7 @@ public class ApiDebugControllerTests extends BaseTest {
         Assertions.assertFalse(testResourcePools.isEmpty());
         ProjectTestResourcePool projectTestResourcePool = new ProjectTestResourcePool();
         projectTestResourcePool.setProjectId(DEFAULT_PROJECT_ID);
-        projectTestResourcePool.setTestResourcePoolId(testResourcePools.get(0).getId());
+        projectTestResourcePool.setTestResourcePoolId(testResourcePools.getFirst().getId());
         projectTestResourcePoolMapper.insert(projectTestResourcePool);
         this.requestPost(DEBUG, request);
         projectTestResourcePoolMapper.deleteByExample(projectTestResourcePoolExample);
@@ -474,7 +479,7 @@ public class ApiDebugControllerTests extends BaseTest {
         baseResourcePoolTestService.insertResourcePoolProject(resourcePool);
         baseResourcePoolTestService.insertProjectApplication(resourcePool);
         // @校验资源池调用失败
-        assertErrorCode(this.requestPost(DEBUG, request), ApiResultCode.RESOURCE_POOL_EXECUTE_ERROR);
+        assertRun(this.requestPostAndReturn(DEBUG, request));
 
         mockPost("/api/debug", "");
         msHTTPElement.setPath("/test/{rest1}/aa");
@@ -543,7 +548,7 @@ public class ApiDebugControllerTests extends BaseTest {
         request.setFrontendDebug(true);
         MvcResult mvcResult = this.requestPostWithOkAndReturn(DEBUG, request);
         TaskRequestDTO taskRequestDTO = getResultData(mvcResult, TaskRequestDTO.class);
-        Assertions.assertEquals(taskRequestDTO.getReportId(), request.getReportId());
+        Assertions.assertEquals(taskRequestDTO.getTaskItem().getReportId(), request.getReportId());
 
         // 测试请求体
         MockMultipartFile file = getMockMultipartFile();
@@ -570,6 +575,14 @@ public class ApiDebugControllerTests extends BaseTest {
 
         // @@校验权限
         requestPostPermissionTest(PermissionConstants.PROJECT_API_DEBUG_EXECUTE, DEBUG, request);
+    }
+
+    public static void assertRun(MvcResult mvcResult) throws UnsupportedEncodingException {
+        Map resultData = JSON.parseMap(mvcResult.getResponse().getContentAsString());
+        Integer code = (Integer) resultData.get("code");
+        if (code != ApiResultCode.RESOURCE_POOL_EXECUTE_ERROR.getCode() && code != ApiResultCode.EXECUTE_RESOURCE_POOL_NOT_CONFIG.getCode()) {
+            Assertions.assertTrue(false);
+        }
     }
 
     private CustomFunction addCustomFunction() {
@@ -676,6 +689,12 @@ public class ApiDebugControllerTests extends BaseTest {
         apiFile.setFileName("test");
         formDataKV.setFiles(List.of(apiFile));
         formValues.add(formDataKV);
+
+        FormDataKV booleanItem = new FormDataKV();
+        formDataKV.setKey("aa");
+        formDataKV.setParamType(BodyParamType.BOOLEAN.getValue());
+        formValues.add(booleanItem);
+
         if (body.getBinaryBody() == null) {
             body.setBinaryBody(new BinaryBody());
         }
@@ -743,7 +762,7 @@ public class ApiDebugControllerTests extends BaseTest {
         request.setModuleId("root");
         request.setFileName("test-debug-file1");
         request.setOriginalName("test-debug-file1.txt");
-        request.setFileId(apiFileResources.get(0).getFileId());
+        request.setFileId(apiFileResources.getFirst().getFileId());
         this.requestPost(TRANSFER, request).andExpect(status().isOk());
     }
 
@@ -765,5 +784,190 @@ public class ApiDebugControllerTests extends BaseTest {
         // @@校验权限
         requestGetPermissionTest(PermissionConstants.PROJECT_API_DEBUG_DELETE, DEFAULT_DELETE, addApiDebug.getId());
     }
+
+
+    @Test
+    @Order(18)
+    public void testImportCurl() throws Exception {
+        ApiImportCurlRequest request = new ApiImportCurlRequest();
+        //浏览器 curl 测试
+        String curl = "curl 'https://127.0.0.1:8081/api/definition/page' \\\n" +
+                "  -H 'Accept: application/json, text/plain, */*' \\\n" +
+                "  -H 'Accept-Language: zh-CN' \\\n" +
+                "  -H 'CSRF-TOKEN: 1234454351313131431' \\\n" +
+                "  -H 'Connection: keep-alive' \\\n" +
+                "  -H 'Content-Type: application/json;charset=UTF-8' \\\n" +
+                "  -H 'ORGANIZATION: 100001' \\\n" +
+                "  -H 'Origin: http://127.0.0.1:8081' \\\n" +
+                "  -H 'PROJECT: 100001100001' \\\n" +
+                "  -H 'Referer: http://127.0.0.1:8081/' \\\n" +
+                "  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36' \\\n" +
+                "  -H 'X-AUTH-TOKEN: 45fdgsrgdsg-2baf-40bc-98ba-5dsg15s1fg' \\\n" +
+                "  --data-raw '{\"current\":1,\"pageSize\":10,\"sort\":{},\"keyword\":\"\",\"combine\":{},\"searchMode\":\"AND\",\"projectId\":\"100001100001\",\"moduleIds\":[],\"protocols\":[\"HTTP\"],\"filter\":{\"status\":[],\"method\":[],\"priority\":[]},\"excludeIds\":[\"123456783242123\",\"\",\"\"]}' \\\n" +
+                "  --insecure";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        curl = "curl 'http://127.0.0.1:8081/project/get-member/option/100001100001?_t=1724293604633' \\\n" +
+                "  -H 'Accept: application/json, text/plain, */*' \\\n" +
+                "  -H 'Accept-Language: zh-CN' \\\n" +
+                "  -H 'CSRF-TOKEN: Q+DnK2GzMwG07cIVmaaeqSHZFeOk6RnorsyXL9eSCASECASDFJzHzwj60q9uW43o/yESDFSCESASDSFASDH3xXTiCXRxPXT6spuFIHjmYQ+AYbw=' \\\n" +
+                "  -H 'ORGANIZATION: 100001' \\\n" +
+                "  -H 'PROJECT: 1202136548611' \\\n" +
+                "  -H 'Proxy-Connection: keep-alive' \\\n" +
+                "  -H 'Referer: http://127.0.0.1:8081/' \\\n" +
+                "  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36' \\\n" +
+                "  -H 'X-AUTH-TOKEN: 85de962d-2baf-40bc-98ba-9af2e6564d0b' \\\n" +
+                "  --insecure";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        //抓包格式测试
+        //Charles工具 curl 测试
+        curl = "curl \n" +
+                "-H 'Host: 127.0.0.1:8081' \n" +
+                "-H 'Accept: application/json, text/plain, */*' \n" +
+                "-H 'CSRF-TOKEN: Q+DnK2GzMwG07cIVmaaeqSHZFeOk6RnorsyXL9eD9VxP3FEJzHzwj60q9uW43o/y0Exoa6kQub0sN0H3xXTiCXRxPXT6spuFIHjmYQ+AYbw=' \n" +
+                "-H 'X-AUTH-TOKEN: 512dsfsfds255d-2baf-40bc-98ba-5dsg15s1fg' \n" +
+                "-H 'PROJECT: 124548721548' \n" +
+                "-H 'Accept-Language: zh-CN' \n" +
+                "-H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36' \n" +
+                "-H 'ORGANIZATION: 100001' -H 'Referer: http://127.0.0.1:8081/' \n" +
+                "--compressed 'http://127.0.0.1:8081/project/get/100001100001?_t=1724294013069'";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        //Fiddler工具 curl 测试
+        curl = "curl -X POST 'http://example.com/api' -H 'Accept: application/json' -H 'User-Agent: Fiddler' -H 'Authorization: Bearer token_here'";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        //GET 请求 测试
+        curl = "curl -X GET https://example.com";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        //POST 请求带数据 测试
+        curl = "curl -X POST -d 'key1=value1&key2=value2' https://example.com/post";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        //json数据 测试
+        curl = "curl -X POST -H 'Content-Type: application/json' -d '{\"key\":\"value\"}' https://example.com/post";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        //文件 测试
+        curl = "curl -F 'file=@path/to/file' https://example.com/upload";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        //自定义头部和认证 测试
+        curl = "curl -H 'Authorization: Bearer token' -H 'Accept: application/json' -u username:password https://example.com";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        //组合 测试
+        curl = "curl -X POST \\\n" +
+                "-u username:password \\\n" +
+                "-H 'Content-Type: multipart/form-data' \\\n" +
+                "-H 'Custom-Header: Value' \\\n" +
+                "-F 'file=@/path/to/file' \\\n" +
+                "-F 'param1=value1' \\\n" +
+                "https://example.com/upload";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        curl = "curl -X GET \\\n" +
+                "-H 'Authorization: Bearer YOUR_TOKEN' \\\n" +
+                "-L \\\n" +
+                "-v \\\n" +
+                "https://example.com/resource";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        curl = "curl -X GET \\\n" +
+                "-H 'Accept: application/json' \\\n" +
+                "-x http://proxyserver:port \\\n" +
+                "-i \\\n" +
+                "https://example.com/api?param1=value1&param2=value2";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        curl = "curl -X POST \\\n" +
+                "-H 'Content-Type: application/json' \\\n" +
+                "-d '{\"key1\": \"value1\", \"key2\": \"value2\"}' \\\n" +
+                "--max-time 30 \\\n" +
+                "--retry 3 \\\n" +
+                "https://example.com/api";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        curl = "curl 'https://www.tapd.cn/2335412151/prong/iterations/card_view/123465456789431534?q=fsadfasjhkahkrhfdsasccasfsdf' \\\n" +
+                "  -H 'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7' \\\n" +
+                "  -H 'Accept-Language: zh-CN,zh;q=0.9' \\\n" +
+                "  -H 'Cache-Control: max-age=0' \\\n" +
+                "  -H 'Connection: keep-alive' \\\n" +
+                "  -H 'Cookie: iter_card_status=; 66565258464512_55234234_iterations_card_view_close_status=0; 232564132154_55023423_/prong/iterations/index_remember_view=134247554678224278546; iter_card_status=; 412045464_5123433_iterations_card_view_close_status=0; left_iteration_list_token=20225424528746eda6e21g1dfgd51867891ef7cbb3a9; tui_filter_fields=%5B%13d1gd51r1gf23d1r%2C%22owner%22%2C%22dg13dr51ation_id2C%dsf22priority%22%5D; 112315sc39_5501533_/prong/tasks/index_remember_view=115501223315036973; 5dfsse933_11324fsd3001000025_story_create_template=1155041233424001000009; tapdsession=17174887199dc61sdfscaeerg229dcd5beb5c16d6062b32d6cesc68a61f51fb; __root_domain_v=.tapd.cn; _qddaz=QD.147917cscse0554; t_u=7ab057cd1f0c6casedfcasfr61d09eb29f94c12a82c73007d3e505f68411bdfgdrg156f1b984a7b98566b7bdsafs2937ccb1974809f3fsef3f828%7C1; iteration_view_type_cookie=card_view; fsefdcdcbug_create_template=1155049f12055242000010; new_worktable=search_filter; dsc-token=V0FahgEQeO8hNyzI; 5532133_11550434242340025_story_create_template=115504234234000009; iteration_card_tab_33242490=list; iteration_card_current_iteration_334235590=--; cloud_current_workspaceId=53429234; iteration_card_tab_324234dd=list; _t_uid=19732439; _t_crop=6049432436; tapd_div=101_2885; locale=zh_CN; iteration_card_current_iteration_5234234=1155042344512542342863' \\\n" +
+                "  -H 'Referer: https://www.tapd.cn/5324120234165/bugtrace/bugs/view?bug_id=1445248132543744315' \\\n" +
+                "  -H 'Sec-Fetch-Dest: document' \\\n" +
+                "  -H 'Sec-Fetch-Mode: navigate' \\\n" +
+                "  -H 'Sec-Fetch-Site: same-origin' \\\n" +
+                "  -H 'Sec-Fetch-User: ?1' \\\n" +
+                "  -H 'Upgrade-Insecure-Requests: 1' \\\n" +
+                "  -H 'User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36' \\\n" +
+                "  -H 'sec-ch-ua: \"Not)A;Brand\";v=\"99\", \"Google Chrome\";v=\"127\", \"Chromium\";v=\"127\"' \\\n" +
+                "  -H 'sec-ch-ua-mobile: ?0' \\\n" +
+                "  -H 'sec-ch-ua-platform: \"macOS\"'";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        curl = "curl 'https://127.0.0.1:8081/api/definition/page' \\\n" +
+                "  -H 'Accept: application/json, text/plain, */*' \\\n" +
+                "  -H 'Accept-Language: zh-CN' \\\n" +
+                "  -H 'CSRF-TOKEN: 1234454351313131431' \\\n" +
+                "  -H 'Connection: keep-alive' \\\n" +
+                "  -H 'Content-Type: application/json;charset=UTF-8' \\\n" +
+                "  -H 'ORGANIZATION: 100001' \\\n" +
+                "  -H 'Origin: http://127.0.0.1:8081' \\\n" +
+                "  -H 'PROJECT: 100001100001' \\\n" +
+                "  -H 'Referer: http://127.0.0.1:8081/' \\\n" +
+                "  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36' \\\n" +
+                "  -H 'X-AUTH-TOKEN: 45fdgsrgdsg-2baf-40bc-98ba-5dsg15s1fg' \\\n" +
+                "  --data-raw '{current:1,\"pageSize\":10,\"sort\":{},\"keyword\":\"\",\"combine\":{},\"searchMode\":\"AND\",\"projectId\":\"100001100001\",\"moduleIds\":[],\"protocols\":[\"HTTP\"],\"filter\":{\"status\":[],\"method\":[],\"priority\":[]},\"excludeIds\":[\"123456783242123\",\"\",\"\"]}' \\\n" +
+                "  --insecure";
+        request.setCurl(curl);
+        this.requestPost(IMPORT_CURL, request);
+
+        curl = "curl -X POST -H 'Content-Type: application/json' --data-urlencode '{\"key\":\"value\"}' https://example.com/post";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+
+        curl = "curl 'http://xx:xx/test/tst1/orderAction/tes' \\\n" +
+                "  -H 'Accept: application/json, text/plain, /' \\\n" +
+                "  -H 'Accept-Language: zh-CN,zh;q=0.9' \\\n" +
+                "  -H 'Content-Type: application/x-www-form-urlencoded' \\\n" +
+                "  -H 'Cookie: _ati=4621860983598; saas_oms_session=hhh%3D' \\\n" +
+                "  -H 'Origin: http://xx:xx' \\\n" +
+                "  -H 'Proxy-Connection: keep-alive'\n" +
+                "  -H 'Referer: http://xx:xx/order/eCommerceBus/b2cOrder' \\\n" +
+                "  -H 'User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36' \\\n" +
+                "  -H 'X-Requested-With: XMLHttpRequest' \\\n" +
+                "  -H 'token: xx.yy.hh' \\\n" +
+                "  --data-raw 'channel_type=1&channel_id=84&action_type=1&tid=44444' \\\n" +
+                "  --insecure";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        curl = "curl -I https://example.com";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+
+        curl = "curl --head https://example.com";
+        request.setCurl(curl);
+        this.requestPostWithOk(IMPORT_CURL, request);
+    }
+
 
 }

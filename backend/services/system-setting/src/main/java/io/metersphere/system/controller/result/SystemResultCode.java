@@ -7,6 +7,10 @@ import io.metersphere.sdk.exception.IResultCode;
  */
 public enum SystemResultCode implements IResultCode {
 
+    USER_TOO_MANY(101511, "User too many"),
+    DEPT_USER_TOO_MANY(101512, "Department user too many"),
+    INVITE_EMAIL_EXIST(101513, "user_email_already_exists"),
+
     /**
      * 调用获取全局用户组接口，如果操作的是非全局的用户组，会返回该响应码
      */
@@ -28,7 +32,8 @@ public enum SystemResultCode implements IResultCode {
     PLUGIN_SCRIPT_FORMAT(101011, "plugin.script.format"),
     NO_PROJECT_USER_ROLE_PERMISSION(101012, "project_user_role_permission_error"),
     NO_GLOBAL_USER_ROLE_PERMISSION(101013, "no_global_user_role_permission_error"),
-    PLUGIN_PARSE_ERROR(101014, "plugin.parse.error");
+    PLUGIN_PARSE_ERROR(101014, "plugin.parse.error"),
+    USER_VIEW_EXIST(101015, "user_view_exist"),;
 
     private final int code;
     private final String message;

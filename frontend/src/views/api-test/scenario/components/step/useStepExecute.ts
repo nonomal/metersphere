@@ -3,16 +3,21 @@ import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
 import { localExecuteApiDebug } from '@/api/modules/api-test/common';
 import { debugScenario } from '@/api/modules/api-test/scenario';
 import { getSocket } from '@/api/modules/project-management/commonScript';
-import { t } from '@/hooks/useI18n';
+import { useI18n } from '@/hooks/useI18n';
 import useAppStore from '@/store/modules/app';
 import { findNodeByKey, getGenerateId, mapTree, traverseTree } from '@/utils';
 
 import type { RequestResult } from '@/models/apiTest/common';
-import type { ApiScenarioDebugRequest, Scenario, ScenarioStepItem } from '@/models/apiTest/scenario';
+import type {
+  ApiScenarioDebugRequest,
+  Scenario,
+  ScenarioStepDetails,
+  ScenarioStepItem,
+} from '@/models/apiTest/scenario';
 import { ScenarioExecuteStatus, ScenarioStepRefType, ScenarioStepType } from '@/enums/apiEnum';
 
 import type { RequestParam } from '../common/customApiDrawer.vue';
-import updateStepStatus, { getScenarioFileParams } from '../utils';
+import updateStepStatus, { getScenarioFileParams, getStepDetails } from '../utils';
 
 /**
  * 步骤执行逻辑
@@ -27,7 +32,7 @@ export default function useStepExecute({
 }: {
   scenario: Ref<Scenario>;
   steps: Ref<ScenarioStepItem[]>;
-  stepDetails: Ref<Record<string, any>>;
+  stepDetails: Ref<Record<string, ScenarioStepDetails>>;
   activeStep: Ref<ScenarioStepItem | undefined>;
   isPriorityLocalExec: Ref<boolean> | undefined;
   localExecuteUrl: Ref<string> | undefined;
@@ -39,34 +44,42 @@ export default function useStepExecute({
    * 开启websocket监听，接收执行结果
    */
   function debugSocket(step: ScenarioStepItem, _scenario: Scenario, reportId: string | number) {
-    websocketMap[reportId] = getSocket(
-      reportId || '',
-      scenario.value.executeType === 'localExec' ? '/ws/debug' : '',
-      scenario.value.executeType === 'localExec' ? localExecuteUrl?.value : ''
-    );
-    websocketMap[reportId].addEventListener('message', (event) => {
-      const data = JSON.parse(event.data);
-      if (data.msgType === 'EXEC_RESULT') {
-        if (step.reportId === data.reportId) {
-          // 判断当前查看的tab是否是当前返回的报告的tab，是的话直接赋值
-          data.taskResult.requestResults.forEach((result: RequestResult) => {
-            if (_scenario.stepResponses[result.stepId] === undefined) {
-              _scenario.stepResponses[result.stepId] = [];
-            }
-            _scenario.stepResponses[result.stepId].push({
-              ...result,
-              console: data.taskResult.console,
+    return new Promise((resolve) => {
+      websocketMap[reportId] = getSocket(
+        reportId || '',
+        scenario.value.executeType === 'localExec' ? '/ws/debug' : '',
+        scenario.value.executeType === 'localExec' ? localExecuteUrl?.value : ''
+      );
+      websocketMap[reportId].addEventListener('message', (event) => {
+        const data = JSON.parse(event.data);
+        if (data.msgType === 'EXEC_RESULT') {
+          if (step.reportId === data.reportId) {
+            // 判断当前查看的tab是否是当前返回的报告的tab，是的话直接赋值
+            data.taskResult.requestResults.forEach((result: RequestResult) => {
+              if (_scenario.stepResponses[result.stepId] === undefined) {
+                _scenario.stepResponses[result.stepId] = [];
+              }
+              _scenario.stepResponses[result.stepId].push({
+                ...result,
+                console: data.taskResult.console,
+              });
             });
-          });
+          }
+        } else if (data.msgType === 'EXEC_END') {
+          // 执行结束，关闭websocket
+          websocketMap[reportId]?.close();
+          if (step.reportId === data.reportId) {
+            step.isExecuting = false;
+            if (_scenario.stepResponses[step.uniqueId] === undefined) {
+              _scenario.stepResponses[step.uniqueId] = [];
+            }
+            updateStepStatus([step], _scenario.stepResponses, step.uniqueId);
+          }
         }
-      } else if (data.msgType === 'EXEC_END') {
-        // 执行结束，关闭websocket
-        websocketMap[reportId]?.close();
-        if (step.reportId === data.reportId) {
-          step.isExecuting = false;
-          updateStepStatus([step], _scenario.stepResponses, step.uniqueId);
-        }
-      }
+      });
+      websocketMap[reportId].addEventListener('open', () => {
+        resolve(true);
+      });
     });
   }
 
@@ -77,7 +90,7 @@ export default function useStepExecute({
     try {
       currentStep.isExecuting = true;
       currentStep.executeStatus = ScenarioExecuteStatus.EXECUTING;
-      debugSocket(currentStep, scenario.value, executeParams.reportId); // 开启websocket
+      await debugSocket(currentStep, scenario.value, executeParams.reportId); // 开启websocket
       const res = await debugScenario({
         id: scenario.value.id || '',
         grouped: false,
@@ -89,6 +102,7 @@ export default function useStepExecute({
           ...getScenarioFileParams(scenario.value),
         },
         ...executeParams,
+        stepDetails: getStepDetails(executeParams.steps, executeParams.stepDetails),
         steps: mapTree(executeParams.steps, (node) => {
           return {
             ...node,
@@ -156,6 +170,7 @@ export default function useStepExecute({
    * @param executeType 执行类型
    */
   function handleApiExecute(request: RequestParam, executeType?: 'localExec' | 'serverExec') {
+    const { t } = useI18n();
     const realStep = findNodeByKey<ScenarioStepItem>(steps.value, request.uniqueId || request.stepId, 'uniqueId');
     if (realStep) {
       delete scenario.value.stepResponses[realStep.uniqueId]; // 先移除上一次的执行结果

@@ -1,11 +1,13 @@
 package io.metersphere.system.schedule;
 
+import io.metersphere.sdk.constants.ApplicationNumScope;
 import io.metersphere.sdk.exception.MSException;
 import io.metersphere.system.domain.Schedule;
 import io.metersphere.system.domain.ScheduleExample;
 import io.metersphere.system.dto.request.ScheduleConfig;
 import io.metersphere.system.mapper.ScheduleMapper;
 import io.metersphere.system.uid.IDGenerator;
+import io.metersphere.system.uid.NumGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.BooleanUtils;
@@ -32,7 +34,12 @@ public class ScheduleService {
         schedule.setId(IDGenerator.nextStr());
         schedule.setCreateTime(System.currentTimeMillis());
         schedule.setUpdateTime(System.currentTimeMillis());
+        schedule.setNum(getNextNum(schedule.getProjectId()));
         scheduleMapper.insert(schedule);
+    }
+
+    public long getNextNum(String projectId) {
+        return NumGenerator.nextNum(projectId, ApplicationNumScope.TASK);
     }
 
 
@@ -113,6 +120,28 @@ public class ScheduleService {
         }
     }
 
+    public List<String> updateIfExist(String resourceId, boolean enable, JobKey jobKey, TriggerKey triggerKey, Class clazz, String operator) {
+        ScheduleExample example = new ScheduleExample();
+        example.createCriteria().andResourceIdEqualTo(resourceId).andJobEqualTo(clazz.getName());
+        List<Schedule> scheduleList = scheduleMapper.selectByExample(example);
+        if (CollectionUtils.isNotEmpty(scheduleList)) {
+            Schedule schedule = scheduleList.getFirst();
+            if (!schedule.getEnable().equals(enable)) {
+                schedule.setEnable(enable);
+                schedule.setUpdateTime(System.currentTimeMillis());
+                scheduleMapper.updateByExampleSelective(schedule, example);
+                apiScheduleNoticeService.sendScheduleNotice(schedule, operator);
+                if (enable) {
+                    scheduleManager.addCronJob(jobKey, triggerKey, clazz, schedule.getValue(),
+                            scheduleManager.getDefaultJobDataMap(schedule, schedule.getValue(), schedule.getCreateUser()));
+                } else {
+                    scheduleManager.removeJob(jobKey, triggerKey);
+                }
+            }
+        }
+        return scheduleList.stream().map(Schedule::getResourceId).toList();
+    }
+
     public String scheduleConfig(ScheduleConfig scheduleConfig, JobKey jobKey, TriggerKey triggerKey, Class clazz, String operator) {
         Schedule schedule;
         ScheduleExample example = new ScheduleExample();
@@ -132,6 +161,7 @@ public class ScheduleService {
             schedule.setCreateUser(operator);
             schedule.setCreateTime(System.currentTimeMillis());
             schedule.setUpdateTime(System.currentTimeMillis());
+            schedule.setNum(getNextNum(scheduleConfig.getProjectId()));
             scheduleMapper.insert(schedule);
         }
         //通知

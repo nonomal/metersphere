@@ -8,8 +8,8 @@
  * @author: techird
  * @copyright: Baidu FEX, 2014
  */
+import type { MinderJsonNode, MinderJsonNodeData } from '../../props';
 import Debug from '../tool/debug';
-import useLocaleNotVue from '../tool/useLocaleNotVue';
 import { isDisableNode, markChangeNode } from '../tool/utils';
 
 if (!('innerText' in document.createElement('a')) && 'getSelection' in window) {
@@ -45,7 +45,6 @@ if (!('innerText' in document.createElement('a')) && 'getSelection' in window) {
   });
 }
 
-const tran = useLocaleNotVue;
 const debug = new Debug('input') as any;
 
 function InputRuntime(this: any) {
@@ -276,7 +275,7 @@ function InputRuntime(this: any) {
       }
     }
 
-    text = text.replace(/^\n*|\n*$/g, '');
+    text = text.replace(/^\n*|\n*$/g, '').replace(/<\/?p\b[^>]*>/gi, ''); // 去除富文本内p标签
     text = text.replace(new RegExp(`(\n|\r|\n\r)(\u0020|${String.fromCharCode(160)}){4}`, 'g'), '$1\t');
     this.minder.getSelectedNode().setText(text);
     if (isBold) {
@@ -301,10 +300,10 @@ function InputRuntime(this: any) {
    * @Editor: Naixor
    * @Date: 2015.9.16
    */
-  const commitInputNode = (node: any, text: string) => {
+  const commitInputNode = (node: MinderJsonNode, text: string) => {
     try {
-      this.minder.decodeData('text', text).then((json: any) => {
-        function importText(nodeT: any, jsonT: any, minder: any) {
+      this.minder.decodeData('text', text).then((json: MinderJsonNodeData) => {
+        function importText(nodeT: MinderJsonNode, jsonT: MinderJsonNodeData, minder: any) {
           const { data } = jsonT;
           nodeT.setText(data.text || '');
           const childrenTreeData = jsonT.children || [];
@@ -316,8 +315,13 @@ function InputRuntime(this: any) {
         }
         importText(node, json, this.minder);
         this.minder.fire('contentchange');
-        this.minder.getRoot().renderTree();
-        this.minder.layout(300);
+        if (node.parent) {
+          node.parent.renderTree();
+          node.parent.layout();
+        } else {
+          this.minder.getRoot().renderTree();
+          this.minder.layout(300);
+        }
       });
     } catch (e: any) {
       this.minder.fire('contentchange');
@@ -400,27 +404,6 @@ function InputRuntime(this: any) {
   };
 
   setupFsm();
-
-  // edit entrance in hotbox
-  const setupHotbox = () => {
-    this.hotbox.state('main').button({
-      position: 'center',
-      label: tran('minder.commons.edit'),
-      key: 'F2',
-      enable: () => {
-        if (isDisableNode(this.minder)) {
-          return false;
-        }
-        return this.minder.queryCommandState('text') !== -1;
-      },
-      action: this.editText,
-      beforeShow() {
-        this.$button.children[0].innerHTML = tran('minder.commons.edit');
-      },
-    });
-  };
-
-  setupHotbox();
 }
 
 export default InputRuntime;

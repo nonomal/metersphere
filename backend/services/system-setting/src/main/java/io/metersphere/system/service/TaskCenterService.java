@@ -3,9 +3,14 @@ package io.metersphere.system.service;
 import com.github.pagehelper.Page;
 import com.github.pagehelper.page.PageMethod;
 import io.metersphere.project.domain.Project;
+import io.metersphere.project.domain.ProjectExample;
 import io.metersphere.project.mapper.ProjectMapper;
 import io.metersphere.sdk.constants.HttpMethodConstants;
+import io.metersphere.sdk.constants.PermissionConstants;
+import io.metersphere.sdk.constants.TaskCenterResourceType;
 import io.metersphere.sdk.exception.MSException;
+import io.metersphere.sdk.util.DateUtils;
+import io.metersphere.sdk.util.LogUtils;
 import io.metersphere.sdk.util.SubListUtils;
 import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.domain.Organization;
@@ -24,10 +29,10 @@ import io.metersphere.system.log.service.OperationLogService;
 import io.metersphere.system.mapper.*;
 import io.metersphere.system.notice.constants.NoticeConstants;
 import io.metersphere.system.schedule.ApiScheduleNoticeService;
-import io.metersphere.system.schedule.BaseScheduleJob;
 import io.metersphere.system.schedule.ScheduleService;
 import io.metersphere.system.utils.PageUtils;
 import io.metersphere.system.utils.Pager;
+import io.metersphere.system.utils.SessionUtils;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -41,6 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -87,41 +93,43 @@ public class TaskCenterService {
     ApiScheduleNoticeService apiScheduleNoticeService;
     @Resource
     UserMapper userMapper;
+    @Resource
+    ExtRealMapper extRealMapper;
 
 
     private static final String CREATE_TIME_SORT = "create_time desc";
+    private static final String ORG = "org";
+    private static final String SYSTEM = "system";
 
 
     public Pager<List<TaskCenterScheduleDTO>> getProjectSchedulePage(TaskCenterSchedulePageRequest request, String projectId) {
         checkProjectExist(projectId);
         List<OptionDTO> projectList = getProjectOption(projectId);
-        return createTaskCenterSchedulePager(request, projectList);
+        return createTaskCenterSchedulePager(request, projectList, false);
     }
 
     public Pager<List<TaskCenterScheduleDTO>> getOrgSchedulePage(TaskCenterSchedulePageRequest request, String organizationId) {
         checkOrganizationExist(organizationId);
         List<OptionDTO> projectList = getOrgProjectList(organizationId);
-        return createTaskCenterSchedulePager(request, projectList);
+        return createTaskCenterSchedulePager(request, projectList, false);
     }
 
     public Pager<List<TaskCenterScheduleDTO>> getSystemSchedulePage(TaskCenterSchedulePageRequest request) {
         List<OptionDTO> projectList = getSystemProjectList();
-        return createTaskCenterSchedulePager(request, projectList);
+        return createTaskCenterSchedulePager(request, projectList, true);
     }
 
-    private Pager<List<TaskCenterScheduleDTO>> createTaskCenterSchedulePager(TaskCenterSchedulePageRequest request, List<OptionDTO> projectList) {
+    private Pager<List<TaskCenterScheduleDTO>> createTaskCenterSchedulePager(TaskCenterSchedulePageRequest request, List<OptionDTO> projectList, boolean isSystem) {
         Page<Object> page = PageMethod.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString()) ? request.getSortString() : CREATE_TIME_SORT);
-        return PageUtils.setPageInfo(page, getSchedulePage(request, projectList));
+        return PageUtils.setPageInfo(page, getSchedulePage(request, projectList, isSystem));
     }
 
-    public List<TaskCenterScheduleDTO> getSchedulePage(TaskCenterSchedulePageRequest request, List<OptionDTO> projectList) {
+    public List<TaskCenterScheduleDTO> getSchedulePage(TaskCenterSchedulePageRequest request, List<OptionDTO> projectList, boolean isSystem) {
         List<TaskCenterScheduleDTO> list = new ArrayList<>();
-        if (request != null && !projectList.isEmpty()) {
-            List<String> projectIds = projectList.stream().map(OptionDTO::getId).toList();
-            list = extScheduleMapper.taskCenterSchedulelist(request, projectIds);
-            processTaskCenterSchedule(list, projectList, projectIds);
-        }
+        List<String> projectIds = projectList.stream().map(OptionDTO::getId).toList();
+        list = extScheduleMapper.taskCenterSchedulelist(request, isSystem ? new ArrayList<>() : projectIds);
+        processTaskCenterSchedule(list, projectList, projectIds);
         return list;
     }
 
@@ -189,7 +197,7 @@ public class TaskCenterService {
         return organization;
     }
 
-    public void delete(String id,String moduleType, String userId, String path, String module) {
+    public void delete(String id, String moduleType, String userId, String path, String module) {
         Schedule schedule = checkScheduleExit(id);
         String logModule = getLogModule(moduleType, module);
         if (StringUtils.equals(schedule.getResourceType(), ScheduleTagType.API_IMPORT.name())) {
@@ -201,13 +209,14 @@ public class TaskCenterService {
 
     private static String getLogModule(String moduleType, String module) {
         return switch (ScheduleTagType.valueOf(moduleType)) {
-            case ScheduleTagType.API_IMPORT -> StringUtils.join(module, "_TIME_API_IMPORT");
-            case ScheduleTagType.API_SCENARIO -> StringUtils.join(module, "_TIME_API_SCENARIO");
+            case API_IMPORT -> StringUtils.join(module, "_TIME_API_IMPORT");
+            case API_SCENARIO -> StringUtils.join(module, "_TIME_API_SCENARIO");
+            case TEST_PLAN -> StringUtils.join(module, "_TIME_TEST_PLAN");
             default -> throw new MSException(Translator.get("module_type_error"));
         };
     }
 
-    private Schedule checkScheduleExit(String id) {
+    public Schedule checkScheduleExit(String id) {
         Schedule schedule = scheduleMapper.selectByPrimaryKey(id);
         if (schedule == null) {
             throw new MSException(Translator.get("schedule_not_exist"));
@@ -215,18 +224,23 @@ public class TaskCenterService {
         return schedule;
     }
 
-    public void enable(String id,String moduleType, String userId, String path, String module) {
+    public void enable(String id, String moduleType, String userId, String path, String module) {
         Schedule schedule = checkScheduleExit(id);
         schedule.setEnable(!schedule.getEnable());
         scheduleService.editSchedule(schedule);
-        scheduleService.addOrUpdateCronJob(schedule, new JobKey(schedule.getKey(), schedule.getJob()),
-                new TriggerKey(schedule.getKey(), schedule.getJob()), BaseScheduleJob.class);
+        try {
+            scheduleService.addOrUpdateCronJob(schedule, new JobKey(schedule.getKey(), schedule.getJob()),
+                    new TriggerKey(schedule.getKey(), schedule.getJob()), Class.forName(schedule.getJob()));
+        } catch (ClassNotFoundException e) {
+            LogUtils.error(e);
+            throw new RuntimeException(e);
+        }
         apiScheduleNoticeService.sendScheduleNotice(schedule, userId);
         String logModule = getLogModule(moduleType, module);
         saveLog(List.of(schedule), userId, path, HttpMethodConstants.GET.name(), logModule, OperationLogType.UPDATE.name());
     }
 
-    public void update(String id,String moduleType, String cron, String userId, String path, String module) {
+    public void update(String id, String moduleType, String cron, String userId, String path, String module) {
         Schedule schedule = checkScheduleExit(id);
         schedule.setValue(cron);
         scheduleService.editSchedule(schedule);
@@ -264,19 +278,25 @@ public class TaskCenterService {
         operationLogService.batchAdd(logs);
     }
 
-    public void batchEnable(TaskCenterScheduleBatchRequest request, String userId, String path, String module, boolean enable, String projectId) {
-        List<OptionDTO> projectList = getSystemProjectList();
-        batchOperation(request, userId, path, module, projectList, enable, projectId);
+    public void batchEnable(TaskCenterScheduleBatchRequest request, String userId, String path, String module,
+                            boolean enable, String projectId, Consumer<Map<String, List<String>>> checkPermissionFunc) {
+        batchOperation(request, userId, path, module, new ArrayList<>(), enable, projectId, checkPermissionFunc);
     }
 
-    public void batchEnableOrg(TaskCenterScheduleBatchRequest request, String userId, String orgId, String path, String module, boolean enable, String projectId) {
+    public void systemBatchEnable(TaskCenterScheduleBatchRequest request, String userId, String path, String module,
+                                  boolean enable, String projectId) {
+        batchEnable(request, userId, path, module, enable, projectId, getCheckPermissionFunc(SYSTEM, request.getScheduleTagType()));
+    }
+
+    public void orgBatchEnable(TaskCenterScheduleBatchRequest request, String userId, String orgId, String path, String module,
+                               boolean enable, String projectId) {
         List<OptionDTO> projectList = getOrgProjectList(orgId);
-        batchOperation(request, userId, path, module, projectList, enable, projectId);
-
+        batchOperation(request, userId, path, module, projectList, enable, projectId, getCheckPermissionFunc(ORG, request.getScheduleTagType()));
     }
 
-    private void batchOperation(TaskCenterScheduleBatchRequest request, String userId, String path, String module, List<OptionDTO> projectList, boolean enable, String projectId) {
-        List<Schedule> scheduleList = new ArrayList<>();
+    private void batchOperation(TaskCenterScheduleBatchRequest request, String userId, String path, String module,
+                                List<OptionDTO> projectList, boolean enable, String projectId, Consumer<Map<String, List<String>>> checkPermissionFunc) {
+        List<Schedule> scheduleList;
         if (request.isSelectAll()) {
             List<String> projectIds = projectList.stream().map(OptionDTO::getId).toList();
             scheduleList = extScheduleMapper.getSchedule(request, projectIds);
@@ -291,14 +311,22 @@ public class TaskCenterService {
             scheduleList.removeAll(request.getExcludeIds());
         }
 
+        // 校验权限
+        checkBatchPermission(checkPermissionFunc, scheduleList);
+
         SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH);
         ScheduleMapper batchMapper = sqlSession.getMapper(ScheduleMapper.class);
         SubListUtils.dealForSubList(scheduleList, 100, list -> {
             list.forEach(s -> {
                 s.setEnable(enable);
                 batchMapper.updateByPrimaryKeySelective(s);
-                scheduleService.addOrUpdateCronJob(s, new JobKey(s.getKey(), s.getJob()),
-                        new TriggerKey(s.getKey(), s.getJob()), BaseScheduleJob.class);
+                try {
+                    scheduleService.addOrUpdateCronJob(s, new JobKey(s.getKey(), s.getJob()),
+                            new TriggerKey(s.getKey(), s.getJob()), Class.forName(s.getJob()));
+                } catch (ClassNotFoundException e) {
+                    LogUtils.error(e);
+                    throw new RuntimeException(e);
+                }
             });
             sqlSession.flushStatements();
         });
@@ -308,8 +336,134 @@ public class TaskCenterService {
         saveLog(scheduleList, userId, path, HttpMethodConstants.POST.name(), logModule, OperationLogType.UPDATE.name());
     }
 
-    public void batchEnableProject(TaskCenterScheduleBatchRequest request, String userId, String projectId, String path, String module, boolean enable) {
+    /**
+     * 校验权限
+     *
+     * @param checkPermissionFunc
+     * @param schedules
+     */
+    public void checkBatchPermission(Consumer<Map<String, List<String>>> checkPermissionFunc, List<Schedule> schedules) {
+        if (checkPermissionFunc != null && CollectionUtils.isNotEmpty(schedules)) {
+            List<String> projectIds = schedules.stream().map(Schedule::getProjectId).distinct().toList();
+            ProjectExample example = new ProjectExample();
+            example.createCriteria().andIdIn(projectIds);
+            Map<String, String> projectOrgMap = projectMapper.selectByExample(example)
+                    .stream()
+                    .collect(Collectors.toMap(Project::getId, Project::getOrganizationId));
+            Map<String, List<String>> reportOrgProjectMap = new HashMap<>();
+            schedules.forEach(schedule -> {
+                // 获取组织和项目信息，校验对应权限
+                List<String> reportIds = reportOrgProjectMap.getOrDefault(projectOrgMap.get(schedule.getProjectId()), new ArrayList<>());
+                reportIds.add(schedule.getProjectId());
+                reportOrgProjectMap.put(projectOrgMap.get(schedule.getProjectId()), reportIds);
+            });
+            // 校验权限
+            checkPermissionFunc.accept(reportOrgProjectMap);
+        }
+    }
+
+    public void batchEnableProject(TaskCenterScheduleBatchRequest request, String userId, String projectId, String path,
+                                   String module, boolean enable) {
         List<OptionDTO> projectList = getProjectOption(projectId);
-        batchOperation(request, userId, path, module, projectList, enable, projectId);
+        batchOperation(request, userId, path, module, projectList, enable, projectId, null);
+    }
+
+    public void hasPermission(String type, String moduleType, String orgId, String projectId) {
+        Map<String, List<String>> orgPermission = Map.of(
+                ScheduleTagType.API_IMPORT.name(), List.of(PermissionConstants.ORGANIZATION_TASK_CENTER_READ_STOP, PermissionConstants.PROJECT_API_DEFINITION_IMPORT),
+                TaskCenterResourceType.API_SCENARIO.name(), List.of(PermissionConstants.ORGANIZATION_TASK_CENTER_READ_STOP, PermissionConstants.PROJECT_API_SCENARIO_EXECUTE),
+                TaskCenterResourceType.TEST_PLAN.name(), List.of(PermissionConstants.ORGANIZATION_TASK_CENTER_READ_STOP, PermissionConstants.TEST_PLAN_READ_EXECUTE)
+        );
+
+        Map<String, List<String>> projectPermission = Map.of(
+                ScheduleTagType.API_IMPORT.name(), List.of(PermissionConstants.PROJECT_API_DEFINITION_IMPORT),
+                TaskCenterResourceType.API_SCENARIO.name(), List.of(PermissionConstants.PROJECT_API_SCENARIO_EXECUTE),
+                TaskCenterResourceType.TEST_PLAN.name(), List.of(PermissionConstants.TEST_PLAN_READ_EXECUTE)
+        );
+
+        Map<String, List<String>> systemPermission = Map.of(
+                ScheduleTagType.API_IMPORT.name(), List.of(PermissionConstants.SYSTEM_TASK_CENTER_READ_STOP, PermissionConstants.PROJECT_API_DEFINITION_IMPORT),
+                TaskCenterResourceType.API_SCENARIO.name(), List.of(PermissionConstants.SYSTEM_TASK_CENTER_READ_STOP, PermissionConstants.PROJECT_API_SCENARIO_EXECUTE),
+                TaskCenterResourceType.TEST_PLAN.name(), List.of(PermissionConstants.SYSTEM_TASK_CENTER_READ_STOP, PermissionConstants.TEST_PLAN_READ_EXECUTE)
+        );
+
+        boolean hasPermission = switch (type) {
+            case "org" ->
+                    orgPermission.get(moduleType).stream().anyMatch(item -> SessionUtils.hasPermission(orgId, projectId, item));
+            case "project" ->
+                    projectPermission.get(moduleType).stream().anyMatch(item -> SessionUtils.hasPermission(orgId, projectId, item));
+            case "system" ->
+                    systemPermission.get(moduleType).stream().anyMatch(item -> SessionUtils.hasPermission(orgId, projectId, item));
+            default -> false;
+        };
+
+        if (!hasPermission) {
+            throw new MSException(Translator.get("no_permission_to_resource"));
+        }
+    }
+
+    public int getSystemScheduleTotal() {
+        return extScheduleMapper.countByProjectIds(new ArrayList<>());
+    }
+
+    public int getOrgScheduleTotal(String currentOrganizationId) {
+        checkOrganizationExist(currentOrganizationId);
+        List<OptionDTO> projectList = getOrgProjectList(currentOrganizationId);
+        //获取项目id
+        List<String> projectIds = projectList.stream().map(OptionDTO::getId).toList();
+        return extScheduleMapper.countByProjectIds(projectIds);
+    }
+
+    public int getProjectScheduleTotal(String currentProjectId) {
+        checkProjectExist(currentProjectId);
+        return extScheduleMapper.countByProjectIds(List.of(currentProjectId));
+    }
+
+    public int getSystemRealTotal() {
+        int apiTestCaseTotal = extRealMapper.caseReportCountByProjectIds(new ArrayList<>(), DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        int apiScenarioTotal = extRealMapper.scenarioReportCountByProjectIds(new ArrayList<>(), DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        int testPlanTotal = extRealMapper.testPlanReportCountByProjectIds(new ArrayList<>(), DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        return apiTestCaseTotal + apiScenarioTotal + testPlanTotal;
+    }
+
+    public int getOrgRealTotal(String currentOrganizationId) {
+        checkOrganizationExist(currentOrganizationId);
+        List<OptionDTO> projectList = getOrgProjectList(currentOrganizationId);
+        //获取项目id
+        List<String> projectIds = projectList.stream().map(OptionDTO::getId).toList();
+        int apiTestCaseTotal = extRealMapper.caseReportCountByProjectIds(projectIds, DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        int apiScenarioTotal = extRealMapper.scenarioReportCountByProjectIds(projectIds, DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        int testPlanTotal = extRealMapper.testPlanReportCountByProjectIds(projectIds, DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        return apiTestCaseTotal + apiScenarioTotal + testPlanTotal;
+    }
+
+    public int getProjectRealTotal(String currentProjectId) {
+        checkProjectExist(currentProjectId);
+        int apiTestCaseTotal = extRealMapper.caseReportCountByProjectIds(List.of(currentProjectId), DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        int apiScenarioTotal = extRealMapper.scenarioReportCountByProjectIds(List.of(currentProjectId), DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        int testPlanTotal = extRealMapper.testPlanReportCountByProjectIds(List.of(currentProjectId), DateUtils.getDailyStartTime(), DateUtils.getDailyEndTime());
+        return apiTestCaseTotal + apiScenarioTotal + testPlanTotal;
+    }
+
+    private Consumer<Map<String, List<String>>> getCheckPermissionFunc(String type, String moduleType) {
+        return (orgProjectMap) ->
+                orgProjectMap.keySet().forEach(orgId ->
+                        orgProjectMap.get(orgId).forEach(projectId ->
+                                hasPermission(type, moduleType, orgId, projectId)
+                        )
+                );
+    }
+
+    public void checkSystemPermission(String moduleType, String id) {
+        Schedule schedule = checkScheduleExit(id);
+        Project project = projectMapper.selectByPrimaryKey(schedule.getProjectId());
+        hasPermission(SYSTEM, moduleType,
+                project.getOrganizationId(), schedule.getProjectId());
+    }
+
+    public void checkOrgPermission(String moduleType, String id) {
+        Schedule schedule = checkScheduleExit(id);
+        hasPermission(ORG, moduleType,
+                SessionUtils.getCurrentOrganizationId(), schedule.getProjectId());
     }
 }

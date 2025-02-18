@@ -16,20 +16,14 @@ import io.metersphere.sdk.util.BeanUtils;
 import io.metersphere.sdk.util.CommonBeanFactory;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.Translator;
-import io.metersphere.system.domain.Plugin;
-import io.metersphere.system.domain.ServiceIntegration;
-import io.metersphere.system.domain.TestResourcePoolExample;
-import io.metersphere.system.domain.User;
+import io.metersphere.system.domain.*;
 import io.metersphere.system.dto.sdk.OptionDTO;
 import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.log.dto.LogDTO;
 import io.metersphere.system.mapper.PluginMapper;
 import io.metersphere.system.mapper.TestResourcePoolMapper;
-import io.metersphere.system.service.BaseBugScheduleService;
-import io.metersphere.system.service.PlatformPluginService;
-import io.metersphere.system.service.PluginLoadService;
-import io.metersphere.system.service.ServiceIntegrationService;
+import io.metersphere.system.service.*;
 import io.metersphere.system.utils.ServiceUtils;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
@@ -53,9 +47,6 @@ public class ProjectApplicationService {
     private ExtProjectUserRoleMapper extProjectUserRoleMapper;
 
     @Resource
-    private ProjectTestResourcePoolMapper projectTestResourcePoolMapper;
-
-    @Resource
     private PluginMapper pluginMapper;
 
     @Resource
@@ -76,6 +67,8 @@ public class ProjectApplicationService {
     private ProjectMapper projectMapper;
     @Resource
     private TestResourcePoolMapper testResourcePoolMapper;
+    @Resource
+    private CommonProjectPoolService commonProjectPoolService;
 
     /**
      * 更新配置信息
@@ -84,7 +77,8 @@ public class ProjectApplicationService {
      * @return
      */
     public void update(ProjectApplication application, String currentUser) {
-        this.doBeforeUpdate(application, currentUser);
+        //更新应用配置状态 改变项目是否允许对接三方平台，不影响定时任务状态 只能任务中心开启/关闭 暂时注释下面一行
+        //this.doBeforeUpdate(application, currentUser);
         //配置信息入库
         this.createOrUpdateConfig(application);
     }
@@ -109,6 +103,12 @@ public class ProjectApplicationService {
                 application.getType()) && baseBugScheduleService != null) {
             // 缺陷同步配置开启或关闭
             baseBugScheduleService.enableOrNotBugSyncSchedule(application.getProjectId(), currentUser, Boolean.valueOf(application.getTypeValue()));
+        }
+        BaseDemandScheduleService baseDemandScheduleService = CommonBeanFactory.getBean(BaseDemandScheduleService.class);
+        if (StringUtils.equals(ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED.name() + "_" + ProjectApplicationType.CASE_RELATED_CONFIG.CASE_ENABLE.name(),
+                application.getType()) && baseDemandScheduleService != null && !Boolean.parseBoolean(application.getTypeValue())) {
+            // 需求同步配置关闭
+            baseDemandScheduleService.enableOrNotDemandSyncSchedule(application.getProjectId(), currentUser, Boolean.valueOf(application.getTypeValue()));
         }
     }
 
@@ -143,27 +143,44 @@ public class ProjectApplicationService {
             poolType = ProjectApplicationType.API.API_RESOURCE_POOL_ID.name();
             moduleType = "api_test";
         }
+        Project project = projectMapper.selectByPrimaryKey(projectId);
+        List<TestResourcePool> testResourcePools = new ArrayList<>();
+        if (project.getAllResourcePool()) {
+            testResourcePools= commonProjectPoolService.getProjectAllPoolsByEffect(project);
+        }
         if (StringUtils.isNotBlank(poolType) && StringUtils.isNotBlank(moduleType)) {
             if (configMap.containsKey(poolType)) {
                 //如果是适用于所有的组织
                 int count = 0;
-                TestResourcePoolExample example = new TestResourcePoolExample();
-                example.createCriteria().andIdEqualTo(configMap.get(poolType).toString()).andAllOrgEqualTo(true);
-                if (testResourcePoolMapper.countByExample(example) > 0) {
-                    count = extProjectMapper.resourcePoolIsExist(configMap.get(poolType).toString(), projectId);
-                } else {
-                    //指定组织  则需要关联组织-资源池的关系表  看看是否再全部存在
-                    count = extProjectMapper.resourcePoolIsExistByOrg(configMap.get(poolType).toString(), projectId);
+                if (project.getAllResourcePool()) {
+                    count = testResourcePools.size();
+                }else {
+                    TestResourcePoolExample example = new TestResourcePoolExample();
+                    example.createCriteria().andIdEqualTo(configMap.get(poolType).toString()).andAllOrgEqualTo(true);
+                    if (testResourcePoolMapper.countByExample(example) > 0) {
+                        count = extProjectMapper.resourcePoolIsExist(configMap.get(poolType).toString(), projectId);
+                    } else {
+                        //指定组织  则需要关联组织-资源池的关系表  看看是否再全部存在
+                        count = extProjectMapper.resourcePoolIsExistByOrg(configMap.get(poolType).toString(), projectId);
+                    }
                 }
                 if (count == 0) {
                     configMap.remove(poolType);
                 }
             }
             if (!configMap.containsKey(poolType)) {
-                List<ProjectTestResourcePool> projectTestResourcePools = extProjectMapper.getResourcePool(projectId);
-                if (CollectionUtils.isNotEmpty(projectTestResourcePools)) {
-                    projectTestResourcePools.sort(Comparator.comparing(ProjectTestResourcePool::getTestResourcePoolId));
-                    configMap.put(poolType, projectTestResourcePools.getFirst().getTestResourcePoolId());
+                if (project.getAllResourcePool()){
+                    if (CollectionUtils.isNotEmpty(testResourcePools)) {
+                        testResourcePools.sort(Comparator.comparing(TestResourcePool::getId));
+                        configMap.put(poolType, testResourcePools.getFirst().getId());
+                    }
+
+                } else {
+                    List<ProjectTestResourcePool> projectTestResourcePools = extProjectMapper.getResourcePool(projectId);
+                    if (CollectionUtils.isNotEmpty(projectTestResourcePools)) {
+                        projectTestResourcePools.sort(Comparator.comparing(ProjectTestResourcePool::getTestResourcePoolId));
+                        configMap.put(poolType, projectTestResourcePools.getFirst().getTestResourcePoolId());
+                    }
                 }
             }
         }
@@ -198,7 +215,7 @@ public class ProjectApplicationService {
                 .filter(serviceIntegration -> {
                     return serviceIntegration.getEnable()    // 服务集成开启
                             && orgPluginIds.contains(serviceIntegration.getPluginId());  // 该服务集成对应的插件有权限
-                }).collect(Collectors.toList());
+                }).toList();
         List<OptionDTO> options = new ArrayList<>();
         plusins.forEach(serviceIntegration -> {
             PluginWrapper pluginWrapper = pluginLoadService.getPluginWrapper(serviceIntegration.getPluginId());
@@ -317,6 +334,16 @@ public class ProjectApplicationService {
         return delLog(application, OperationLogModule.PROJECT_MANAGEMENT_PERMISSION_MENU_MANAGEMENT, "接口测试配置");
     }
 
+    /**
+     * 任务中心 日志
+     *
+     * @param application 配置项
+     * @return 日志
+     */
+    public LogDTO updateTaskLog(ProjectApplication application) {
+        return delLog(application, OperationLogModule.PROJECT_MANAGEMENT_PERMISSION_MENU_MANAGEMENT, "任务中心配置");
+    }
+
 
     /**
      * 用例管理 日志
@@ -415,6 +442,8 @@ public class ProjectApplicationService {
         String moduleSetting = extProjectMapper.getModuleSetting(projectId);
         Map<String, Boolean> moduleMap = new HashMap<>();
         List<ModuleDTO> moduleDTOList = new ArrayList<>();
+        // 任务中心设置项默认展示
+        moduleMap.put("taskCenter", true);
         if (StringUtils.isNotEmpty(moduleSetting)) {
             ProjectApplicationExample example = new ProjectApplicationExample();
             JSON.parseArray(moduleSetting).forEach(module -> {
@@ -422,7 +451,7 @@ public class ProjectApplicationService {
                 example.createCriteria().andTypeEqualTo(String.valueOf(module)).andProjectIdEqualTo(projectId);
                 List<ProjectApplication> applications = projectApplicationMapper.selectByExample(example);
                 if (CollectionUtils.isNotEmpty(applications)) {
-                    moduleMap.put(String.valueOf(module), Boolean.valueOf(applications.get(0).getTypeValue()));
+                    moduleMap.put(String.valueOf(module), Boolean.valueOf(applications.getFirst().getTypeValue()));
                 } else {
                     moduleMap.put(String.valueOf(module), Boolean.TRUE);
                 }
@@ -440,10 +469,10 @@ public class ProjectApplicationService {
     /**
      * 用例关联需求配置
      *
-     * @param projectId
-     * @param configs
+     * @param projectId 项目ID
+     * @param configs   关联需求配置信息
      */
-    public void updateRelated(String projectId, Map<String, String> configs) {
+    public void updateRelated(String projectId, Map<String, String> configs, String currentUser) {
         List<ProjectApplication> relatedConfigs = configs.entrySet().stream().map(config -> new ProjectApplication(projectId, ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED.name() + "_" + config.getKey().toUpperCase(), config.getValue())).collect(Collectors.toList());
         ProjectApplicationExample example = new ProjectApplicationExample();
         example.createCriteria().andProjectIdEqualTo(projectId).andTypeLike(ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED.name() + "%");
@@ -454,6 +483,11 @@ public class ProjectApplicationService {
             projectApplicationMapper.batchInsert(relatedConfigs);
         } else {
             projectApplicationMapper.batchInsert(relatedConfigs);
+        }
+        // 更新需求定时任务配置
+        BaseDemandScheduleService baseDemandScheduleService = CommonBeanFactory.getBean(BaseDemandScheduleService.class);
+        if (baseDemandScheduleService != null) {
+            baseDemandScheduleService.updateDemandSyncScheduleConfig(relatedConfigs, projectId, currentUser);
         }
     }
 
@@ -542,7 +576,7 @@ public class ProjectApplicationService {
         example.createCriteria().andProjectIdEqualTo(projectId).andTypeLike(ProjectApplicationType.BUG.BUG_SYNC.name() + "_" + ProjectApplicationType.PLATFORM_BUG_CONFIG.BUG_PLATFORM_CONFIG.name());
         List<ProjectApplication> list = projectApplicationMapper.selectByExample(example);
         if (CollectionUtils.isNotEmpty(list)) {
-            return list.get(0).getTypeValue().replaceAll("\\\\", "");
+            return list.getFirst().getTypeValue().replaceAll("\\\\", "");
         }
         return null;
     }
@@ -559,7 +593,7 @@ public class ProjectApplicationService {
         example.createCriteria().andProjectIdEqualTo(projectId).andTypeLike(ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED.name() + "_" + ProjectApplicationType.PLATFORM_DEMAND_CONFIG.DEMAND_PLATFORM_CONFIG.name());
         List<ProjectApplication> list = projectApplicationMapper.selectByExample(example);
         if (CollectionUtils.isNotEmpty(list)) {
-            return list.get(0).getTypeValue().replaceAll("\\\\", "");
+            return list.getFirst().getTypeValue().replaceAll("\\\\", "");
         }
         return null;
     }
@@ -568,7 +602,7 @@ public class ProjectApplicationService {
         ProjectApplicationExample example = new ProjectApplicationExample();
         example.createCriteria().andProjectIdEqualTo(projectId).andTypeEqualTo(type);
         List<ProjectApplication> projectApplications = projectApplicationMapper.selectByExample(example);
-        return CollectionUtils.isEmpty(projectApplications) ? null : projectApplications.get(0);
+        return CollectionUtils.isEmpty(projectApplications) ? null : projectApplications.getFirst();
     }
 
     /**
@@ -594,6 +628,33 @@ public class ProjectApplicationService {
     }
 
     /**
+     * 获取项目所属平台
+     *
+     * @param projectId 项目ID
+     * @return 项目所属平台
+     */
+    public String getDemandPlatformId(String projectId) {
+        ProjectApplication platformEnableConfig = getByType(projectId, ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED.name() + "_" + ProjectApplicationType.CASE_RELATED_CONFIG.CASE_ENABLE.name());
+        ProjectApplication platformKeyConfig = getByType(projectId, ProjectApplicationType.CASE_RELATED_CONFIG.CASE_RELATED.name() + "_PLATFORM_KEY");
+        boolean isEnable = platformEnableConfig != null && Boolean.parseBoolean(platformEnableConfig.getTypeValue()) && platformKeyConfig != null;
+        if (!isEnable) {
+            return "Metersphere";
+        } else {
+            ServiceIntegration serviceIntegration = getPlatformServiceIntegrationWithSyncOrDemand(projectId, false);
+            if (serviceIntegration == null) {
+                // 项目未配置第三方平台
+                return "Metersphere";
+            }
+        }
+        PluginWrapper pluginWrapper = pluginLoadService.getPluginWrapper(platformKeyConfig.getTypeValue());
+        if (pluginWrapper == null) {
+            // 插件未找到
+            return "Metersphere";
+        }
+        return pluginWrapper.getPluginId();
+    }
+
+    /**
      * 获取项目同步机制
      *
      * @param projectId 项目ID
@@ -604,7 +665,7 @@ public class ProjectApplicationService {
         example.createCriteria().andProjectIdEqualTo(projectId).andTypeEqualTo(ProjectApplicationType.BUG.BUG_SYNC.name() + "_MECHANISM");
         List<ProjectApplication> list = projectApplicationMapper.selectByExample(example);
         if (CollectionUtils.isNotEmpty(list)) {
-            return StringUtils.equals(list.get(0).getTypeValue(), "increment");
+            return StringUtils.equals(list.getFirst().getTypeValue(), "increment");
         } else {
             return false;
         }
@@ -681,5 +742,12 @@ public class ProjectApplicationService {
             return "Local";
         }
         return plugin.getName();
+    }
+
+    public int getEnableFakeErrorList(String projectId) {
+        FakeErrorExample example = new FakeErrorExample();
+        example.createCriteria().andProjectIdEqualTo(projectId).andEnableEqualTo(true);
+        long l = fakeErrorMapper.countByExample(example);
+        return (int) l;
     }
 }

@@ -1,17 +1,24 @@
 <template>
   <div class="flex flex-1 flex-col overflow-hidden">
-    <div v-if="activeApiTab.id === 'all' && currentTab === 'case'" class="flex-1 overflow-hidden">
-      <caseTable
-        ref="caseTableRef"
-        :offspring-ids="props.offspringIds"
-        :is-api="false"
-        :active-module="props.activeModule"
-        :protocol="props.protocol"
-        :member-options="memberOptions"
-        @open-case-tab="openCaseTab"
-        @open-case-tab-and-execute="openCaseTabAndExecute"
-      />
-    </div>
+    <keep-alive :include="cacheStore.cacheViews">
+      <MsCacheWrapper
+        v-if="activeApiTab.id === 'all' && currentTab === 'case'"
+        class="flex-1 overflow-hidden"
+        :cache-name="CacheTabTypeEnum.API_TEST_CASE_TABLE"
+      >
+        <caseTable
+          ref="caseTableRef"
+          key="API_TEST_CASE_TABLE"
+          :offspring-ids="props.offspringIds"
+          :is-api="false"
+          :active-module="props.activeModule"
+          :selected-protocols="props.selectedProtocols"
+          @open-case-tab="openCaseTab"
+          @open-case-tab-and-execute="openCaseTabAndExecute"
+          @handle-adv-search="(val) => emit('handleAdvSearch', val)"
+        />
+      </MsCacheWrapper>
+    </keep-alive>
     <div v-if="activeApiTab.id !== 'all'" class="flex-1 overflow-hidden">
       <caseDetail
         v-model:execute-case="caseExecute"
@@ -26,33 +33,40 @@
 </template>
 
 <script setup lang="ts">
+  import { useRoute } from 'vue-router';
   import { cloneDeep } from 'lodash-es';
 
+  import MsCacheWrapper from '@/components/pure/ms-cache-wrapper/index.vue';
   import { TabItem } from '@/components/pure/ms-editable-tab/types';
   import caseTable from './caseTable.vue';
 
   import { getCaseDetail } from '@/api/modules/api-test/management';
+  import useCacheStore from '@/store/modules/cache/cache';
 
   import { ApiCaseDetail } from '@/models/apiTest/management';
   import { ModuleTreeNode } from '@/models/common';
+  import { CacheTabTypeEnum } from '@/enums/cacheTabEnum';
 
   import type { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
   import { parseRequestBodyFiles } from '@/views/api-test/components/utils';
 
   // 非首屏渲染的大量内容的组件异步导入
   const caseDetail = defineAsyncComponent(() => import('./caseDetail.vue'));
+  const cacheStore = useCacheStore();
 
   const props = defineProps<{
     activeModule: string;
-    protocol: string;
+    selectedProtocols: string[];
     offspringIds: string[];
     moduleTree: ModuleTreeNode[]; // 模块树
-    memberOptions: { label: string; value: string }[];
     currentTab: string;
   }>();
   const emit = defineEmits<{
     (e: 'deleteCase', id: string): void;
+    (e: 'handleAdvSearch', isStartAdvance: boolean): void;
   }>();
+
+  const route = useRoute();
 
   const apiTabs = defineModel<RequestParam[]>('apiTabs', {
     required: true,
@@ -136,8 +150,16 @@
     caseTableRef.value?.loadCaseList();
   }
 
+  onBeforeMount(() => {
+    if (route.query.tab === 'case' && route.query.id) {
+      openCaseTab(route.query.id as string);
+    }
+  });
+
+  const isAdvancedSearchMode = computed(() => caseTableRef.value?.isAdvancedSearchMode);
   defineExpose({
     openCaseTab,
     openCaseTabAndExecute,
+    isAdvancedSearchMode,
   });
 </script>

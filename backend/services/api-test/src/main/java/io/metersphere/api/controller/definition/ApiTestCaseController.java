@@ -2,13 +2,17 @@ package io.metersphere.api.controller.definition;
 
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
+import io.metersphere.api.constants.ApiConstants;
 import io.metersphere.api.domain.ApiTestCase;
+import io.metersphere.api.dto.ApiCaseCompareData;
 import io.metersphere.api.dto.ReferenceDTO;
 import io.metersphere.api.dto.ReferenceRequest;
 import io.metersphere.api.dto.definition.*;
 import io.metersphere.api.dto.request.ApiTransferRequest;
+import io.metersphere.api.dto.scenario.ApiFileCopyRequest;
 import io.metersphere.api.service.ApiFileResourceService;
 import io.metersphere.api.service.definition.*;
+import io.metersphere.plugin.api.spi.AbstractMsTestElement;
 import io.metersphere.project.service.FileModuleService;
 import io.metersphere.sdk.constants.DefaultRepositoryDir;
 import io.metersphere.sdk.constants.PermissionConstants;
@@ -17,6 +21,7 @@ import io.metersphere.system.dto.OperationHistoryDTO;
 import io.metersphere.system.dto.request.OperationHistoryRequest;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
 import io.metersphere.system.dto.sdk.request.PosRequest;
+import io.metersphere.system.file.annotation.FileLimit;
 import io.metersphere.system.log.annotation.Log;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.notice.annotation.SendNotice;
@@ -38,6 +43,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 
 @RestController
@@ -46,6 +52,8 @@ import java.util.List;
 public class ApiTestCaseController {
     @Resource
     private ApiTestCaseService apiTestCaseService;
+    @Resource
+    private ApiTestCaseRunService apiTestCaseRunService;
     @Resource
     private ApiTestCaseRecoverService apiTestCaseRecoverService;
     @Resource
@@ -92,6 +100,7 @@ public class ApiTestCaseController {
         ids.add(id);
         request.setSelectIds(ids);
         request.setProjectId(SessionUtils.getCurrentProjectId());
+        request.setProtocols(List.of(ApiConstants.HTTP_PROTOCOL));
         apiTestCaseRecoverService.batchRecover(request, SessionUtils.getUserId());
     }
 
@@ -133,6 +142,14 @@ public class ApiTestCaseController {
         return apiTestCaseService.update(request, SessionUtils.getUserId());
     }
 
+    @PostMapping("/file/copy")
+    @Operation(summary = "接口测试-接口管理-复制用例时，复制文件")
+    @RequiresPermissions(value = {PermissionConstants.PROJECT_API_DEFINITION_CASE_UPDATE, PermissionConstants.PROJECT_API_DEFINITION_CASE_ADD},
+            logical = Logical.OR)
+    public Map<String, String> copyFile(@Validated @RequestBody ApiFileCopyRequest request) {
+        return apiTestCaseService.copyFile(request);
+    }
+
     @GetMapping(value = "/update-priority/{id}/{priority}")
     @Operation(summary = "接口测试-接口管理-接口用例-更新等级")
     @RequiresPermissions(PermissionConstants.PROJECT_API_DEFINITION_CASE_UPDATE)
@@ -160,7 +177,14 @@ public class ApiTestCaseController {
     public Pager<List<ApiTestCaseDTO>> page(@Validated @RequestBody ApiTestCasePageRequest request) {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString("id")) ? request.getSortString("id") : "pos desc, id desc");
-        return PageUtils.setPageInfo(page, apiTestCaseService.page(request, false));
+        return PageUtils.setPageInfo(page, apiTestCaseService.page(request, false, true, null));
+    }
+
+    @PostMapping(value = "/statistics")
+    @Operation(summary = "接口测试-接口管理-接口用例-统计")
+    @RequiresPermissions(PermissionConstants.PROJECT_API_DEFINITION_CASE_READ)
+    public List<ApiTestCaseDTO> calculate(@RequestBody List<String> ids) {
+        return apiTestCaseService.calculate(ids);
     }
 
     @PostMapping("/batch/delete")
@@ -195,6 +219,14 @@ public class ApiTestCaseController {
         apiTestCaseRecoverService.batchRecover(request, SessionUtils.getUserId());
     }
 
+    @PostMapping("/batch/api-change/sync")
+    @Operation(summary = "接口测试-接口管理-接口用例-批量编辑")
+    @RequiresPermissions(PermissionConstants.PROJECT_API_DEFINITION_CASE_UPDATE)
+    @CheckOwner(resourceId = "#request.getSelectIds()", resourceType = "api_test_case")
+    public void batchSyncApiChange(@Validated @RequestBody ApiCaseBatchSyncRequest request) {
+        apiTestCaseService.batchSyncApiChange(request, SessionUtils.getUserId());
+    }
+
     @PostMapping(value = "/trash/page")
     @Operation(summary = "接口测试-接口管理-接口用例-回收站-分页查询")
     @RequiresPermissions(PermissionConstants.PROJECT_API_DEFINITION_CASE_READ)
@@ -202,7 +234,7 @@ public class ApiTestCaseController {
     public Pager<List<ApiTestCaseDTO>> pageTrash(@Validated @RequestBody ApiTestCasePageRequest request) {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString("id")) ? request.getSortString("id") : "delete_time desc, id desc");
-        return PageUtils.setPageInfo(page, apiTestCaseService.page(request, true));
+        return PageUtils.setPageInfo(page, apiTestCaseService.page(request, true, true, null));
     }
 
     @PostMapping("/edit/pos")
@@ -213,6 +245,7 @@ public class ApiTestCaseController {
         apiTestCaseService.moveNode(request);
     }
 
+    @FileLimit
     @PostMapping("/upload/temp/file")
     @Operation(summary = "上传接口调试所需的文件资源，并返回文件ID")
     @RequiresPermissions(logical = Logical.OR, value = {PermissionConstants.PROJECT_API_DEFINITION_CASE_ADD, PermissionConstants.PROJECT_API_DEFINITION_CASE_UPDATE})
@@ -225,8 +258,11 @@ public class ApiTestCaseController {
     @RequiresPermissions(logical = Logical.OR, value = {PermissionConstants.PROJECT_API_DEFINITION_CASE_READ, PermissionConstants.PROJECT_API_DEFINITION_CASE_UPDATE})
     @CheckOwner(resourceId = "#request.getId()", resourceType = "api_test_case")
     public Pager<List<ExecuteReportDTO>> getExecuteList(@Validated @RequestBody ExecutePageRequest request) {
-        Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
-                StringUtils.isNotBlank(request.getSortString()) ? request.getSortString() : "start_time desc");
+        String sort = StringUtils.isNotBlank(request.getSortString()) ? request.getSortString() : "eti.create_time desc";
+        if (StringUtils.isNotBlank(sort)) {
+            sort = sort.replace("start_time", "eti.create_time");
+        }
+        Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(), sort);
         return PageUtils.setPageInfo(page, apiTestCaseService.getExecuteList(request));
     }
 
@@ -261,7 +297,7 @@ public class ApiTestCaseController {
     @Operation(summary = "用例调试")
     @RequiresPermissions(PermissionConstants.PROJECT_API_DEFINITION_CASE_EXECUTE)
     public TaskRequestDTO debug(@Validated @RequestBody ApiCaseRunRequest request) {
-        return apiTestCaseService.debug(request);
+        return apiTestCaseRunService.debug(request, SessionUtils.getUserId());
     }
 
     @GetMapping("/run/{id}")
@@ -271,14 +307,14 @@ public class ApiTestCaseController {
     public TaskRequestDTO run(@PathVariable String id,
                               @Schema(description = "报告ID，传了可以实时获取结果，不传则不支持实时获取")
                               @RequestParam(required = false) String reportId) {
-        return apiTestCaseService.run(id, reportId, SessionUtils.getUserId());
+        return apiTestCaseRunService.run(id, reportId, SessionUtils.getUserId());
     }
 
     @PostMapping("/run")
     @Operation(summary = "用例执行，传请求详情执行")
     @RequiresPermissions(PermissionConstants.PROJECT_API_DEFINITION_CASE_EXECUTE)
     public TaskRequestDTO run(@Validated @RequestBody ApiCaseRunRequest request) {
-        return apiTestCaseService.run(request, SessionUtils.getUserId());
+        return apiTestCaseRunService.run(request, SessionUtils.getUserId());
     }
 
     @PostMapping("/batch/run")
@@ -286,7 +322,7 @@ public class ApiTestCaseController {
     @RequiresPermissions(PermissionConstants.PROJECT_API_DEFINITION_CASE_EXECUTE)
     @CheckOwner(resourceId = "#request.getSelectIds()", resourceType = "api_test_case")
     public void batchRun(@Validated @RequestBody ApiTestCaseBatchRunRequest request) {
-        apiTestCaseBatchRunService.asyncBatchRun(request, SessionUtils.getUserId());
+        apiTestCaseBatchRunService.batchRun(request, SessionUtils.getUserId());
     }
 
     @PostMapping("/get-reference")
@@ -297,5 +333,39 @@ public class ApiTestCaseController {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString()) ? request.getSortString() : "id desc");
         return PageUtils.setPageInfo(page, apiTestCaseService.getReference(request));
+    }
+
+    @GetMapping("/api-change/clear/{id}")
+    @Operation(summary = "清除接口参数变更标识")
+    @RequiresPermissions(logical = Logical.OR, value = {PermissionConstants.PROJECT_API_DEFINITION_CASE_ADD, PermissionConstants.PROJECT_API_DEFINITION_CASE_UPDATE})
+    @CheckOwner(resourceId = "#id", resourceType = "api_test_case")
+    @Log(type = OperationLogType.UPDATE, expression = "#msClass.clearApiChangeLog(#id)", msClass = ApiTestCaseLogService.class)
+    public void clearApiChange(@PathVariable String id) {
+        apiTestCaseService.clearApiChange(id);
+    }
+
+    @GetMapping("/api-change/ignore/{id}")
+    @Operation(summary = "忽略接口变更提示")
+    @RequiresPermissions(logical = Logical.OR, value = {PermissionConstants.PROJECT_API_DEFINITION_CASE_ADD, PermissionConstants.PROJECT_API_DEFINITION_CASE_UPDATE})
+    @CheckOwner(resourceId = "#id", resourceType = "api_test_case")
+    @Log(type = OperationLogType.UPDATE, expression = "#msClass.ignoreApiChange(#id)", msClass = ApiTestCaseLogService.class)
+    public void ignoreApiChange(@PathVariable String id, @RequestParam(name = "ignore") boolean ignore) {
+        apiTestCaseService.ignoreApiChange(id, ignore);
+    }
+
+    @PostMapping("/api-change/sync")
+    @Operation(summary = "获取同步后的用例详情")
+    @RequiresPermissions(value = PermissionConstants.PROJECT_API_DEFINITION_CASE_UPDATE)
+    @CheckOwner(resourceId = "#request.getId()", resourceType = "api_test_case")
+    public AbstractMsTestElement syncApiChange(@Validated @RequestBody ApiCaseSyncRequest request) {
+        return apiTestCaseService.syncApiChange(request);
+    }
+
+    @GetMapping("/api/compare/{id}")
+    @Operation(summary = "与接口定义对比")
+    @RequiresPermissions(value = PermissionConstants.PROJECT_API_DEFINITION_CASE_READ)
+    @CheckOwner(resourceId = "#id", resourceType = "api_test_case")
+    public ApiCaseCompareData getApiCompareData(@PathVariable String id) {
+        return apiTestCaseService.getApiCompareData(id);
     }
 }

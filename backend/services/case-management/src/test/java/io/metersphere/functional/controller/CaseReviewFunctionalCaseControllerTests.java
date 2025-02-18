@@ -4,15 +4,19 @@ import io.metersphere.functional.constants.CaseReviewPassRule;
 import io.metersphere.functional.constants.FunctionalCaseReviewStatus;
 import io.metersphere.functional.domain.*;
 import io.metersphere.functional.dto.ReviewFunctionalCaseDTO;
+import io.metersphere.functional.dto.ReviewerAndStatusDTO;
 import io.metersphere.functional.mapper.CaseReviewFunctionalCaseMapper;
 import io.metersphere.functional.mapper.CaseReviewHistoryMapper;
 import io.metersphere.functional.request.*;
 import io.metersphere.functional.service.CaseReviewFunctionalCaseService;
 import io.metersphere.sdk.constants.SessionConstants;
+import io.metersphere.sdk.dto.CombineCondition;
+import io.metersphere.sdk.dto.CombineSearch;
 import io.metersphere.sdk.util.JSON;
+import io.metersphere.sdk.util.LogUtils;
 import io.metersphere.system.base.BaseTest;
 import io.metersphere.system.controller.handler.ResultHolder;
-import io.metersphere.system.dto.sdk.BaseCondition;
+import io.metersphere.sdk.dto.BaseCondition;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
 import io.metersphere.system.dto.sdk.OptionDTO;
 import io.metersphere.system.utils.Pager;
@@ -42,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
 
     public static final String GET_CASE_IDS = "/case/review/detail/get-ids/";
+
     public static final String FUNCTIONAL_CASE_LIST_URL = "/functional/case/page";
 
     public static final String REVIEW_CASE_PAGE = "/case/review/detail/page";
@@ -52,6 +57,10 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
     public static final String BATCH_EDIT_REVIEWERS = "/case/review/detail/batch/edit/reviewers";
 
     public static final String REVIEW_FUNCTIONAL_CASE_BATCH_REVIEW = "/case/review/detail/batch/review";
+
+    public static final String REVIEW_FUNCTIONAL_CASE_MIND_REVIEW = "/case/review/detail/mind/multiple/review";
+
+
     public static final String URL_MODULE_TREE = "/case/review/detail/tree/";
 
     public static final String REVIEW_FUNCTIONAL_CASE_MODULE_COUNT = "/case/review/detail/module/count";
@@ -60,6 +69,9 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
 
 
     public static final String GET_CASE_REVIEWER_LIST = "/case/review/detail/reviewer/list";
+
+    public static final String GET_CASE_REVIEWER_AND_STATUS = "/case/review/detail/reviewer/status/total/";
+
 
     @Resource
     private CaseReviewFunctionalCaseMapper caseReviewFunctionalCaseMapper;
@@ -84,15 +96,19 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
         request.setCurrent(1);
         request.setPageSize(10);
         request.setReviewId("wx_review_id_1");
-        Map<String, Object> map = new HashMap<>();
-        map.put("customs", Arrays.asList(new LinkedHashMap() {{
-            put("id", "TEST_FIELD_ID");
-            put("operator", "in");
-            put("value", "222");
-            put("type", "List");
-        }}));
-        request.setCombine(map);
+        request.setCombineSearch(getCustomCombineSearch());
         this.requestPostWithOkAndReturn(FUNCTIONAL_CASE_LIST_URL, request);
+    }
+
+    private CombineSearch getCustomCombineSearch() {
+        CombineSearch combineSearch = new CombineSearch();
+        CombineCondition condition = new CombineCondition();
+        condition.setCustomField(true);
+        condition.setName("TEST_FIELD_ID");
+        condition.setOperator(CombineCondition.CombineConditionOperator.IN.name());
+        condition.setValue(List.of("222"));
+        combineSearch.setConditions(List.of(condition));
+        return combineSearch;
     }
 
 
@@ -106,26 +122,16 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
         request.setProjectId("wx_test_project");
 
         request.setReviewId("wx_review_id_5");
-        request.setViewFlag(true);
         request.setViewStatusFlag(true);
         this.requestPostWithOkAndReturn(REVIEW_CASE_PAGE, request);
         request.setReviewId("wx_review_id_1");
         this.requestPostWithOkAndReturn(REVIEW_CASE_PAGE, request);
 
         request.setReviewId("wx_review_id_1");
-        Map<String, Object> map = new HashMap<>();
-        map.put("customs", Arrays.asList(new LinkedHashMap() {{
-            put("id", "TEST_FIELD_ID");
-            put("operator", "in");
-            put("value", "222");
-            put("type", "List");
-        }}));
-        request.setCombine(map);
-        request.setViewFlag(true);
+        request.setCombineSearch(getCustomCombineSearch());
         request.setViewStatusFlag(true);
         this.requestPostWithOkAndReturn(REVIEW_CASE_PAGE, request);
         this.requestPostWithOkAndReturn(REVIEW_FUNCTIONAL_CASE_MODULE_COUNT, request);
-        request.setViewFlag(false);
         request.setViewStatusFlag(false);
         this.requestPostWithOkAndReturn(REVIEW_CASE_PAGE, request);
 
@@ -196,15 +202,8 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
         request.setSelectIds(new ArrayList<>());
         request.setSelectAll(true);
         request.setExcludeIds(Arrays.asList("TEST_FUNCTIONAL_CASE_ID_1"));
-        Map<String, Object> map = new HashMap<>();
-        map.put("customs", Arrays.asList(new LinkedHashMap() {{
-            put("id", "TEST_FIELD_ID");
-            put("operator", "in");
-            put("value", "222");
-            put("type", "List");
-        }}));
         BaseCondition baseCondition = new BaseCondition();
-        baseCondition.setCombine(map);
+        baseCondition.setCombineSearch(getCustomCombineSearch());
         request.setCondition(baseCondition);
         this.requestPostWithOkAndReturn(BATCH_DELETE_URL, request);
 
@@ -238,7 +237,7 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
     @Order(7)
     public void testPos() throws Exception {
         List<CaseReviewFunctionalCase> caseReviewList = getCaseReviewFunctionalCase("wx_review_id_1");
-        CaseReviewFunctionalCase caseReviews = caseReviewList.get(0);
+        CaseReviewFunctionalCase caseReviews = caseReviewList.getFirst();
         CaseReviewFunctionalCase caseReviews2 = caseReviewList.get(1);
         Long pos = caseReviews.getPos();
         Long pos2 = caseReviews2.getPos();
@@ -251,7 +250,7 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
         this.requestPostWithOkAndReturn(REVIEW_FUNCTIONAL_CASE_POS, posRequest);
         caseReviewList = getCaseReviewFunctionalCase("wx_review_id_1");
         caseReviews = caseReviewList.get(1);
-        caseReviews2 = caseReviewList.get(0);
+        caseReviews2 = caseReviewList.getFirst();
         Long pos3 = caseReviews.getPos();
         Long pos4 = caseReviews2.getPos();
         Assertions.assertTrue(Objects.equals(pos, pos3));
@@ -259,7 +258,7 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
         posRequest.setMoveMode("BEFORE");
         this.requestPostWithOkAndReturn(REVIEW_FUNCTIONAL_CASE_POS, posRequest);
         caseReviewList = getCaseReviewFunctionalCase("wx_review_id_1");
-        caseReviews = caseReviewList.get(0);
+        caseReviews = caseReviewList.getFirst();
         caseReviews2 = caseReviewList.get(1);
         Long pos5 = caseReviews.getPos();
         Long pos6 = caseReviews2.getPos();
@@ -451,6 +450,109 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
 
     @Test
     @Order(9)
+    public void testMindReview() throws Exception {
+
+        MindReviewFunctionalCaseRequest request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_3");
+        request.setCaseId("wx_test_5");
+        request.setStatus(FunctionalCaseReviewStatus.PASS.toString());
+        request.setContent("测试批量评审通过");
+        this.requestPost(REVIEW_FUNCTIONAL_CASE_MIND_REVIEW, request).andExpect(status().is5xxServerError());
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_2");
+        request.setCaseId("gyq_case_id_9");
+        request.setStatus(FunctionalCaseReviewStatus.UN_PASS.toString());
+        request.setContent("测试批量评审失败");
+        this.requestPostWithOk(REVIEW_FUNCTIONAL_CASE_MIND_REVIEW, request);
+
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_4");
+        request.setCaseId("wx_case_id_4");
+        request.setStatus(FunctionalCaseReviewStatus.UNDER_REVIEWED.toString());
+        request.setContent("测试批量评审人");
+        try {
+            caseReviewFunctionalCaseService.mindReview(request, "666");
+        } catch (Exception e){
+            LogUtils.error(e.getMessage());
+        }
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_4");
+        request.setCaseId("wx_case_id_2");
+        request.setStatus(FunctionalCaseReviewStatus.UNDER_REVIEWED.toString());
+        request.setContent("测试批量评审人");
+        caseReviewFunctionalCaseService.mindReview(request, "123");
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_4");
+        request.setCaseId("wx_case_id_2");
+        request.setStatus(FunctionalCaseReviewStatus.UN_PASS.toString());
+        request.setContent("测试批量评审人");
+        caseReviewFunctionalCaseService.mindReview(request, "admin");
+
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_1");
+        request.setCaseId("gyq_case_id_5");
+        request.setStatus(FunctionalCaseReviewStatus.PASS.toString());
+        request.setNotifier("gyq;admin");
+        request.setContent("测试批量评审通过");
+        this.requestPostWithOk(REVIEW_FUNCTIONAL_CASE_MIND_REVIEW, request);
+        CaseReviewFunctionalCase caseReviewFunctionalCase = caseReviewFunctionalCaseMapper.selectByPrimaryKey("gyq_test_5");
+
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_1");
+        request.setStatus(FunctionalCaseReviewStatus.UN_PASS.toString());
+        request.setContent("hhh");
+        request.setCaseId("gyq_case_id_5");
+        request.setContent("测试批量评审通过");
+        caseReviewFunctionalCaseService.mindReview(request, "multiple_review_admin");
+        CaseReviewFunctionalCase caseReviewFunctionalCase1 = caseReviewFunctionalCaseMapper.selectByPrimaryKey("gyq_test_5");
+        Assertions.assertFalse(StringUtils.equalsIgnoreCase(caseReviewFunctionalCase.getStatus(), caseReviewFunctionalCase1.getStatus()));
+
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_4");
+        request.setStatus(FunctionalCaseReviewStatus.PASS.toString());
+        request.setCaseId("wx_case_id_2");
+        caseReviewFunctionalCaseService.mindReview(request, "admin");
+        CaseReviewHistoryExample caseReviewHistoryExample = new CaseReviewHistoryExample();
+        caseReviewHistoryExample.createCriteria().andCaseIdEqualTo("wx_case_id_2").andReviewIdEqualTo("wx_review_id_4").andAbandonedEqualTo(false).andDeletedEqualTo(false);
+        List<CaseReviewHistory> caseReviewHistories = caseReviewHistoryMapper.selectByExample(caseReviewHistoryExample);
+        Assertions.assertEquals(8,caseReviewHistories.size());
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_4");
+        request.setStatus(FunctionalCaseReviewStatus.PASS.toString());
+        request.setCaseId("wx_case_id_2");
+        caseReviewFunctionalCaseService.mindReview(request, "123");
+        caseReviewHistories = caseReviewHistoryMapper.selectByExample(caseReviewHistoryExample);
+        Assertions.assertEquals(9,caseReviewHistories.size());
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_4");
+        request.setStatus(FunctionalCaseReviewStatus.PASS.toString());
+        request.setCaseId("wx_case_id_2");
+        caseReviewFunctionalCaseService.mindReview(request, "123");
+        caseReviewHistories = caseReviewHistoryMapper.selectByExample(caseReviewHistoryExample);
+        Assertions.assertEquals(10,caseReviewHistories.size());
+
+        request = new MindReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_4");
+        request.setStatus(FunctionalCaseReviewStatus.PASS.toString());
+        request.setCaseId("wx_case_id_2");
+        request.setUserId("123");
+        caseReviewFunctionalCaseService.mindReview(request, "123");
+        caseReviewHistories = caseReviewHistoryMapper.selectByExample(caseReviewHistoryExample);
+        Assertions.assertEquals(11,caseReviewHistories.size());
+
+    }
+
+    @Test
+    @Order(10)
     public void testBatchReviewFalse() throws Exception {
         BatchReviewFunctionalCaseRequest request = new BatchReviewFunctionalCaseRequest();
         request.setReviewId("wx_review_id_1");
@@ -482,7 +584,7 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
 
 
     @Test
-    @Order(10)
+    @Order(11)
     public void testBatchEditReviewers() throws Exception {
         BatchEditReviewerRequest request = new BatchEditReviewerRequest();
         //更新评审人
@@ -534,7 +636,7 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
     }
 
     @Test
-    @Order(11)
+    @Order(12)
     public void getUserStatus() throws Exception {
         List<OptionDTO> optionDTOS = getOptionDTOS("wx_review_id_1", "gyq_case_id_5");
         Assertions.assertTrue(CollectionUtils.isNotEmpty(optionDTOS));
@@ -543,13 +645,12 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
     }
 
     @Test
-    @Order(12)
+    @Order(13)
     public void getModuleCount() throws Exception {
         ReviewFunctionalCasePageRequest request = new ReviewFunctionalCasePageRequest();
         request.setReviewId("wx_review_id_1");
         request.setCurrent(1);
         request.setPageSize(10);
-        request.setViewFlag(false);
         request.setProjectId("wx_test_project");
         MvcResult moduleCountMvcResult = this.requestPostWithOkAndReturn(REVIEW_FUNCTIONAL_CASE_MODULE_COUNT, request);
         Map<String, Integer> moduleCount = JSON.parseObject(JSON.toJSONString(
@@ -561,7 +662,7 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
     }
 
     @Test
-    @Order(13)
+    @Order(14)
     public void getReviewerList() throws Exception {
         MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get(GET_CASE_REVIEWER_LIST + "/wx_review_id_1/gyq_case_id_5").header(SessionConstants.HEADER_TOKEN, sessionId)
                         .header(SessionConstants.CSRF_TOKEN, csrfToken)
@@ -573,6 +674,48 @@ public class CaseReviewFunctionalCaseControllerTests extends BaseTest {
         List<CaseReviewFunctionalCaseUser> optionDTOS = JSON.parseArray(JSON.toJSONString(resultHolder.getData()), CaseReviewFunctionalCaseUser.class);
         Assertions.assertTrue(CollectionUtils.isNotEmpty(optionDTOS));
     }
+
+    @Test
+    @Order(15)
+    public void getReviewerWidthTotalList() throws Exception {
+        MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get(GET_CASE_REVIEWER_AND_STATUS + "/wx_review_id_1/gyq_case_id_5").header(SessionConstants.HEADER_TOKEN, sessionId)
+                        .header(SessionConstants.CSRF_TOKEN, csrfToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON)).andReturn();
+        String returnData = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        ResultHolder resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        ReviewerAndStatusDTO reviewerAndStatusDTO = JSON.parseObject(JSON.toJSONString(resultHolder.getData()), ReviewerAndStatusDTO.class);
+        Assertions.assertTrue(CollectionUtils.isNotEmpty(reviewerAndStatusDTO.getReviewerStatus()));
+
+        BatchReviewFunctionalCaseRequest request = new BatchReviewFunctionalCaseRequest();
+        request.setReviewId("wx_review_id_1");
+        request.setReviewPassRule(CaseReviewPassRule.MULTIPLE.toString());
+        request.setStatus(FunctionalCaseReviewStatus.RE_REVIEWED.toString());
+        request.setSelectAll(false);
+        request.setSelectIds(List.of("gyq_test_5"));
+        request.setContent("测试批量评审通过");
+        this.requestPostWithOk(REVIEW_FUNCTIONAL_CASE_BATCH_REVIEW, request);
+        result = mockMvc.perform(MockMvcRequestBuilders.get(GET_CASE_REVIEWER_AND_STATUS + "/wx_review_id_1/gyq_case_id_5").header(SessionConstants.HEADER_TOKEN, sessionId)
+                        .header(SessionConstants.CSRF_TOKEN, csrfToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON)).andReturn();
+        returnData = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        reviewerAndStatusDTO = JSON.parseObject(JSON.toJSONString(resultHolder.getData()), ReviewerAndStatusDTO.class);
+        Assertions.assertTrue(CollectionUtils.isNotEmpty(reviewerAndStatusDTO.getReviewerStatus()));
+        result = mockMvc.perform(MockMvcRequestBuilders.get(GET_CASE_REVIEWER_AND_STATUS + "/wx_review_id_5/gyq_case_id_d").header(SessionConstants.HEADER_TOKEN, sessionId)
+                        .header(SessionConstants.CSRF_TOKEN, csrfToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON)).andReturn();
+        returnData = result.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        reviewerAndStatusDTO = JSON.parseObject(JSON.toJSONString(resultHolder.getData()), ReviewerAndStatusDTO.class);
+    }
+
+
 
     private List<OptionDTO> getOptionDTOS(String reviewId, String caseId) throws Exception {
         MvcResult result = mockMvc.perform(MockMvcRequestBuilders.get(REVIEW_FUNCTIONAL_CASE_REVIEWER_STATUS + "/" + reviewId + "/" + caseId).header(SessionConstants.HEADER_TOKEN, sessionId)

@@ -22,6 +22,7 @@ import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.dto.sdk.TemplateCustomFieldDTO;
 import io.metersphere.system.dto.sdk.TemplateDTO;
 import io.metersphere.system.dto.sdk.request.PosRequest;
+import io.metersphere.system.file.annotation.FileLimit;
 import io.metersphere.system.log.annotation.Log;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.notice.annotation.SendNotice;
@@ -91,12 +92,16 @@ public class BugController {
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_READ)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public Pager<List<BugDTO>> page(@Validated @RequestBody BugPageRequest request) {
+        request.setUseTrash(false);
+        if (request.getBoardCount() || request.getRelatedToPlan() || request.getCreateByMe() || request.getAssignedToMe() || request.getUnresolved()) {
+            request.setTodoParam(bugService.buildBugToDoParam(request, SessionUtils.getUserId(), SessionUtils.getCurrentOrganizationId()));
+        }
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
                 StringUtils.isNotBlank(request.getSortString()) ? request.getSortString() : "pos desc");
-        request.setUseTrash(false);
         return PageUtils.setPageInfo(page, bugService.list(request));
     }
 
+    @FileLimit
     @PostMapping("/add")
     @Operation(summary = "缺陷管理-列表-创建缺陷")
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_ADD)
@@ -108,6 +113,7 @@ public class BugController {
         return bugService.addOrUpdate(request, files, SessionUtils.getUserId(), SessionUtils.getCurrentOrganizationId(), false);
     }
 
+    @FileLimit
     @PostMapping("/update")
     @Operation(summary = "缺陷管理-列表-编辑缺陷")
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_UPDATE)
@@ -130,7 +136,7 @@ public class BugController {
     @Operation(summary = "缺陷管理-列表-查看缺陷(详情&&编辑&&复制)")
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_READ)
     public BugDetailDTO get(@PathVariable String id) {
-        return bugService.get(id, SessionUtils.getUserId());
+        return bugService.get(id, SessionUtils.getUserId(), Objects.requireNonNull(SessionUtils.getUser()).getLanguage());
     }
 
     @GetMapping("/delete/{id}")
@@ -143,7 +149,7 @@ public class BugController {
     }
 
     @GetMapping("/sync/{projectId}")
-    @Operation(summary = "缺陷管理-列表-同步缺陷(开源)")
+    @Operation(summary = "缺陷管理-列表-同步缺陷")
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_UPDATE)
     @CheckOwner(resourceId = "#projectId", resourceType = "project")
     public void sync(@PathVariable String projectId) {
@@ -151,11 +157,11 @@ public class BugController {
     }
 
     @PostMapping("/sync/all")
-    @Operation(summary = "缺陷管理-列表-同步缺陷(企业)")
+    @Operation(summary = "缺陷管理-列表-同步缺陷(区间)")
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_UPDATE)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public void syncAll(@RequestBody BugSyncRequest request) {
-        bugSyncService.syncAllBugs(request, SessionUtils.getUserId(), Objects.requireNonNull(SessionUtils.getUser()).getLanguage());
+        bugSyncService.syncAllBugs(request, SessionUtils.getUserId(), Objects.requireNonNull(SessionUtils.getUser()).getLanguage(), Translator.get("sync_mode.manual"));
     }
 
     @GetMapping("/sync/check/{projectId}")
@@ -188,6 +194,7 @@ public class BugController {
     @Operation(summary = "缺陷管理-列表-批量删除缺陷")
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_DELETE)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
+    @Log(type = OperationLogType.DELETE, expression = "#msClass.batchDeleteLog(#request)", msClass = BugLogService.class)
     @SendNotice(taskType = NoticeConstants.TaskType.BUG_TASK, event = NoticeConstants.Event.DELETE, target = "#targetClass.getBatchNoticeByRequest(#request)", targetClass = BugNoticeService.class)
     public void batchDelete(@Validated @RequestBody BugBatchRequest request) {
         request.setUseTrash(false);
@@ -225,7 +232,7 @@ public class BugController {
     @RequiresPermissions(PermissionConstants.PROJECT_BUG_READ)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public TemplateDTO getTemplateDetail(@RequestBody BugTemplateRequest request) {
-        return bugService.getTemplate(request.getId(), request.getProjectId(), request.getFromStatusId(), request.getPlatformBugKey());
+        return bugService.getTemplate(request.getId(), request.getProjectId(), request.getFromStatusId(), request.getPlatformBugKey(), request.getShowLocal(), Objects.requireNonNull(SessionUtils.getUser()).getLanguage());
     }
 
     @GetMapping("/follow/{id}")

@@ -80,7 +80,7 @@
 
 <script setup lang="ts">
   import { nextTick, onMounted, ref, watch } from 'vue';
-  import { useScroll, useVModel } from '@vueuse/core';
+  import { useScroll } from '@vueuse/core';
   import { useDraggable } from 'vue-draggable-plus';
 
   import MsButton from '@/components/pure/ms-button/index.vue';
@@ -317,7 +317,7 @@
         &.active,
         &:hover {
           color: rgb(var(--primary-5));
-          background-color: rgb(var(--primary-1));
+          background-color: rgb(var(--primary-2));
           .ms-editable-tab-close-button {
             @apply visible;
           }

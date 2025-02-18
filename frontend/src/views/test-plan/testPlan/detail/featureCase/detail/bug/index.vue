@@ -1,51 +1,62 @@
 <template>
   <div>
-    <div class="mb-4 flex items-center justify-between">
-      <a-dropdown-button
-        v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+UPDATE']) && total"
-        type="primary"
-        @click="handleSelect('associated')"
-      >
-        {{ t('common.associated') }}
-        <template #icon>
-          <icon-down />
-        </template>
-        <template #content>
-          <a-doption value="new" @click="handleSelect('new')">
-            {{ t('common.newCreate') }}
-          </a-doption>
-        </template>
-      </a-dropdown-button>
-      <a-dropdown-button
-        v-if="hasAnyPermission(['PROJECT_TEST_PLAN:READ+UPDATE']) && !total"
-        type="primary"
-        @click="handleSelect('new')"
-      >
-        {{ t('common.newCreate') }}
-        <template #icon>
-          <icon-down />
-        </template>
-        <template #content>
-          <a-popover title="" position="right">
-            <a-doption value="associated" :disabled="!total" @click="handleSelect('associated')">
-              {{ t('common.associated') }}
+    <div class="mb-4 grid grid-cols-3">
+      <div v-if="props.canEdit">
+        <a-dropdown-button
+          v-if="hasAnyPermission(['PROJECT_BUG:READ']) && total"
+          type="primary"
+          @click="handleSelect('associated')"
+        >
+          {{ t('common.associated') }}
+          <template #icon>
+            <icon-down />
+          </template>
+          <template #content>
+            <a-doption :disabled="!hasAnyPermission(['PROJECT_BUG:READ+ADD'])" value="new" @click="handleSelect('new')">
+              {{ t('common.newCreate') }}
             </a-doption>
-            <template #content>
-              <div class="flex items-center text-[14px]">
-                <span class="text-[var(--color-text-4)]">{{ t('testPlan.featureCase.noBugDataTooltip') }}</span>
-                <MsButton type="text" @click="handleSelect('new')">
-                  {{ t('testPlan.featureCase.noBugDataNewBug') }}
-                </MsButton>
-              </div>
-            </template>
-          </a-popover>
-        </template>
-      </a-dropdown-button>
+          </template>
+        </a-dropdown-button>
+        <a-dropdown-button
+          v-if="hasAnyPermission(['PROJECT_BUG:READ+ADD']) && !total"
+          type="primary"
+          @click="handleSelect('new')"
+        >
+          {{ t('common.newCreate') }}
+          <template #icon>
+            <icon-down />
+          </template>
+          <template #content>
+            <a-popover title="" position="right">
+              <a-doption
+                value="associated"
+                :disabled="!total && !hasAnyPermission(['PROJECT_BUG:READ'])"
+                @click="handleSelect('associated')"
+              >
+                {{ t('common.associated') }}
+              </a-doption>
+              <template #content>
+                <div class="flex items-center text-[14px]">
+                  <span class="text-[var(--color-text-4)]">{{ t('testPlan.featureCase.noBugDataTooltip') }}</span>
+                  <MsButton
+                    :disabled="!hasAnyPermission(['PROJECT_BUG:READ+ADD'])"
+                    type="text"
+                    @click="handleSelect('new')"
+                  >
+                    {{ t('testPlan.featureCase.noBugDataNewBug') }}
+                  </MsButton>
+                </div>
+              </template>
+            </a-popover>
+          </template>
+        </a-dropdown-button>
+      </div>
+
       <a-input-search
         v-model:model-value="keyword"
         :placeholder="t('caseManagement.featureCase.searchByName')"
         allow-clear
-        class="mx-[8px] w-[240px]"
+        class="col-span-2 col-end-7 mx-[8px] w-[240px]"
         @search="initData"
         @press-enter="initData"
         @clear="resetHandler"
@@ -57,10 +68,11 @@
       :case-id="props.caseId"
       :bug-total="total"
       :bug-columns="columns"
+      :can-edit="props.canEdit"
       :load-bug-list-api="associatedBugPage"
       :load-params="{
-        testPlanCaseId: route.query.testPlanCaseId,
         caseId: props.caseId,
+        testPlanCaseId: props.testPlanCaseId,
       }"
       @link="emit('link')"
       @new="emit('new')"
@@ -93,7 +105,8 @@
   const appStore = useAppStore();
   const props = defineProps<{
     caseId: string;
-    testPlanId: string;
+    testPlanCaseId: string;
+    canEdit: boolean;
   }>();
 
   const keyword = ref<string>('');
@@ -102,6 +115,7 @@
     (e: 'link'): void;
     (e: 'new'): void;
     (e: 'save', params: TableQueryParams): void;
+    (e: 'updateCount'): void;
   }>();
 
   const columns = ref<MsTableColumn>([
@@ -121,7 +135,6 @@
       showInTable: true,
       showTooltip: false,
       width: 300,
-      ellipsis: true,
       showDrag: false,
     },
     {
@@ -134,8 +147,15 @@
       },
       showInTable: true,
       width: 150,
-      ellipsis: true,
       showDrag: false,
+    },
+    {
+      title: 'common.creator',
+      slotName: 'createUserName',
+      dataIndex: 'createUserName',
+      showInTable: true,
+      showTooltip: true,
+      width: 200,
     },
     {
       title: 'caseManagement.featureCase.updateUser',
@@ -147,17 +167,6 @@
       },
       showInTable: true,
       width: 200,
-      ellipsis: true,
-    },
-    {
-      title: 'caseManagement.featureCase.defectSource',
-      slotName: 'source',
-      dataIndex: 'source',
-      showInTable: true,
-      showTooltip: true,
-      width: 100,
-      ellipsis: true,
-      showDrag: false,
     },
     {
       title: 'caseManagement.featureCase.tableColumnActions',
@@ -218,6 +227,7 @@
       await testPlanCancelBug(id);
       Message.success(t('caseManagement.featureCase.cancelLinkSuccess'));
       initData();
+      emit('updateCount');
     } catch (error) {
       console.log(error);
     } finally {
@@ -228,6 +238,9 @@
   const statusFilterOptions = ref<BugOptionItem[]>([]);
 
   async function initFilterOptions() {
+    if (!props.canEdit) {
+      columns.value = columns.value.filter((item) => item.dataIndex !== 'operation');
+    }
     if (hasAnyPermission(['PROJECT_BUG:READ'])) {
       const res = await getCustomOptionHeader(appStore.currentProjectId);
       handleUserFilterOptions.value = res.handleUserOption;

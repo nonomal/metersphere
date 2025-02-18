@@ -5,7 +5,8 @@
       :self-style="{
         border: `1px solid ${props.tagBackgroundColor || methodColor}`,
         color: props.tagTextColor || methodColor,
-        backgroundColor: props.tagBackgroundColor || 'white',
+        backgroundColor: props.tagBackgroundColor || 'var(--color-text-fff)',
+        display: 'flex',
       }"
       :size="props.tagSize"
     >
@@ -37,8 +38,8 @@
 
   const colorMaps = [
     {
-      color: 'rgb(var(--success-6))',
-      includes: [RequestMethods.GET, RequestMethods.HEAD],
+      color: 'rgb(var(--success-7))',
+      includes: [RequestMethods.GET, RequestMethods.HEAD, 'HTTP'],
     },
     {
       color: 'rgb(var(--warning-7))',

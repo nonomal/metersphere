@@ -1,5 +1,5 @@
 <template>
-  <a-spin class="min-h-[400px] w-full" :loading="loading">
+  <a-spin class="w-full" :loading="loading">
     <a-input
       v-if="props.isModal"
       v-model:model-value="moduleKeyword"
@@ -42,13 +42,13 @@
       <template v-if="!props.isModal" #extra="nodeData">
         <MsPopConfirm
           v-if="hasAnyPermission(['FUNCTIONAL_CASE:READ+ADD'])"
-          :visible="addSubVisible"
           :is-delete="false"
-          :all-names="[]"
+          :all-names="(nodeData.children || []).map((e: ModuleTreeNode) => e.name || '')"
           :title="t('caseManagement.featureCase.addSubModule')"
           :ok-text="t('common.confirm')"
           :field-config="{
             placeholder: t('caseManagement.featureCase.addGroupTip'),
+            nameExistTipText: t('project.fileManagement.nameExist'),
           }"
           :loading="confirmLoading"
           @confirm="addSubModule"
@@ -61,11 +61,11 @@
         <MsPopConfirm
           v-if="hasAnyPermission(['FUNCTIONAL_CASE:READ+UPDATE'])"
           :title="t('caseManagement.featureCase.rename')"
-          :all-names="[]"
+          :all-names="(nodeData.parent? nodeData.parent.children || [] : caseTree).filter((e: ModuleTreeNode) => e.id !== nodeData.id).map((e: ModuleTreeNode) => e.name || '')"
           :is-delete="false"
           :node-id="nodeData.id"
           :ok-text="t('common.confirm')"
-          :field-config="{ field: renameCaseName }"
+          :field-config="{ field: renameCaseName, nameExistTipText: t('project.fileManagement.nameExist') }"
           :loading="confirmLoading"
           @confirm="updateNameModule"
           @cancel="resetFocusNodeKey"
@@ -83,7 +83,7 @@
   import { Message } from '@arco-design/web-vue';
 
   import MsButton from '@/components/pure/ms-button/index.vue';
-  import MsPopConfirm from '@/components/pure/ms-popconfirm/index.vue';
+  import MsPopConfirm, { ConfirmValue } from '@/components/pure/ms-popconfirm/index.vue';
   import type { ActionsItem } from '@/components/pure/ms-table-more-action/types';
   import MsTree from '@/components/business/ms-tree/index.vue';
   import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
@@ -99,7 +99,7 @@
   import useModal from '@/hooks/useModal';
   import useAppStore from '@/store/modules/app';
   import useFeatureCaseStore from '@/store/modules/case/featureCase';
-  import { mapTree } from '@/utils';
+  import { characterLimit, mapTree, traverseTree } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import type { CreateOrUpdateModule, UpdateModule } from '@/models/caseManagement/featureCase';
@@ -123,7 +123,14 @@
     groupKeyword: string; // 搜索关键字
   }>();
 
-  const emits = defineEmits(['update:selectedKeys', 'caseNodeSelect', 'init', 'dragUpdate', 'update:groupKeyword']);
+  const emits = defineEmits([
+    'update:selectedKeys',
+    'caseNodeSelect',
+    'init',
+    'dragUpdate',
+    'update:groupKeyword',
+    'deleteNode',
+  ]);
 
   const currentProjectId = computed(() => appStore.currentProjectId);
 
@@ -178,14 +185,23 @@
           ...e,
           hideMoreAction: e.id === 'root' || props.isModal,
           draggable: e.id !== 'root' && !props.isModal,
-          disabled: e.id === props.activeFolder && props.isModal,
           count: props.modulesCount?.[e.id] || 0,
         };
       });
       featureCaseStore.setModulesTree(caseTree.value);
-      featureCaseStore.setModuleId(['all']);
+      if (!featureCaseStore.moduleId) {
+        featureCaseStore.setModuleId(['all']);
+      }
+
       if (isSetDefaultKey) {
         selectedNodeKeys.value = [caseTree.value[0].id];
+        const offspringIds: string[] = [];
+        mapTree(caseTree.value[0].children || [], (e) => {
+          offspringIds.push(e.id);
+          return e;
+        });
+
+        emits('caseNodeSelect', selectedNodeKeys.value, offspringIds);
       }
       emits(
         'init',
@@ -203,7 +219,7 @@
   const deleteHandler = (node: MsTreeNodeData) => {
     openModal({
       type: 'error',
-      title: t('caseManagement.featureCase.moduleDeleteTipTitle', { name: node.name }),
+      title: t('caseManagement.featureCase.moduleDeleteTipTitle', { name: characterLimit(node.name) }),
       content: t('caseManagement.featureCase.deleteCaseTipContent'),
       okText: t('caseManagement.featureCase.deleteConfirm'),
       okButtonProps: {
@@ -213,8 +229,9 @@
       onBeforeOk: async () => {
         try {
           await deleteCaseModuleTree(node.id);
+          initModules();
+          emits('deleteNode');
           Message.success(t('caseManagement.featureCase.deleteSuccess'));
-          initModules(selectedNodeKeys.value[0] === node.id);
         } catch (error) {
           console.log(error);
         }
@@ -280,20 +297,13 @@
         dropPosition,
       });
       Message.success(t('caseManagement.featureCase.moduleMoveSuccess'));
+      emits('dragUpdate');
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       loading.value = false;
-      await initModules();
-      const treeNode = ref<MsTreeNodeData | null>(null);
-      treeNode.value = dropNode;
-      treeNode.value.children = [];
-      if (dropPosition === 0) {
-        treeNode.value.children.push(dragNode);
-      }
-      caseNodeSelect(dropNode.id, treeNode.value);
-      emits('dragUpdate');
+      initModules();
     }
   }
 
@@ -303,11 +313,10 @@
     }
   };
 
-  const addSubVisible = ref(false);
   const confirmLoading = ref(false);
 
   // 添加子模块
-  async function addSubModule(formValue?: { field: string }, cancel?: () => void) {
+  async function addSubModule(formValue: ConfirmValue, cancel?: () => void) {
     try {
       confirmLoading.value = true;
       const params: CreateOrUpdateModule = {
@@ -322,6 +331,7 @@
       }
       initModules();
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       confirmLoading.value = false;
@@ -329,7 +339,7 @@
   }
 
   // 更新子模块
-  async function updateNameModule(formValue?: { field: string; id?: string }, cancel?: () => void) {
+  async function updateNameModule(formValue: ConfirmValue, cancel?: () => void) {
     try {
       confirmLoading.value = true;
       if (formValue && formValue.id) {
@@ -345,6 +355,7 @@
         initModules();
       }
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       confirmLoading.value = false;
@@ -368,29 +379,18 @@
     };
   });
 
-  watch(
-    () => props.activeFolder,
-    (val) => {
-      if (val === 'all') {
-        initModules();
-      }
-    }
-  );
-
   /**
    * 初始化模块文件数量
    */
   watch(
     () => props.modulesCount,
     (obj) => {
-      caseTree.value = mapTree<ModuleTreeNode>(caseTree.value, (node) => {
-        return {
-          ...node,
-          hideMoreAction: node.id === 'root' || props.isModal,
-          count: obj?.[node.id] || 0,
-        };
+      traverseTree(caseTree.value, (node) => {
+        node.count = obj?.[node.id] || 0;
+        node.hideMoreAction = node.id === 'root' || props.isModal;
       });
-    }
+    },
+    { deep: true }
   );
 
   onBeforeMount(() => {

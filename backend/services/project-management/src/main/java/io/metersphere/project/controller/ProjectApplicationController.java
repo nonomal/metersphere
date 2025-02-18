@@ -5,7 +5,6 @@ import io.metersphere.project.dto.ModuleDTO;
 import io.metersphere.project.request.ProjectApplicationRequest;
 import io.metersphere.project.service.ProjectApplicationService;
 import io.metersphere.project.service.ProjectService;
-import io.metersphere.sdk.constants.ApplicationScope;
 import io.metersphere.sdk.constants.PermissionConstants;
 import io.metersphere.sdk.constants.ProjectApplicationType;
 import io.metersphere.sdk.exception.MSException;
@@ -25,7 +24,6 @@ import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -84,8 +82,32 @@ public class ProjectApplicationController {
         Map<String, Object> configMap = projectApplicationService.get(request, types);
         int errorNum = projectApplicationService.getFakeErrorList(request.getProjectId());
         configMap.put("FAKE_ERROR_NUM", errorNum);
+        int enableErrorNum = projectApplicationService.getEnableFakeErrorList(request.getProjectId());
+        configMap.put("ENABLE_FAKE_ERROR_NUM", enableErrorNum);
         return configMap;
     }
+
+    /**
+     * ==========任务中心开始==========
+     */
+    @PostMapping("/update/task")
+    @Operation(summary = "任务中心-配置")
+    @RequiresPermissions(PermissionConstants.PROJECT_APPLICATION_TASK_UPDATE)
+    @Log(type = OperationLogType.UPDATE, expression = "#msClass.updateTaskLog(#application)", msClass = ProjectApplicationService.class)
+    public void updateTask(@Validated({Updated.class}) @RequestBody ProjectApplication application) {
+        projectApplicationService.update(application, SessionUtils.getUserId());
+    }
+
+    @PostMapping("/task")
+    @Operation(summary = "任务中心-获取配置")
+    @RequiresPermissions(PermissionConstants.PROJECT_APPLICATION_TASK_READ)
+    public Map<String, Object> getTask(@Validated @RequestBody ProjectApplicationRequest request) {
+        List<String> types = Arrays.stream(ProjectApplicationType.TASK.values()).map(ProjectApplicationType.TASK::name).collect(Collectors.toList());
+        return projectApplicationService.get(request, types);
+    }
+    /**
+     * ==========任务中心结束==========
+     */
 
     @GetMapping("/api/user/{projectId}")
     @Operation(summary = "接口测试-获取审核人")
@@ -153,7 +175,7 @@ public class ProjectApplicationController {
     @RequiresPermissions(PermissionConstants.PROJECT_APPLICATION_CASE_UPDATE)
     @Log(type = OperationLogType.UPDATE, expression = "#msClass.updateRelatedRequirementsLog(#projectId, #configs)", msClass = ProjectApplicationService.class)
     public void updateRelated(@PathVariable("projectId") String projectId, @RequestBody Map<String, String> configs) {
-        projectApplicationService.updateRelated(projectId, configs);
+        projectApplicationService.updateRelated(projectId, configs, SessionUtils.getUserId());
     }
 
     @GetMapping("/case/related/info/{projectId}")

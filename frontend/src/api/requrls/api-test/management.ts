@@ -12,12 +12,15 @@ export const DeleteModuleUrl = '/api/definition/module/delete'; // 删除模块
 export const DefinitionPageUrl = '/api/definition/page'; // 接口定义列表
 export const AddDefinitionUrl = '/api/definition/add'; // 添加接口定义
 export const UpdateDefinitionUrl = '/api/definition/update'; // 更新接口定义
+export const StopApiExportUrl = '/api/definition/stop';
+export const GetApiDownloadFileUrl = '/api/definition/download/file';
 export const GetDefinitionDetailUrl = '/api/definition/get-detail'; // 获取接口定义详情
 export const TransferFileUrl = '/api/definition/transfer'; // 文件转存
 export const TransferFileModuleOptionUrl = '/api/definition/transfer/options'; // 文件转存目录
 export const UploadTempFileUrl = '/api/definition/upload/temp/file'; // 临时文件上传
 export const DeleteDefinitionUrl = '/api/definition/delete-to-gc'; // 删除接口定义
 export const ImportDefinitionUrl = '/api/definition/import'; // 导入接口定义
+export const ExportDefinitionUrl = '/api/definition/export'; // 导入接口定义
 export const SortDefinitionUrl = '/api/definition/edit/pos'; // 接口定义拖拽
 export const CopyDefinitionUrl = '/api/definition/copy'; // 复制接口定义
 export const BatchUpdateDefinitionUrl = '/api/definition/batch-update'; // 批量更新接口定义
@@ -35,6 +38,9 @@ export const OperationHistoryUrl = '/api/definition/operation-history'; // 接�
 export const SaveOperationHistoryUrl = '/api/definition/operation-history/save'; // 接口定义-另存变更历史为指定版本
 export const RecoverOperationHistoryUrl = '/api/definition/operation-history/recover'; // 接口定义-变更历史恢复
 export const DefinitionReferenceUrl = '/api/definition/get-reference'; // 获取接口引用关系
+export const ConvertJsonSchemaToJsonUrl = '/api/definition/json-schema/preview'; // 将json-schema转换为 json 数据
+export const JsonSchemaAutoGenerateUrl = '/api/definition/json-schema/auto-generate'; // 将json-schema转换为 json 数据
+export const DefinitionFileCopyUrl = '/api/definition/file/copy'; // 接口文件复制
 
 /**
  * Mock
@@ -57,7 +63,7 @@ export const GetMockUrlUrl = '/api/definition/mock/get-url'; // 获取mock url
  * api回收站
  */
 export const RecoverDefinitionUrl = '/api/definition/recover'; // 回收站-接口定义-恢复
-export const DeleteRecycleApiUrl = '/api/definition/delete/'; // 回收站-接口定义-彻底删除
+export const DeleteRecycleApiUrl = '/api/definition/delete'; // 回收站-接口定义-彻底删除
 export const BatchRecoverApiUrl = '/api/definition/batch-recover'; // 回收站-接口定义-批量恢复
 export const BatchCleanOutApiUrl = '/api/definition/batch/delete'; // 回收站-接口定义-批量彻底删除
 export const GetTrashModuleTreeUrl = '/api/definition/module/trash/tree'; // 回收站查找模块
@@ -77,16 +83,26 @@ export const TransferFileCaseUrl = '/api/case/transfer'; // 文件转存
 export const TransferFileModuleOptionCaseUrl = '/api/case/transfer/options'; // 文件转存目录
 export const UploadTempFileCaseUrl = '/api/case/upload/temp/file'; // 临时文件上传
 export const GetCaseDetailUrl = '/api/case/get-detail'; // 获取接口用例详情
-export const GetEnvListUrl = '/api/test/env-list'; // 接口测试-环境列表
 export const BatchExecuteCaseUrl = '/api/case/batch/run'; // 批量执行接口用例
 export const ExecuteCaseUrl = '/api/case/run'; // 单独执行接口用例
 export const GetExecuteHistoryUrl = '/api/case/execute/page'; // 获取用的执行历史
 export const GetDependencyUrl = '/api/case/get-reference'; // 获取用例的依赖关系
 export const GetChangeHistoryUrl = '/api/case/operation-history/page'; // 获取用例的依赖关系
-export const ToggleFollowCaseUrl = '/api/case/follow'; // 接口定义-关注/取消关注
+export const ToggleFollowCaseUrl = '/api/case/follow'; // 接口用例-关注
+export const ToggleUnFollowCaseUrl = '/api/case/unfollow'; // 接口用例-取消关注
 export const RunCaseUrl = '/api/case/run'; // 执行接口用例
 export const GetCaseReportByIdUrl = '/api/report/case/get/'; // 接口用例报告获取
 export const GetCaseReportDetailUrl = '/api/report/case/get/detail/'; // 接口用例报告获取
+export const CaseExportLogUrl = '/api/report/case/export'; // 接口用例导出报告日志记录
+export const CaseBatchExportLogUrl = '/api/report/case/batch-export'; // 接口用例批量导出报告日志记录
+export const GetCaseBatchExportParamsUrl = '/api/report/case/batch-param'; // 接口用例批量导出报告id集合
+export const CaseStatisticsUrl = '/api/case/statistics'; // 用例执行率统计
+export const getSyncedCaseDetailUrl = '/api/case/api-change/sync'; // 接口测试-接口用例-定义对比用例-同步-获取同步后的用例详情
+export const clearThisChangeUrl = '/api/case/api-change/clear'; // 接口定义-变更对比-清除本次变更
+export const caseTableBatchSyncUrl = '/api/case/batch/api-change/sync'; // 接口测试-接口管理-接口用例-批量同步
+export const ignoreEveryTimeApiChangeUrl = '/api/case/api-change/ignore'; // 接口测试-接口用例-忽略每次接口变更
+export const diffDataUrl = '/api/case/api/compare'; // 接口测试-接口用例-定义对比用例
+export const CaseFileCopyUrl = '/api/case/file/copy'; // 接口用例文件复制
 
 /**
  * 接口用例回收站
@@ -98,5 +114,20 @@ export const DeleteRecycleCaseUrl = '/api/case/delete'; // 接口用例彻底删
 export const BatchDeleteRecycleCaseUrl = '/api/case/batch/delete'; // 接口用例批量彻底删除
 export const AddCaseUrl = '/api/case/add'; // 添加用例
 
-export const PoolOption = '/api/test/pool-option/'; // 获取接口资源池
+export const GetPoolOptionUrl = '/api/test/pool-option'; // 获取接口资源池
 export const GetPoolId = '/api/test/get-pool/'; // 获取项目应用设置的资源池id
+
+// 接口定义文档
+export const AddShareUrl = '/api/doc/share/add'; // 接口测试-接口管理-新增分享
+export const UpdateShareUrl = '/api/doc/share/update'; // 接口测试-接口管理-更新分享
+export const DeleteShareUrl = '/api/doc/share/delete'; // 接口测试-接口管理-删除分享
+export const GetSharePageUrl = '/api/doc/share/page'; // 接口测试-接口管理-分享列表
+export const checkSharePsdUrl = '/api/doc/share/check'; // 接口测试-接口管理-校验分享密码
+export const shareDetailUrl = '/api/doc/share/detail'; // 接口测试-接口管理-查看链接
+export const shareModuleTreeUrl = '/api/doc/share/module/tree'; // 接口测试-接口管理-模块树
+export const shareModuleCountUrl = '/api/doc/share/module/count'; // 接口测试-接口管理-模块数量
+export const ExportShareDefinitionUrl = '/api/doc/share/export'; // 导入分享接口定义
+export const GetShareApiDownloadFileUrl = '/api/doc/share/download/file'; // 下载导出的文档
+export const StopShareApiExportUrl = '/api/doc/share/stop'; // 停止分享导出
+export const GetShareDefinitionDetailUrl = '/api/doc/share/get-detail'; // 获取接口定义文档分享详情
+export const GetShareDefinitionPluginUrl = '/api/doc/share/plugin/script'; // 获取分享接口定义的插件脚本

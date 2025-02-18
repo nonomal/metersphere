@@ -7,6 +7,7 @@ import io.metersphere.dto.TestCaseProviderDTO;
 import io.metersphere.functional.constants.AssociateCaseType;
 import io.metersphere.functional.domain.FunctionalCaseTest;
 import io.metersphere.functional.domain.FunctionalCaseTestExample;
+import io.metersphere.functional.dto.FunctionalCaseStepDTO;
 import io.metersphere.functional.dto.FunctionalCaseTestDTO;
 import io.metersphere.functional.dto.FunctionalCaseTestPlanDTO;
 import io.metersphere.functional.dto.TestPlanCaseExecuteHistoryDTO;
@@ -19,17 +20,21 @@ import io.metersphere.functional.request.FunctionalCaseTestRequest;
 import io.metersphere.provider.BaseAssociateApiProvider;
 import io.metersphere.provider.BaseAssociateBugProvider;
 import io.metersphere.provider.BaseAssociateScenarioProvider;
+import io.metersphere.provider.BaseTestPlanProvider;
 import io.metersphere.request.*;
+import io.metersphere.sdk.constants.TestPlanConstants;
+import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.LogUtils;
 import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
+import io.metersphere.system.uid.IDGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.ibatis.session.ExecutorType;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.mybatis.spring.SqlSessionUtils;
-import org.redisson.api.IdGenerator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,6 +59,9 @@ public class FunctionalTestCaseService {
     private BaseAssociateScenarioProvider associateScenarioProvider;
 
     @Resource
+    private BaseTestPlanProvider baseTestPlanProvider;
+
+    @Resource
     SqlSessionFactory sqlSessionFactory;
 
     @Resource
@@ -67,8 +75,6 @@ public class FunctionalTestCaseService {
 
     @Resource
     private ExtFunctionalCaseModuleMapper extFunctionalCaseModuleMapper;
-
-    private static final String UNPLANNED_API = "api_unplanned_request";
 
     @Resource
     private BaseAssociateBugProvider baseAssociateBugProvider;
@@ -136,7 +142,7 @@ public class FunctionalTestCaseService {
             functionalCaseTest.setSourceId(apiScenario.getId());
             functionalCaseTest.setVersionId(apiScenario.getVersionId());
             functionalCaseTest.setSourceType(request.getSourceType());
-            functionalCaseTest.setId(IdGenerator.random().generateId());
+            functionalCaseTest.setId(IDGenerator.nextStr());
             functionalCaseTest.setCreateUser(userId);
             functionalCaseTest.setCreateTime(System.currentTimeMillis());
             functionalCaseTest.setUpdateUser(userId);
@@ -162,7 +168,7 @@ public class FunctionalTestCaseService {
             functionalCaseTest.setSourceId(apiTestCase.getId());
             functionalCaseTest.setVersionId(apiTestCase.getVersionId());
             functionalCaseTest.setSourceType(request.getSourceType());
-            functionalCaseTest.setId(IdGenerator.random().generateId());
+            functionalCaseTest.setId(IDGenerator.nextStr());
             functionalCaseTest.setCreateUser(userId);
             functionalCaseTest.setCreateTime(System.currentTimeMillis());
             functionalCaseTest.setUpdateUser(userId);
@@ -191,7 +197,7 @@ public class FunctionalTestCaseService {
     public List<String> doSelectIds(DisassociateOtherCaseRequest request) {
         if (request.isSelectAll()) {
             List<String> ids = extFunctionalCaseTestMapper.getIds(request);
-            if (org.apache.commons.collections.CollectionUtils.isNotEmpty(request.getExcludeIds())) {
+            if (CollectionUtils.isNotEmpty(request.getExcludeIds())) {
                 ids.removeAll(request.getExcludeIds());
             }
             return ids;
@@ -202,12 +208,19 @@ public class FunctionalTestCaseService {
 
     public List<BaseTreeNode> getTree(AssociateCaseModuleRequest request) {
         List<BaseTreeNode> fileModuleList = new ArrayList<>();
+        String unplanned = "api_unplanned_request";
         switch (request.getSourceType()) {
-            case AssociateCaseType.API -> fileModuleList = extFunctionalCaseModuleMapper.selectApiCaseModuleByRequest(request);
-            case AssociateCaseType.SCENARIO -> fileModuleList = extFunctionalCaseModuleMapper.selectApiScenarioModuleByRequest(request);
+            case AssociateCaseType.API -> {
+                fileModuleList = extFunctionalCaseModuleMapper.selectApiCaseModuleByRequest(request);
+                unplanned = "api_unplanned_request";
+            }
+            case AssociateCaseType.SCENARIO ->{
+                fileModuleList = extFunctionalCaseModuleMapper.selectApiScenarioModuleByRequest(request);
+                unplanned = "api_unplanned_scenario";
+            }
             default -> new ArrayList<>();
         }
-        return functionalCaseModuleService.buildTreeAndCountResource(fileModuleList, true, Translator.get(UNPLANNED_API));
+        return functionalCaseModuleService.buildTreeAndCountResource(fileModuleList, true, Translator.get(unplanned));
     }
 
     public List<FunctionalCaseTestDTO> hasAssociatePage(FunctionalCaseTestRequest request) {
@@ -254,7 +267,25 @@ public class FunctionalTestCaseService {
      * @return List<FunctionalCaseTestPlanDTO>
      */
     public List<FunctionalCaseTestPlanDTO> hasAssociatePlanPage(AssociatePlanPageRequest request) {
+        this.initDefaultFilter(request);
         return extFunctionalCaseTestMapper.getPlanList(request);
+    }
+
+    private void initDefaultFilter(AssociatePlanPageRequest request) {
+
+        if (request.getFilter() != null && request.getFilter().get("planStatus") != null) {
+
+            List<String> statusList = new ArrayList<>(request.getFilter().get("planStatus"));
+            if (statusList.contains(TestPlanConstants.TEST_PLAN_STATUS_ARCHIVED)) {
+                statusList.remove(TestPlanConstants.TEST_PLAN_STATUS_ARCHIVED);
+            }
+
+            if (statusList.size() < 3 && baseTestPlanProvider != null) {
+                //目前未归档的测试计划只有3中类型。所以这里判断如果是3个的话等于直接查询未归档
+                request.setIncludeTestPlanIds(baseTestPlanProvider.selectTestPlanIdByFunctionCaseAndStatus(request.getCaseId(), statusList));
+            }
+        }
+
     }
 
     public List<TestPlanCaseExecuteHistoryDTO> getTestPlanCaseExecuteHistory(String caseId) {
@@ -264,7 +295,14 @@ public class FunctionalTestCaseService {
                 planCaseExecuteHistoryDTO.setContentText(new String(planCaseExecuteHistoryDTO.getContent(), StandardCharsets.UTF_8));
             }
             if (planCaseExecuteHistoryDTO.getSteps() != null) {
-                planCaseExecuteHistoryDTO.setStepsText(new String(planCaseExecuteHistoryDTO.getSteps(), StandardCharsets.UTF_8));
+                String historyStepStr = new String(planCaseExecuteHistoryDTO.getSteps(), StandardCharsets.UTF_8);
+                planCaseExecuteHistoryDTO.setStepsText(historyStepStr);
+                if (StringUtils.isNotBlank(historyStepStr)) {
+                    List<FunctionalCaseStepDTO> historySteps = JSON.parseArray(historyStepStr, FunctionalCaseStepDTO.class);
+                    if (org.apache.commons.collections.CollectionUtils.isNotEmpty(historySteps)) {
+                        planCaseExecuteHistoryDTO.setShowResult(true);
+                    }
+                }
             }
         }
         return planExecuteHistoryList;

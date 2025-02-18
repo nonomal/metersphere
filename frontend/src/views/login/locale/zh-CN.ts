@@ -1,10 +1,10 @@
 export default {
-  'login.form.title': '一站式开源持续测试平台',
-  'login.form.userName.errMsg': '邮箱不能为空',
+  'login.form.title': '开源持续测试工具',
+  'login.form.userName.errMsg': '用户名不能为空',
   'login.form.password.errMsg': '密码不能为空',
   'login.form.login.errMsg': '登录出错，请刷新重试',
   'login.form.login.success': '欢迎使用',
-  'login.form.userName.placeholder': '请输入邮箱',
+  'login.form.userName.placeholder': '请输入用户名',
   'login.form.userName.placeholderOther': '请输入账号',
   'login.form.password.placeholder': '请输入密码',
   'login.form.rememberPassword': '记住密码',
@@ -15,5 +15,8 @@ export default {
   'login.form.oauth2Test': 'OAuth2 测试',
   'login.form.modeLoginMethods': '更多登录方式',
   'login.form.accountLogin': '账号登录',
-  'login.form.LDAPLogin': 'LDAP登录',
+  'login.form.LDAPLogin': 'LDAP 登录',
+  'login.form.username': '用户名',
+  'login.form.password': '密码',
+  'login.form.loading': '登录中',
 };

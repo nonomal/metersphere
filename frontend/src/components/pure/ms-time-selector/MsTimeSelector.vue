@@ -1,23 +1,25 @@
 <template>
   <div class="ms-time-selector">
     <a-input-number
-      v-model:model-value="current.value"
+      v-model:model-value="numberValue"
       class="w-[120px]"
-      :min="0"
+      :min="1"
+      :max="1000"
       hide-button
       size="small"
       :disabled="props.disabled"
-      @press-enter="handleEnter(false)"
-      @blur="handleEnter(false)"
+      @press-enter="changeNumber"
+      @blur="changeNumber"
     >
       <template #suffix>
         <a-select
-          v-model:model-value="current.type"
+          v-model:model-value="typeValue"
           size="small"
           class="max-w-[64px]"
           :disabled="props.disabled"
           :options="option"
           :trigger-props="{ autoFitPopupMinWidth: true }"
+          @change="(val) => changeType(val as string)"
         />
       </template>
     </a-input-number>
@@ -29,48 +31,53 @@
 
   const { t } = useI18n();
 
-  const props = defineProps<{ modelValue?: string; defaultValue?: string; disabled?: boolean }>();
+  const props = defineProps<{
+    defaultValue?: string;
+    disabled?: boolean;
+    allowEmpty?: boolean; // 允许为空
+  }>();
   const emit = defineEmits<{
-    (e: 'update:modelValue', value: string): void;
     (e: 'change', value: string): void;
   }>();
 
-  // 是否是enter触发
-  const isEnter = ref<boolean>(false);
+  const modelValue = defineModel<string>('modelValue', {
+    default: '',
+  });
 
   function parseValue(v?: string) {
     // 使用正则表达式匹配输入字符串，提取类型和值
     if (!v) {
-      return { type: 'H', value: undefined };
+      return { type: 'H', value: props.allowEmpty ? '' : 0 };
     }
-    const match = v.match(/^(\d+)([MYHD])$/);
+    const match = v.match(/^(\d+(\.\d+)?)([MYHD])$/);
     if (match) {
       const value = parseInt(match[1], 10); // 提取值并将其转换为整数
-      const type = match[2]; // 提取类型
+      const type = match[3]; // 提取类型
       return { type, value };
     }
     // 如果输入字符串不匹配格式，可以抛出错误或返回一个默认值
-    return { type: 'H', value: undefined };
+    return { type: 'H', value: props.allowEmpty ? '' : 0 };
   }
-  const current = reactive(parseValue(props.modelValue || props.defaultValue));
+  const numberValue = ref();
+  const typeValue = ref('H');
 
-  const handleEnter = (isBlur: boolean) => {
-    if (isBlur) {
-      if (!isEnter.value) {
-        // 不是由Enter触发的blur
-        const { value } = parseValue(props.modelValue || props.defaultValue);
-        current.value = value;
-      }
-      isEnter.value = false;
-    } else {
-      // 触发的是Enter
-      const result = current.value ? `${current.value}${current.type}` : '';
-      emit('update:modelValue', current.value ? `${current.value}${current.type}` : '');
-      emit('change', result);
-      isEnter.value = true;
-    }
-  };
-  const option = computed(() => [
+  function initNumberAndType() {
+    const { value, type } = parseValue(modelValue.value);
+    numberValue.value = value;
+    typeValue.value = type;
+  }
+
+  function changeNumber() {
+    const result =
+      numberValue.value === undefined ? props.defaultValue || '' : `${numberValue.value}${typeValue.value}`;
+    modelValue.value = result;
+    nextTick(() => {
+      initNumberAndType();
+      emit('change', modelValue.value);
+    });
+  }
+
+  const option = [
     {
       label: t('msTimeSelector.hour'),
       value: 'H',
@@ -87,13 +94,28 @@
       label: t('msTimeSelector.year'),
       value: 'Y',
     },
-  ]);
+  ];
+
+  function changeType(val: string) {
+    const result = numberValue.value === undefined ? props.defaultValue || '' : `${numberValue.value}${val}`;
+    modelValue.value = result;
+    nextTick(() => {
+      initNumberAndType();
+    });
+  }
+
   watch(
-    () => props.modelValue,
-    (v) => {
-      const { value, type } = parseValue(v);
-      current.value = value;
-      current.type = type;
+    () => modelValue.value,
+    (val) => {
+      if (!props.allowEmpty) {
+        numberValue.value = 0;
+        initNumberAndType();
+      } else if (val && Number(val) !== 0) {
+        initNumberAndType();
+      }
+    },
+    {
+      immediate: true,
     }
   );
 </script>
@@ -122,7 +144,6 @@
       border-right: 1px solid var(--color-text-n7);
       border-bottom: 1px solid var(--color-text-n7);
       border-radius: 0 4px 4px 0;
-      background: var(--color-text-n8);
     }
     :deep(.arco-select-focused) {
       border-color: rgb(var(--primary-7));

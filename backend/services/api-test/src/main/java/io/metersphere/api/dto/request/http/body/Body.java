@@ -1,5 +1,6 @@
 package io.metersphere.api.dto.request.http.body;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
@@ -20,7 +21,7 @@ public class Body {
      * 同时持久化多个类型的请求体
      */
     @NotBlank
-    private String bodyType;
+    private String bodyType = BodyType.NONE.name();
     /**
      * None 请求体
      * 当 bodyType 为 NONE 时，使用该字段
@@ -79,10 +80,12 @@ public class Body {
         bodyTypeClassMap.put(BodyType.BINARY, BinaryBody.class);
     }
 
+    @JsonIgnore
     public Class getBodyClassByType() {
         return bodyTypeClassMap.get(BodyType.valueOf(bodyType));
     }
 
+    @JsonIgnore
     public Object getBodyDataByType() {
         Map<BodyType, Object> boadyDataMap = new HashMap<>();
         boadyDataMap.put(BodyType.NONE, noneBody);

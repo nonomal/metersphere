@@ -43,13 +43,16 @@ public abstract class AbstractCustomFieldValidator {
 
     protected void validateRequired(TemplateCustomFieldDTO customField, String value) throws CustomFieldValidateException {
         if (customField.getRequired() && StringUtils.isBlank(value)) {
+            if (StringUtils.equalsIgnoreCase(customField.getInternalFieldKey(),"functional_priority")) {
+                return;
+            }
             CustomFieldValidateException.throwException(String.format(Translator.get("custom_field_required_tip"), customField.getFieldName()));
         }
     }
 
     protected void validateArrayRequired(TemplateCustomFieldDTO customField, String value) throws CustomFieldValidateException {
         if (customField.getRequired() && (StringUtils.isBlank(value) || StringUtils.equals(value, "[]"))) {
-            CustomFieldValidateException.throwException(String.format(Translator.get("custom_field_required_tip"), customField.getFieldId()));
+            CustomFieldValidateException.throwException(String.format(Translator.get("custom_field_required_tip"), customField.getFieldName()));
         }
     }
 
@@ -70,5 +73,9 @@ public abstract class AbstractCustomFieldValidator {
             LogUtils.error(e);
         }
         return new ArrayList<>();
+    }
+
+    public Object parse2Value(String value, TemplateCustomFieldDTO customField) {
+        return value;
     }
 }

@@ -2,46 +2,60 @@
   <div>
     <ms-base-table v-bind="propsRes" no-disable filter-icon-align-left v-on="propsEvent">
       <template #num="{ record }">
-        <span type="text" class="px-0">{{ record.num }}</span>
+        <div class="flex items-center justify-start">
+          <span type="text" class="px-0">{{ record.num }}</span>
+          <a-tooltip v-if="record.testPlanNum" :content="record.testPlanNum">
+            <MsTag
+              class="ml-2"
+              :self-style="{
+                border: `1px solid ${color}`,
+                color: color,
+                backgroundColor: 'var(--color-text-fff)',
+              }"
+            >
+              {{ record.testPlanNum }}
+            </MsTag>
+          </a-tooltip>
+        </div>
       </template>
-      <template #[FilterSlotNameEnum.API_TEST_SCENARIO_EXECUTE_RESULT]="{ filterContent }">
-        <executeStatus :status="filterContent.value" />
-      </template>
+
       <template #triggerMode="{ record }">
         <span>{{ t(TriggerModeLabel[record.triggerMode as keyof typeof TriggerModeLabel]) }}</span>
       </template>
       <template #status="{ record }">
-        <executeStatus :status="record.status" />
+        <ExecutionStatus :status="record.status" :module-type="ReportEnum.API_SCENARIO_REPORT" />
+      </template>
+      <template #executeStatus="{ record }">
+        <ExecStatus :status="record.execStatus" />
       </template>
       <template #operation="{ record }">
-        <div v-if="record.historyDeleted">
-          <a-tooltip :content="t('project.executionHistory.cleared')" position="top">
-            <MsButton
-              :disabled="
-                record.historyDeleted ||
-                !hasAnyPermission(['PROJECT_API_SCENARIO:READ+EXECUTE', 'PROJECT_API_REPORT:READ'])
-              "
-              class="!mr-0"
-              @click="showResult(record)"
-              >{{ t('apiScenario.executeHistory.execution.operation') }}
-            </MsButton>
-          </a-tooltip>
-        </div>
-        <div v-else>
+        <a-tooltip
+          v-if="record.execStatus !== ExecuteStatusEnum.PENDING"
+          :content="t('common.executionResultCleaned')"
+          position="top"
+          :disabled="!record.resultDeleted"
+        >
           <MsButton
             :disabled="
-              record.historyDeleted ||
+              record.resultDeleted ||
               !hasAnyPermission(['PROJECT_API_SCENARIO:READ+EXECUTE', 'PROJECT_API_REPORT:READ'])
             "
             class="!mr-0"
             @click="showResult(record)"
             >{{ t('apiScenario.executeHistory.execution.operation') }}
           </MsButton>
-        </div>
+        </a-tooltip>
       </template>
     </ms-base-table>
     <!-- 场景报告抽屉 -->
-    <caseAndScenarioReportDrawer v-model:visible="showScenarioReportVisible" is-scenario :report-id="reportId" />
+    <scenarioExecuteResultDrawer
+      v-if="showScenarioReportVisible"
+      :id="activeRecord.id"
+      v-model:visible="showScenarioReportVisible"
+      :user-name="activeRecord.createUser"
+      :status="activeRecord.execStatus"
+      :result="activeRecord.status"
+    />
   </div>
 </template>
 
@@ -53,19 +67,24 @@
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import { MsTableColumn } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
-  import caseAndScenarioReportDrawer from '@/views/api-test/components/caseAndScenarioReportDrawer.vue';
-  import ExecuteStatus from '@/views/api-test/scenario/components/executeStatus.vue';
+  import MsTag from '@/components/pure/ms-tag/ms-tag.vue';
+  import ExecutionStatus from '@/views/api-test/report/component/reportStatus.vue';
+  import ExecStatus from '@/views/taskCenter/component/execStatus.vue';
 
   import { getExecuteHistory } from '@/api/modules/api-test/scenario';
   import { useI18n } from '@/hooks/useI18n';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { ExecuteHistoryItem } from '@/models/apiTest/scenario';
-  import { ExecuteStatusFilters } from '@/enums/apiEnum';
-  import { TriggerModeLabel } from '@/enums/reportEnum';
+  import { ReportEnum, ReportStatus, TriggerModeLabel } from '@/enums/reportEnum';
   import { FilterSlotNameEnum } from '@/enums/tableFilterEnum';
+  import { ExecuteStatusEnum } from '@/enums/taskCenter';
 
   import { triggerModeOptions } from '@/views/api-test/report/utils';
+
+  const scenarioExecuteResultDrawer = defineAsyncComponent(
+    () => import('@/views/taskCenter/component/scenarioExecuteResultDrawer.vue')
+  );
 
   const tableQueryParams = ref<any>();
 
@@ -76,11 +95,11 @@
     readOnly?: boolean;
   }>();
 
-  const executeStatusFilters = computed(() => {
-    return Object.values(ExecuteStatusFilters).map((key) => {
+  const statusList = computed(() => {
+    return Object.keys(ReportStatus).map((key) => {
       return {
         value: key,
-        label: key,
+        label: t(ReportStatus[key].label),
       };
     });
   });
@@ -91,7 +110,7 @@
       dataIndex: 'id',
       slotName: 'num',
       fixed: 'left',
-      width: 150,
+      width: 280,
     },
     {
       title: 'apiScenario.executeHistory.execution.triggerMode',
@@ -104,11 +123,17 @@
       width: 100,
     },
     {
-      title: 'apiScenario.executeHistory.execution.status',
+      title: 'ms.taskCenter.executeStatus',
+      dataIndex: 'executeStatus',
+      slotName: 'executeStatus',
+      width: 150,
+    },
+    {
+      title: 'report.result',
       dataIndex: 'status',
       slotName: 'status',
       filterConfig: {
-        options: executeStatusFilters.value,
+        options: statusList.value,
         filterSlotName: FilterSlotNameEnum.API_TEST_SCENARIO_EXECUTE_RESULT,
       },
       width: 100,
@@ -171,9 +196,12 @@
   }
 
   const showScenarioReportVisible = ref(false);
-  const reportId = ref('');
+  const activeRecord = ref<ExecuteHistoryItem>({} as ExecuteHistoryItem);
+
+  const color = 'rgb(var(--primary-7))';
+
   function showResult(record: ExecuteHistoryItem) {
-    reportId.value = record.id;
+    activeRecord.value = record;
     showScenarioReportVisible.value = true;
   }
 

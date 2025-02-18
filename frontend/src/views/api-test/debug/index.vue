@@ -9,7 +9,6 @@
           @init="(val) => (folderTree = val)"
           @new-api="addDebugTab"
           @click-api-node="openApiTab"
-          @import="importDrawerVisible = true"
           @update-api-node="handleApiUpdateFromModuleTree"
           @delete-finish="handleDeleteFinish"
         />
@@ -23,6 +22,7 @@
               :readonly="!hasAnyPermission(['PROJECT_API_DEBUG:READ+ADD'])"
               at-least-one
               @add="addDebugTab"
+              @close="handleDebugTabClose"
             >
               <template #label="{ tab }">
                 <apiMethodName :method="tab.protocol === 'HTTP' ? tab.method : tab.protocol" class="mr-[4px]" />
@@ -35,10 +35,11 @@
             </MsEditableTab>
           </div>
           <div class="flex-1 overflow-hidden">
-            <debug
+            <requestComposition
               v-model:detail-loading="loading"
               v-model:request="activeDebug"
               :module-tree="folderTree"
+              :protocol-key="ProtocolKeyEnum.API_DEBUG_NEW_PROTOCOL"
               :create-api="addDebug"
               :update-api="updateDebug"
               :execute-api="executeDebug"
@@ -47,12 +48,14 @@
               :file-save-as-source-id="activeDebug.id"
               :file-save-as-api="transferFile"
               :file-module-options-api="getTransferOptions"
+              hide-json-schema
               :permission-map="{
                 execute: 'PROJECT_API_DEBUG:READ+EXECUTE',
                 update: 'PROJECT_API_DEBUG:READ+UPDATE',
                 create: 'PROJECT_API_DEBUG:READ+ADD',
                 saveASApi: 'PROJECT_API_DEFINITION:READ+ADD',
               }"
+              @import="importDialogVisible = true"
               @add-done="handleDebugAddDone"
             />
           </div>
@@ -60,38 +63,7 @@
       </template>
     </MsSplitBox>
   </MsCard>
-  <MsDrawer
-    v-model:visible="importDrawerVisible"
-    :width="680"
-    :ok-disabled="curlCode.trim() === ''"
-    disabled-width-drag
-    @cancel="curlCode = ''"
-    @confirm="handleCurlImportConfirm"
-  >
-    <template #title>
-      <a-tooltip position="right" :content="t('apiTestDebug.importByCURLTip')">
-        <span
-          >{{ t('apiTestDebug.importByCURL') }}
-          <icon-exclamation-circle
-            class="ml-[4px] text-[var(--color-text-brand)] hover:text-[rgb(var(--primary-5))]"
-            size="16"
-          />
-        </span>
-      </a-tooltip>
-    </template>
-    <div class="h-full">
-      <MsCodeEditor
-        v-if="importDrawerVisible"
-        v-model:model-value="curlCode"
-        theme="MS-text"
-        height="100%"
-        :language="LanguageEnum.PLAINTEXT"
-        :show-theme-change="false"
-        :show-full-screen="false"
-      >
-      </MsCodeEditor>
-    </div>
-  </MsDrawer>
+  <importCurlDialog v-model:visible="importDialogVisible" @done="handleImportCurlDone" />
 </template>
 
 <script lang="ts" setup>
@@ -102,15 +74,13 @@
   import { cloneDeep } from 'lodash-es';
 
   import MsCard from '@/components/pure/ms-card/index.vue';
-  import MsCodeEditor from '@/components/pure/ms-code-editor/index.vue';
-  import { LanguageEnum } from '@/components/pure/ms-code-editor/types';
-  import MsDrawer from '@/components/pure/ms-drawer/index.vue';
   import MsEditableTab from '@/components/pure/ms-editable-tab/index.vue';
   import { TabItem } from '@/components/pure/ms-editable-tab/types';
   import MsSplitBox from '@/components/pure/ms-split-box/index.vue';
   import moduleTree from './components/moduleTree.vue';
   import apiMethodName from '@/views/api-test/components/apiMethodName.vue';
-  import debug, { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
+  import importCurlDialog from '@/views/api-test/components/importCurlDialog.vue';
+  import requestComposition, { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
 
   import { localExecuteApiDebug } from '@/api/modules/api-test/common';
   import {
@@ -124,11 +94,13 @@
   } from '@/api/modules/api-test/debug';
   import { useI18n } from '@/hooks/useI18n';
   import useLeaveTabUnSaveCheck from '@/hooks/useLeaveTabUnSaveCheck';
-  import { parseCurlScript } from '@/utils';
+  import useRequestCompositionStore from '@/store/modules/api/requestComposition';
   import { hasAnyPermission } from '@/utils/permission';
 
+  import { CurlParseResult } from '@/models/apiTest/common';
   import { ModuleTreeNode } from '@/models/common';
   import {
+    ProtocolKeyEnum,
     RequestAuthType,
     RequestComposition,
     RequestContentTypeEnum,
@@ -138,15 +110,15 @@
   } from '@/enums/apiEnum';
 
   import { defaultBodyParams, defaultResponse } from '../components/config';
-  import { parseRequestBodyFiles } from '../components/utils';
+  import { parseCurlBody, parseRequestBodyFiles } from '../components/utils';
 
   const route = useRoute();
   const { t } = useI18n();
+  const requestCompositionStore = useRequestCompositionStore();
 
   const moduleTreeRef = ref<InstanceType<typeof moduleTree>>();
   const folderTree = ref<ModuleTreeNode[]>([]);
-  const importDrawerVisible = ref(false);
-  const curlCode = ref('');
+  const importDialogVisible = ref(false);
   const loading = ref(false);
 
   async function handleDebugAddDone() {
@@ -155,11 +127,12 @@
   }
 
   const initDefaultId = `debug-${Date.now()}`;
+  const localProtocol = localStorage.getItem(ProtocolKeyEnum.API_DEBUG_NEW_PROTOCOL);
   const defaultDebugParams: RequestParam = {
     type: 'api',
     id: initDefaultId,
     moduleId: 'root',
-    protocol: 'HTTP',
+    protocol: localProtocol || 'HTTP',
     url: '',
     activeTab: RequestComposition.HEADER,
     label: t('apiTestDebug.newApi'),
@@ -167,7 +140,15 @@
     method: RequestMethods.GET,
     unSaved: false,
     headers: [],
-    body: cloneDeep(defaultBodyParams),
+    body: {
+      ...cloneDeep(defaultBodyParams),
+      jsonBody: {
+        jsonValue: '',
+        enableJsonSchema: false,
+        jsonSchemaTableData: [],
+        jsonSchemaTableSelectedRowKeys: [],
+      },
+    },
     query: [],
     rest: [],
     polymorphicName: '',
@@ -229,10 +210,12 @@
 
   function addDebugTab(defaultProps?: Partial<TabItem>) {
     const id = `debug-${Date.now()}`;
+    const protocol = localStorage.getItem(ProtocolKeyEnum.API_DEBUG_NEW_PROTOCOL);
     debugTabs.value.push({
       ...cloneDeep(defaultDebugParams),
       id,
       isNew: !defaultProps?.id, // 新开的tab标记为前端新增的调试，因为此时都已经有id了；但是如果是查看打开的会有携带id
+      protocol: protocol || activeDebug.value.protocol || defaultDebugParams.protocol, // 新开的tab默认使用当前激活的tab的协议
       ...defaultProps,
     });
     activeDebug.value = debugTabs.value[debugTabs.value.length - 1];
@@ -274,20 +257,22 @@
     }
   }
 
-  function handleCurlImportConfirm() {
-    const { url, headers, queryParameters, method } = parseCurlScript(curlCode.value);
+  function handleImportCurlDone(res: CurlParseResult) {
+    const { url, method, headers, queryParams, bodyType, body } = res;
+    const requestBody = parseCurlBody(bodyType, body);
     addDebugTab({
       url,
       method: method?.toUpperCase() || RequestMethods.GET,
       headers:
-        headers?.map((e) => ({
+        Object.keys(headers)?.map((e) => ({
           contentType: RequestContentTypeEnum.TEXT,
           description: '',
           enable: true,
-          ...e,
+          key: e,
+          value: headers[e],
         })) || [],
       query:
-        queryParameters?.map((e) => ({
+        Object.keys(queryParams)?.map((e) => ({
           paramType: RequestParamsType.STRING,
           description: '',
           required: false,
@@ -295,11 +280,12 @@
           minLength: undefined,
           encode: false,
           enable: true,
-          ...e,
+          key: e,
+          value: queryParams[e],
         })) || [],
+      body: requestBody,
     });
-    curlCode.value = '';
-    importDrawerVisible.value = false;
+    importDialogVisible.value = false;
     nextTick(() => {
       handleActiveDebugChange();
     });
@@ -355,23 +341,14 @@
     }
   }
 
-  /**
-  async function openSaveAsApiModal(node: MsTreeNodeData) {
-    try {
-      const [modules] = await getModuleTreeOnlyModules({
-        keyword: '',
-        protocol: '',
-        projectId: appStore.currentProjectId,
-        moduleIds: [],
-      });
-      apiModules.value = modules;
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.log(error);
-    } finally {
+  function handleDebugTabClose(item: TabItem) {
+    requestCompositionStore.removePluginFormMapItem(item.id);
+    const closingIndex = debugTabs.value.findIndex((e) => e.id === item.id);
+    if (closingIndex > -1) {
+      debugTabs.value.splice(closingIndex, 1);
     }
   }
-  */
+
   onMounted(() => {
     if (route.query.id) {
       openApiTab(route.query.id as string);

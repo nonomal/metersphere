@@ -4,13 +4,7 @@
       <span type="text" class="one-line-text cursor-pointer px-0 text-[rgb(var(--primary-5))]">{{ record.num }}</span>
     </template>
     <template #name="{ record }">
-      <div class="one-line-text flex max-w-[150px] flex-nowrap items-center"> {{ characterLimit(record.name) }}</div>
-      <a-popover title="" position="right" style="width: 480px">
-        <div class="ml-1 text-[rgb(var(--primary-5))]">{{ t('caseManagement.featureCase.preview') }}</div>
-        <template #content>
-          <div v-dompurify-html="record.content" class="markdown-body" style="margin-left: 48px"> </div>
-        </template>
-      </a-popover>
+      <BugNamePopover :name="record.name" :content="record.content" />
     </template>
     <template #statusName="{ record }">
       <div class="one-line-text">{{ record.statusName || '-' }}</div>
@@ -20,13 +14,18 @@
         <div class="one-line-text max-w-[200px]">{{ characterLimit(record.handleUserName) || '-' }}</div>
       </a-tooltip>
     </template>
+    <template #createUserName="{ record }">
+      <a-tooltip :content="record.handleUserName">
+        <div class="one-line-text">{{ record.createUserName || '-' }}</div>
+      </a-tooltip>
+    </template>
 
     <template #operation="{ record }">
       <MsButton v-permission="['FUNCTIONAL_CASE:READ+UPDATE']" @click="cancelLink(record.id)">{{
         t('caseManagement.featureCase.cancelLink')
       }}</MsButton>
     </template>
-    <template v-if="(keyword || '').trim() === ''" #empty>
+    <template v-if="(keyword || '').trim() === '' && props.canEdit" #empty>
       <div class="flex w-full items-center justify-center text-[var(--color-text-4)]">
         {{ t('caseManagement.featureCase.tableNoDataWidthComma') }}
         <span v-if="hasAnyPermission(['FUNCTIONAL_CASE:READ+UPDATE', 'PROJECT_BUG:READ+ADD'])">{{
@@ -42,7 +41,7 @@
         </MsButton>
         <span v-if="hasAnyPermission(['PROJECT_BUG:READ+ADD'])">{{ t('caseManagement.featureCase.or') }}</span>
         <MsButton v-permission="['PROJECT_BUG:READ+ADD']" class="ml-[8px]" @click="createDefect">
-          {{ t('caseManagement.featureCase.createDefect') }}
+          {{ t('testPlan.featureCase.noBugDataNewBug') }}
         </MsButton>
       </div>
     </template>
@@ -57,6 +56,7 @@
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import type { MsTableColumn } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
+  import BugNamePopover from '@/views/case-management/caseManagementFeature/components/tabContent/tabBug/bugNamePopover.vue';
 
   import { useI18n } from '@/hooks/useI18n';
   import { useAppStore } from '@/store';
@@ -67,14 +67,20 @@
 
   const appStore = useAppStore();
   const { t } = useI18n();
-  const props = defineProps<{
-    caseId: string;
-    keyword: string;
-    bugColumns: MsTableColumn;
-    bugTotal: number; // 平台缺陷总数决定是否新建还是关联
-    loadParams?: Record<string, any>;
-    loadBugListApi: (params: TableQueryParams) => Promise<CommonList<Record<string, any>>>; // 获取列表请求函数
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      caseId: string;
+      keyword: string;
+      bugColumns: MsTableColumn;
+      bugTotal: number; // 平台缺陷总数决定是否新建还是关联
+      loadParams?: Record<string, any>;
+      loadBugListApi: (params: TableQueryParams) => Promise<CommonList<Record<string, any>>>; // 获取列表请求函数
+      canEdit?: boolean;
+    }>(),
+    {
+      canEdit: true,
+    }
+  );
 
   const emit = defineEmits<{
     (e: 'link'): void;
@@ -91,9 +97,8 @@
     setLoadListParams: setLinkListParams,
   } = useTable(props.loadBugListApi, {
     columns: props.bugColumns,
-    scroll: { x: 'auto' },
+    scroll: { x: '100%' },
     heightUsed: 340,
-    enableDrag: false,
   });
 
   const innerKeyword = useVModel(props, 'keyword', emit);
@@ -149,4 +154,12 @@
   });
 </script>
 
-<style scoped></style>
+<!-- <style lang="less">
+  .bug-content-popover {
+    .arco-popover-content {
+      overflow: auto;
+      max-height: 400px;
+      .ms-scroll-bar();
+    }
+  }
+</style> -->

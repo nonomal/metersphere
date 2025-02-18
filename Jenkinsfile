@@ -6,9 +6,6 @@ pipeline {
             label 'metersphere'
         }
     }
-    triggers {
-        pollSCM('50 * * * *')
-    }
     environment {
         IMAGE_PREFIX = 'registry.fit2cloud.com/metersphere'
         IMAGE_NAME = 'metersphere'
@@ -66,7 +63,8 @@ pipeline {
                         LOCAL_REPOSITORY=$(./mvnw help:evaluate -Dexpression=settings.localRepository --settings ./settings.xml -q -DforceStdout)
                         rm -rf $LOCAL_REPOSITORY/io/metersphere/metersphere-jmeter-assertions/*
                         rm -rf $LOCAL_REPOSITORY/io/metersphere/metersphere-jmeter-functions/*
-                        
+                        rm -rf $LOCAL_REPOSITORY/io/metersphere/monitoring-engine/*
+
                         ./mvnw clean install -Drevision=${REVISION} -DskipTests --settings ./settings.xml
                         mkdir -p backend/app/target/dependency && (cd backend/app/target/dependency && jar -xf ../*.jar);
                     '''
@@ -90,34 +88,7 @@ pipeline {
                         cp -rf $LOCAL_REPOSITORY/io/metersphere/$library/${REVISION}/$library-${REVISION}.jar backend/app/target/dependency/BOOT-INF/lib/
                     done
     
-                    docker --config /home/metersphere/.docker buildx build --no-cache --build-arg MS_VERSION=\${TAG_NAME:-\$BRANCH_NAME}-\${GIT_COMMIT:0:8} -t ${IMAGE_PREFIX}/${IMAGE_NAME}:\${TAG_NAME:-\$BRANCH_NAME}-community --platform linux/amd64,linux/arm64 . --push
-                    '''
-                }
-            }
-        }
-        stage('Enterprise build & push') {
-            when { environment name: 'BUILD_SDK', value: 'false' }
-            steps {
-                configFileProvider([configFile(fileId: 'metersphere-maven', targetLocation: 'settings.xml')]) {
-                    sh '''#!/bin/bash -xe
-                    export JAVA_HOME=/opt/jdk-21
-                    export CLASSPATH=$JAVA_HOME/lib:$CLASSPATH
-                    export PATH=$JAVA_HOME/bin:/opt/apache-maven-3.8.3/bin:$PATH
-                    java -version
-                    LOCAL_REPOSITORY=$(./mvnw help:evaluate -Dexpression=settings.localRepository --settings ./settings.xml -q -DforceStdout)
-                    # echo $LOCAL_REPOSITORY
-
-                    libraries=('metersphere-api-test-impl' 'general-xpack-impl')
-                    for library in "${libraries[@]}";
-                    do
-                        cp -rf $LOCAL_REPOSITORY/io/metersphere/$library/${REVISION}/$library-${REVISION}.jar backend/app/target/dependency/BOOT-INF/lib/
-                        #
-                        rm -rf $LOCAL_REPOSITORY/io/metersphere/$library/${REVISION}/target/lib/*
-                        ./mvnw dependency:copy-dependencies -DincludeScope=runtime --file $LOCAL_REPOSITORY/io/metersphere/$library/${REVISION}/$library-${REVISION}.pom --settings ./settings.xml
-                        cp -rf $LOCAL_REPOSITORY/io/metersphere/$library/${REVISION}/target/lib/* backend/app/target/dependency/BOOT-INF/lib/
-                    done
-
-                    docker --config /home/metersphere/.docker buildx build --no-cache --build-arg MS_VERSION=\${TAG_NAME:-\$BRANCH_NAME}-\${GIT_COMMIT:0:8} -t ${IMAGE_PREFIX}/${IMAGE_NAME}:\${TAG_NAME:-\$BRANCH_NAME}-enterprise --platform linux/amd64,linux/arm64 . --push
+                    docker --config /home/metersphere/.docker buildx build --no-cache --build-arg MS_VERSION=\${TAG_NAME:-\$BRANCH_NAME}-\${GIT_COMMIT:0:8} -t ${IMAGE_PREFIX}/${IMAGE_NAME}:\${TAG_NAME:-\$BRANCH_NAME} --platform linux/amd64,linux/arm64 . --push
                     '''
                 }
             }

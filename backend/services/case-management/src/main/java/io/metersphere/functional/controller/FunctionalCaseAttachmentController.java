@@ -23,6 +23,7 @@ import io.metersphere.system.log.annotation.Log;
 import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.security.CheckOwner;
+import io.metersphere.system.service.CommonFileService;
 import io.metersphere.system.utils.Pager;
 import io.metersphere.system.utils.SessionUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -59,10 +60,19 @@ public class FunctionalCaseAttachmentController {
     @Resource
     private FileModuleService fileModuleService;
 
+    @Resource
+    private CommonFileService commonFileService;
+
 
     @PostMapping("/page")
     @Operation(summary = "用例管理-功能用例-附件-关联文件列表分页接口")
-    @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ)
+    @RequiresPermissions(value = {
+            PermissionConstants.FUNCTIONAL_CASE_READ,
+            PermissionConstants.PROJECT_API_DEBUG_READ,
+            PermissionConstants.PROJECT_API_DEFINITION_READ,
+            PermissionConstants.PROJECT_API_DEFINITION_CASE_READ,
+            PermissionConstants.PROJECT_API_SCENARIO_READ,
+    }, logical = Logical.OR)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public Pager<List<FileInformationResponse>> page(@Validated @RequestBody FileMetadataTableRequest request) {
         return fileMetadataService.page(request);
@@ -70,7 +80,7 @@ public class FunctionalCaseAttachmentController {
 
 
     @PostMapping("/preview")
-    @Operation(summary = "用例管理-功能用例-附件/副文本(原图/文件)-文件预览")
+    @Operation(summary = "用例管理-功能用例-附件/富文本(原图/文件)-文件预览")
     @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public ResponseEntity<byte[]> preview(@Validated @RequestBody FunctionalCaseFileRequest request) throws Exception {
@@ -84,7 +94,7 @@ public class FunctionalCaseAttachmentController {
     }
 
     @PostMapping("/download")
-    @Operation(summary = "用例管理-功能用例-附件/副文本(原图/文件)-文件下载")
+    @Operation(summary = "用例管理-功能用例-附件/富文本(原图/文件)-文件下载")
     @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public ResponseEntity<byte[]> download(@Validated @RequestBody FunctionalCaseFileRequest request) throws Exception {
@@ -112,7 +122,7 @@ public class FunctionalCaseAttachmentController {
     @CheckOwner(resourceId = "#projectId", resourceType = "project")
     public String update(@PathVariable String projectId, @PathVariable String id) {
         FileLogRecord fileLogRecord = FileLogRecord.builder()
-                .logModule(OperationLogModule.FUNCTIONAL_CASE)
+                .logModule(OperationLogModule.CASE_MANAGEMENT_CASE_CASE)
                 .operator(SessionUtils.getUserId())
                 .projectId(projectId)
                 .build();
@@ -128,7 +138,7 @@ public class FunctionalCaseAttachmentController {
         byte[] fileByte = functionalCaseAttachmentService.getFileByte(request);
         FunctionalCaseAttachment attachment = functionalCaseAttachmentService.getAttachment(request);
         FileLogRecord fileLogRecord = FileLogRecord.builder()
-                .logModule(OperationLogModule.FUNCTIONAL_CASE)
+                .logModule(OperationLogModule.CASE_MANAGEMENT_CASE_CASE)
                 .operator(SessionUtils.getUserId())
                 .projectId(request.getProjectId())
                 .build();
@@ -178,14 +188,14 @@ public class FunctionalCaseAttachmentController {
     }
 
     @PostMapping("/upload/temp/file")
-    @Operation(summary = "用例管理-功能用例-上传副文本里所需的文件资源，并返回文件ID")
+    @Operation(summary = "用例管理-功能用例-上传富文本里所需的文件资源，并返回文件ID")
     @RequiresPermissions(logical = Logical.OR, value = {PermissionConstants.FUNCTIONAL_CASE_READ_ADD, PermissionConstants.FUNCTIONAL_CASE_READ_UPDATE, PermissionConstants.FUNCTIONAL_CASE_READ_COMMENT})
     public String upload(@RequestParam("file") MultipartFile file) throws Exception {
-        return functionalCaseAttachmentService.uploadTemp(file);
+        return commonFileService.uploadTempImgFile(file);
     }
 
     @GetMapping(value = "/download/file/{projectId}/{fileId}/{compressed}")
-    @Operation(summary = "用例管理-功能用例-预览上传的副文本里所需的文件资源原图")
+    @Operation(summary = "用例管理-功能用例-预览上传的富文本里所需的文件资源原图")
     public ResponseEntity<byte[]> downloadImgById(@PathVariable String projectId, @PathVariable String fileId, @Schema(description = "查看压缩图片", requiredMode = Schema.RequiredMode.REQUIRED)
     @PathVariable("compressed") boolean compressed) {
         return functionalCaseAttachmentService.downloadImgById(projectId, fileId, compressed);

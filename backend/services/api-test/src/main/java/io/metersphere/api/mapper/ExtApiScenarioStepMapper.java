@@ -13,9 +13,15 @@ import java.util.List;
 public interface ExtApiScenarioStepMapper {
     List<String> getStepIdsByScenarioId(@Param("scenarioId") String scenarioId);
 
+    /**
+     * 这个 sql 执行时，会清理一级缓存
+     * 避免多次调用后数据异常
+     * @param scenarioIds
+     * @return
+     */
     List<ApiScenarioStepDTO> getStepDTOByScenarioIds(@Param("scenarioIds") List<String> scenarioIds);
 
-    List<ApiScenarioCsvStep> getCsvStepByScenarioId(@Param("scenarioId") String scenarioId);
+    List<ApiScenarioCsvStep> getCsvStepByScenarioIds(@Param("scenarioIds") List<String> scenarioId);
 
     /**
      * 查询有步骤详情的请求类型的步骤
@@ -25,4 +31,12 @@ public interface ExtApiScenarioStepMapper {
      * @return
      */
     List<String> getHasBlobRequestStepIds(@Param("scenarioId")  String scenarioId);
+
+    List<String> selectResourceId(@Param("projectId") String projectId, @Param("stepType") String stepType);
+
+    List<String> selectApiResourceId(@Param("projectId") String projectId, @Param("stepType") String stepType, List<String> protocols);
+
+    List<String> selectApiCaseResourceId(@Param("projectId") String projectId, @Param("stepType") String stepType, List<String> protocols);
+
+    List<String> selectCustomRequestConfigByProjectId(String projectId);
 }

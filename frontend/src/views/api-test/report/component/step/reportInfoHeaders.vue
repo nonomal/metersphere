@@ -1,14 +1,23 @@
 <template>
-  <div class="mb-4 flex h-[36px] items-center justify-between">
+  <div class="mb-[16px] flex items-center justify-between">
     <div class="flex items-center">
-      <div class="mr-2 font-medium leading-[36px]">{{ t('report.detail.api.reportDetail') }}</div>
-      <a-radio-group v-model:model-value="innerActiveTab" type="button" size="small">
+      <div class="mr-2 font-medium">{{ t('report.detail.api.reportDetail') }}</div>
+      <a-radio-group v-if="!props.isExport" v-model:model-value="innerActiveTab" type="button" size="small">
         <a-radio v-for="item of methods" :key="item.value" :value="item.value">
           {{ t(item.label) }}
         </a-radio>
       </a-radio-group>
     </div>
-    <div class="w-[240px]">
+    <div v-if="!props.isExport" class="grid grid-cols-2">
+      <a-input-search
+        v-model:model-value="innerKeywordName"
+        :placeholder="t('report.detail.api.placeHolderName')"
+        allow-clear
+        class="mx-[8px] w-[240px]"
+        @search="searchList"
+        @press-enter="searchList"
+        @clear="reset"
+      />
       <MsCascader
         v-model:model-value="innerKeyword"
         mode="native"
@@ -58,13 +67,24 @@
   const props = defineProps<{
     activeTab: 'tiled' | 'tab';
     keyword: string;
+    keywordName: string;
     showType: 'API' | 'CASE';
+    isExport?: boolean; // 是否是导出pdf预览
   }>();
 
-  const emit = defineEmits(['update:activeTab', 'update:keyword']);
+  const emit = defineEmits(['update:activeTab', 'update:keyword', 'update:keywordName', 'search', 'reset']);
 
   const innerActiveTab = useVModel(props, 'activeTab', emit);
   const innerKeyword = useVModel(props, 'keyword', emit);
+  const innerKeywordName = useVModel(props, 'keywordName', emit);
+
+  function searchList() {
+    emit('search');
+  }
+
+  function reset() {
+    emit('reset');
+  }
 
   const methods = ref([
     {
@@ -80,19 +100,19 @@
   const createChildOption = (key: string) => [
     {
       value: `${key}-SUCCESS`,
-      label: t(`report.detail.successCount`),
+      label: t(`common.pass`),
     },
     {
       value: `${key}-FAKE_ERROR`,
-      label: t(`report.detail.fakeErrorCount`),
+      label: t(`common.fakeError`),
     },
     {
       value: `${key}-ERROR`,
-      label: t(`report.detail.errorCount`),
+      label: t(`common.fail`),
     },
     {
       value: `${key}-PENDING`,
-      label: t(`report.detail.pendingCount`),
+      label: t(`common.unExecute`),
     },
     {
       value: `${key}-scriptIdentifier`,

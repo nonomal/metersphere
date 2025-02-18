@@ -3,7 +3,7 @@
     <div class="mb-4 flex items-center justify-between">
       <div>
         <a-button
-          v-permission.all="['SYSTEM_USER:READ+ADD', 'SYSTEM_USER_ROLE:READ']"
+          v-permission.all="['SYSTEM_USER:READ+ADD']"
           class="mr-3"
           type="primary"
           @click="showUserModal('create')"
@@ -11,19 +11,14 @@
           {{ t('system.user.createUser') }}
         </a-button>
         <a-button
-          v-permission.all="['SYSTEM_USER:READ+INVITE', 'SYSTEM_USER_ROLE:READ']"
+          v-permission.all="['SYSTEM_USER:READ+INVITE']"
           class="mr-3"
           type="outline"
           @click="showEmailInviteModal"
         >
           {{ t('system.user.emailInvite') }}
         </a-button>
-        <a-button
-          v-permission="['SYSTEM_USER:READ+IMPORT', 'SYSTEM_USER_ROLE:READ']"
-          class="mr-3"
-          type="outline"
-          @click="showImportModal"
-        >
+        <a-button v-permission.all="['SYSTEM_USER:READ+IMPORT']" class="mr-3" type="outline" @click="showImportModal">
           {{ t('system.user.importUser') }}
         </a-button>
       </div>
@@ -42,6 +37,7 @@
       :action-config="tableBatchActions"
       v-on="propsEvent"
       @batch-action="handleTableBatch"
+      @enable-change="enableChange"
     >
       <template #userGroup="{ record }">
         <MsTagGroup
@@ -49,6 +45,8 @@
           :tag-list="record.userRoleList"
           type="primary"
           theme="outline"
+          allow-edit
+          show-table
           @click="handleTagClick(record)"
         />
         <MsSelect
@@ -65,7 +63,7 @@
             })"
           value-key="id"
           label-key="name"
-          class="w-full"
+          class="w-full max-w-[300px]"
           allow-clear
           :multiple="true"
           :at-least-one="true"
@@ -76,9 +74,6 @@
       </template>
       <template #action="{ record }">
         <template v-if="!record.enable">
-          <MsButton v-permission="['SYSTEM_USER:READ+UPDATE']" @click="enableUser(record)">
-            {{ t('system.user.enable') }}
-          </MsButton>
           <MsButton v-permission="['SYSTEM_USER:READ+DELETE']" @click="deleteUser(record)">
             {{ t('system.user.delete') }}
           </MsButton>
@@ -139,6 +134,7 @@
               label: (val as Record<string, any>).name,
               value: val,
             })"
+          class="w-full"
           :object-value="true"
           value-key="id"
           label-key="name"
@@ -197,7 +193,7 @@
     </template>
     <div v-if="importResult === 'success'" class="flex flex-col items-center justify-center">
       <icon-check-circle-fill class="text-[32px] text-[rgb(var(--success-6))]" />
-      <div class="mb-[8px] mt-[16px] text-[16px] font-medium leading-[24px] text-[var(--color-text-000)]">
+      <div class="mb-[8px] mt-[16px] text-[16px] font-medium leading-[24px] text-[var(--color-text-1)]">
         {{ t('system.user.importSuccess') }}
       </div>
       <div class="sub-text">
@@ -309,8 +305,8 @@
   import MsBatchForm from '@/components/business/ms-batch-form/index.vue';
   import type { FormItemModel } from '@/components/business/ms-batch-form/types';
   import MsSelect from '@/components/business/ms-select';
+  import inviteModal from '../components/inviteModal.vue';
   import batchModal from './components/batchModal.vue';
-  import inviteModal from './components/inviteModal.vue';
 
   import {
     batchCreateUser,
@@ -346,37 +342,56 @@
 
   const columns: MsTableColumn = [
     {
-      title: 'system.user.tableColumnEmail',
+      title: 'system.user.userName',
       dataIndex: 'email',
       showTooltip: true,
       sortIndex: 0,
+      columnSelectorDisabled: true,
     },
     {
       title: 'system.user.tableColumnName',
       dataIndex: 'name',
       showTooltip: true,
       sortIndex: 1,
+      columnSelectorDisabled: true,
+    },
+    {
+      title: 'system.user.tableColumnEmail',
+      dataIndex: 'email',
+      showTooltip: true,
+      sortIndex: 2,
+      columnSelectorDisabled: true,
     },
     {
       title: 'system.user.tableColumnPhone',
       dataIndex: 'phone',
+      showDrag: true,
+      showTooltip: true,
+      width: 140,
     },
     {
       title: 'system.user.tableColumnOrg',
       dataIndex: 'organizationList',
       isTag: true,
+      showDrag: true,
+      tagPrimary: 'default',
       width: 300,
     },
     {
       title: 'system.user.tableColumnUserGroup',
       dataIndex: 'userRoleList',
       slotName: 'userGroup',
+      isTag: true,
+      showDrag: true,
+      allowEditTag: true,
       width: 300,
     },
     {
       title: 'system.user.tableColumnStatus',
       slotName: 'enable',
       dataIndex: 'enable',
+      showDrag: true,
+      permission: ['SYSTEM_USER:READ+UPDATE'],
     },
     {
       title: hasOperationSysUserPermission.value ? 'system.user.tableColumnActions' : '',
@@ -533,6 +548,14 @@
     });
   }
 
+  function enableChange(record: UserListItem, newValue: string | number | boolean) {
+    if (newValue) {
+      enableUser(record);
+    } else {
+      disabledUser(record);
+    }
+  }
+
   /**
    * 删除用户
    */
@@ -577,11 +600,6 @@
     {
       label: 'system.user.resetPassword',
       eventTag: 'resetPassword',
-      permission: ['SYSTEM_USER:READ+UPDATE'],
-    },
-    {
-      label: 'system.user.disable',
-      eventTag: 'disabled',
       permission: ['SYSTEM_USER:READ+UPDATE'],
     },
     {
@@ -695,9 +713,6 @@
       case 'resetPassword':
         resetPassword(record);
         break;
-      case 'disabled':
-        disabledUser(record);
-        break;
       case 'delete':
         deleteUser(record);
         break;
@@ -732,11 +747,9 @@
 
   async function init() {
     try {
-      if (hasAnyPermission(['SYSTEM_USER_ROLE:READ'])) {
-        userGroupOptions.value = await getSystemRoles();
-        if (userGroupOptions.value.length) {
-          userForm.value.userGroup = userGroupOptions.value.filter((e: SystemRole) => e.selected === true);
-        }
+      userGroupOptions.value = await getSystemRoles();
+      if (userGroupOptions.value.length) {
+        userForm.value.userGroup = userGroupOptions.value.filter((e: SystemRole) => e.selected === true);
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -824,14 +837,14 @@
   const batchFormRef = ref<InstanceType<typeof MsBatchForm>>();
   const batchFormModels: Ref<FormItemModel[]> = ref([
     {
-      filed: 'name',
+      field: 'name',
       type: 'input',
       label: 'system.user.createUserName',
       rules: [{ required: true, message: t('system.user.createUserNameNotNull') }, { validator: checkUerName }],
       placeholder: 'system.user.createUserNamePlaceholder',
     },
     {
-      filed: 'email',
+      field: 'email',
       type: 'input',
       label: 'system.user.createUserEmail',
       rules: [
@@ -842,7 +855,7 @@
       placeholder: 'system.user.createUserEmailPlaceholder',
     },
     {
-      filed: 'phone',
+      field: 'phone',
       type: 'input',
       label: 'system.user.createUserPhone',
       rules: [{ validator: checkUerPhone }],

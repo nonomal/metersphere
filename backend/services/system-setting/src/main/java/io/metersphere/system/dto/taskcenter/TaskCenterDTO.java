@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.util.List;
 
 /**
  * @author: LAN
@@ -24,6 +25,8 @@ public class TaskCenterDTO implements Serializable {
 
     @Schema(description = "项目id")
     private String projectId;
+    @Schema(description = "组织id")
+    private String organizationId;
 
     @Schema(description = "报告id")
     private String id;
@@ -43,8 +46,11 @@ public class TaskCenterDTO implements Serializable {
     @Schema(description = "资源池名称")
     private String poolName;
 
-    @Schema(description = "执行状态/SUCCESS/ERROR")
+    @Schema(description = "执行结果/SUCCESS/ERROR")
     private String status;
+
+    @Schema(description = "执行状态/SUCCESS/ERROR")
+    private String execStatus;
 
     @Schema(description = "脚本标识")
     private String scriptIdentifier;
@@ -61,5 +67,9 @@ public class TaskCenterDTO implements Serializable {
     @Schema(description = "执行历史是否被清理")
     private boolean historyDeleted = false;
 
+    @Schema(description = "计划组ID")
+    private String parent;
 
+    @Schema(description = "计划组子任务")
+    private List<TaskCenterDTO> children;
 }

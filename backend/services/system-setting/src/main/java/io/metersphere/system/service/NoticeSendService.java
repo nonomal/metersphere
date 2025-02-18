@@ -8,7 +8,9 @@ import io.metersphere.system.notice.NoticeModel;
 import io.metersphere.system.notice.constants.NoticeConstants;
 import io.metersphere.system.notice.sender.AbstractNoticeSender;
 import io.metersphere.system.notice.sender.impl.*;
+import io.metersphere.system.notice.utils.MessageTemplateUtils;
 import jakarta.annotation.Resource;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.SerializationUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.i18n.LocaleContextHolder;
@@ -17,6 +19,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 @Component
 public class NoticeSendService {
@@ -74,7 +77,11 @@ public class NoticeSendService {
                     .forEach(messageDetail -> {
                         MessageDetail m = SerializationUtils.clone(messageDetail);
                         NoticeModel n = SerializationUtils.clone(noticeModel);
-                        this.getNoticeSender(m).send(m, n);
+                        try {
+                            this.getNoticeSender(m).send(m, n);
+                        } catch (Exception e) {
+                            LogUtils.error(e);
+                        }
                     });
 
         } catch (Exception e) {
@@ -85,9 +92,9 @@ public class NoticeSendService {
     private static void setLanguage(NoticeModel noticeModel) {
         String language = (String) noticeModel.getParamMap().get("Language");
         Locale locale = Locale.SIMPLIFIED_CHINESE;
-        if (StringUtils.containsIgnoreCase("US",language)) {
+        if (StringUtils.containsIgnoreCase(language,"US")) {
             locale = Locale.US;
-        } else if (StringUtils.containsIgnoreCase("TW",language)){
+        } else if (StringUtils.containsIgnoreCase(language,"TW")){
             locale = Locale.TAIWAN;
         }
         LocaleContextHolder.setLocale(locale);
@@ -95,9 +102,9 @@ public class NoticeSendService {
 
     public void setLanguage(String language) {
         Locale locale = Locale.SIMPLIFIED_CHINESE;
-        if (StringUtils.containsIgnoreCase("US",language)) {
+        if (StringUtils.containsIgnoreCase(language,"US")) {
             locale = Locale.US;
-        } else if (StringUtils.containsIgnoreCase("TW",language)){
+        } else if (StringUtils.containsIgnoreCase(language,"TW")){
             locale = Locale.TAIWAN;
         }
         LocaleContextHolder.setLocale(locale);
@@ -126,7 +133,11 @@ public class NoticeSendService {
                     .forEach(messageDetail -> {
                         MessageDetail m = SerializationUtils.clone(messageDetail);
                         NoticeModel n = SerializationUtils.clone(noticeModel);
-                        this.getNoticeSender(m).send(m, n);
+                        try {
+                            this.getNoticeSender(m).send(m, n);
+                        } catch (Exception e) {
+                            LogUtils.error(e);
+                        }
                     });
 
         } catch (Exception e) {
@@ -148,12 +159,75 @@ public class NoticeSendService {
                     .forEach(messageDetail -> {
                         MessageDetail m = SerializationUtils.clone(messageDetail);
                         NoticeModel n = SerializationUtils.clone(noticeModel);
-                        this.getNoticeSender(m).send(m, n);
+                        try {
+                            this.getNoticeSender(m).send(m, n);
+                        } catch (Exception e) {
+                            LogUtils.error(e);
+                        }
                     });
 
         } catch (Exception e) {
             LogUtils.error(e.getMessage(), e);
         }
+    }
+
+    /**
+     * 其他类型
+     */
+    @Async("threadPoolTaskExecutor")
+    public void sendOther(String taskType, NoticeModel noticeModel, List<String> users, boolean excludeSelf) {
+        //如果在线需要排除自己，也需要选定当前环境选择的语言
+        if (excludeSelf) {
+            setLanguage(noticeModel);
+        }
+        // 定时任务调用不排除自己
+        noticeModel.setExcludeSelf(excludeSelf);
+        try {
+            String projectId = (String) noticeModel.getParamMap().get("projectId");
+            List<MessageDetail> messageDetails = messageDetailService.searchMessageByTypeAndProjectId(taskType, projectId)
+                    .stream()
+                    .filter(messageDetail -> StringUtils.equals(messageDetail.getEvent(), noticeModel.getEvent()))
+                    .toList();
+            if (CollectionUtils.isEmpty(messageDetails)) {
+                NoticeModel n = SerializationUtils.clone(noticeModel);
+                MessageDetail m = buildMessageTails(taskType, noticeModel, users, projectId);
+                inSiteNoticeSender.send(m, n);
+            } else {
+                // 异步发送通知
+                messageDetails.stream()
+                        .forEach(messageDetail -> {
+                            MessageDetail m = SerializationUtils.clone(messageDetail);
+                            if (CollectionUtils.isNotEmpty(users)) {
+                                m.getReceiverIds().addAll(users);
+                            }
+                            NoticeModel n = SerializationUtils.clone(noticeModel);
+                            try {
+                                this.getNoticeSender(m).send(m, n);
+                            } catch (Exception e) {
+                                LogUtils.error(e);
+                            }
+                        });
+            }
+
+        } catch (Exception e) {
+            LogUtils.error(e.getMessage(), e);
+        }
+    }
+
+    private static MessageDetail buildMessageTails(String taskType, NoticeModel noticeModel, List<String> users, String projectId) {
+        MessageDetail m = new MessageDetail();
+        Map<String, String> defaultTemplateTitleMap = MessageTemplateUtils.getDefaultTemplateSubjectMap();
+        String defaultSubject = defaultTemplateTitleMap.get(taskType + "_" + noticeModel.getEvent());
+        Map<String, String> defaultTemplateMap = MessageTemplateUtils.getDefaultTemplateMap();
+        String defaultTemplate = defaultTemplateMap.get(taskType + "_" + noticeModel.getEvent());
+        m.setReceiverIds(users);
+        m.setProjectId(projectId);
+        m.setEvent(noticeModel.getEvent());
+        m.setTaskType(taskType);
+        m.setTemplate(defaultTemplate);
+        m.setSubject(defaultSubject);
+        m.setType(NoticeConstants.Type.IN_SITE);
+        return m;
     }
 
 }

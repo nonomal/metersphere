@@ -14,7 +14,7 @@ const TestPlan: AppRouteRecordRaw = {
     icon: 'icon-a-icon_test-tracking_filled1',
     order: 2,
     hideChildrenInMenu: true,
-    roles: ['*'],
+    roles: ['PROJECT_TEST_PLAN:READ', 'PROJECT_TEST_PLAN_REPORT:READ'],
   },
   children: [
     // 测试计划
@@ -23,8 +23,8 @@ const TestPlan: AppRouteRecordRaw = {
       name: TestPlanRouteEnum.TEST_PLAN_INDEX,
       component: () => import('@/views/test-plan/testPlan/index.vue'),
       meta: {
-        locale: 'menu.testPlan',
-        roles: ['*'],
+        locale: 'menu.testPlanShort',
+        roles: ['PROJECT_TEST_PLAN:READ'],
         isTopMenu: true,
       },
     },
@@ -34,8 +34,27 @@ const TestPlan: AppRouteRecordRaw = {
       component: () => import('@/views/test-plan/report/index.vue'),
       meta: {
         locale: 'menu.apiTest.report',
-        roles: ['*'],
+        roles: ['PROJECT_TEST_PLAN_REPORT:READ'],
         isTopMenu: true,
+      },
+    },
+    {
+      path: 'testPlanReportDetail',
+      name: TestPlanRouteEnum.TEST_PLAN_REPORT_DETAIL,
+      component: () => import('@/views/test-plan/report/detail/detail.vue'),
+      meta: {
+        locale: 'menu.apiTest.reportDetail',
+        roles: ['PROJECT_TEST_PLAN_REPORT:READ'],
+        breadcrumbs: [
+          {
+            name: TestPlanRouteEnum.TEST_PLAN_REPORT,
+            locale: 'menu.apiTest.report',
+          },
+          {
+            name: TestPlanRouteEnum.TEST_PLAN_REPORT_DETAIL,
+            locale: 'menu.apiTest.reportDetail',
+          },
+        ],
       },
     },
     // 测试计划详情
@@ -56,6 +75,17 @@ const TestPlan: AppRouteRecordRaw = {
             locale: 'menu.testPlan.testPlanDetail',
           },
         ],
+      },
+    },
+    // 自定义配置报告
+    {
+      path: 'testPlanIndexConfig',
+      name: TestPlanRouteEnum.TEST_PLAN_INDEX_CONFIG,
+      component: () => import('@/views/test-plan/report/detail/configReport.vue'),
+      meta: {
+        locale: 'testPlan.planConfigReport',
+        roles: ['PROJECT_TEST_PLAN_REPORT:READ'],
+        isTopMenu: false,
       },
     },
     // 测试计划-测试计划详情-功能用例详情

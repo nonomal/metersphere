@@ -1,4 +1,3 @@
-import { useRouter } from 'vue-router';
 import { defineStore } from 'pinia';
 import { Notification } from '@arco-design/web-vue';
 import { cloneDeep } from 'lodash-es';
@@ -8,14 +7,17 @@ import type { BreadcrumbItem } from '@/components/business/ms-breadcrumb/types';
 import { getEnvironment, getEnvList } from '@/api/modules/api-test/common';
 import { getProjectInfo } from '@/api/modules/project-management/basicInfo';
 import { getProjectList } from '@/api/modules/project-management/project';
-import { getPageConfig } from '@/api/modules/setting/config';
+import { getBaseInfo, getPageConfig } from '@/api/modules/setting/config';
 import { getPackageType, getSystemVersion } from '@/api/modules/system';
 import { getMenuList } from '@/api/modules/user';
 import defaultSettings from '@/config/settings.json';
 import { useI18n } from '@/hooks/useI18n';
-import { NO_PROJECT_ROUTE_NAME } from '@/router/constants';
+import useUser from '@/hooks/useUser';
+import router from '@/router';
+import { featureRouteMap, NO_PROJECT_ROUTE_NAME } from '@/router/constants';
 import { watchStyle, watchTheme } from '@/utils/theme';
 
+import type { EnvironmentItem } from '@/models/projectManagement/environmental';
 import type { PageConfig, PageConfigKeys, Style, Theme } from '@/models/setting/config';
 import { ProjectListItem } from '@/models/setting/project';
 
@@ -47,6 +49,7 @@ const useAppStore = defineStore('app', {
     ...defaultSettings,
     loading: false,
     loadingTip: '',
+    loginLoading: false,
     topMenus: [] as RouteRecordRaw[],
     currentTopMenu: {} as RouteRecordRaw,
     breadcrumbList: [] as BreadcrumbItem[],
@@ -57,7 +60,7 @@ const useAppStore = defineStore('app', {
     defaultLoginConfig,
     defaultPlatformConfig,
     innerHeight: 0,
-    currentMenuConfig: [],
+    currentMenuConfig: Object.keys(featureRouteMap),
     pageConfig: {
       ...defaultThemeConfig,
       ...defaultLoginConfig,
@@ -65,9 +68,11 @@ const useAppStore = defineStore('app', {
     },
     packageType: '',
     projectList: [] as ProjectListItem[],
-    ordList: [],
+    orgList: [],
     envList: [],
     currentEnvConfig: undefined,
+    fileMaxSize: 50,
+    isDarkTheme: false,
   }),
 
   getters: {
@@ -107,6 +112,18 @@ const useAppStore = defineStore('app', {
     },
     getCurrentEnvId(state: AppState): string {
       return state.currentEnvConfig?.id || '';
+    },
+    getEnvList(state: AppState): EnvironmentItem[] {
+      return state.envList;
+    },
+    getLoginLoadingStatus(state: AppState): boolean {
+      return state.loginLoading;
+    },
+    getPackageType(state: AppState): string {
+      return state.packageType;
+    },
+    getFileMaxSize(state: AppState): number {
+      return state.fileMaxSize;
     },
   },
   actions: {
@@ -215,8 +232,8 @@ const useAppStore = defineStore('app', {
     /**
      * 设置当前组织列表
      */
-    setOrdList(ordList: { id: string; name: string }[]) {
-      this.ordList = ordList;
+    setOrgList(orgList: { id: string; name: string }[]) {
+      this.orgList = orgList;
     },
     /**
      * 设置当前系统包类型
@@ -227,6 +244,12 @@ const useAppStore = defineStore('app', {
     // 重置系统包的版本
     resetSystemPackageType() {
       this.packageType = '';
+    },
+    /**
+     * 设置登录页面的loading
+     */
+    setLoginLoading(value: boolean) {
+      this.loginLoading = value;
     },
     /**
      * 获取系统版本
@@ -253,12 +276,19 @@ const useAppStore = defineStore('app', {
     },
     async getProjectInfos() {
       try {
-        if (!this.currentProjectId) {
+        const { isWhiteListPage } = useUser();
+        const routeName = router.currentRoute.value.name as string;
+        if (
+          !this.currentProjectId ||
+          routeName?.includes('setting') ||
+          routeName?.includes('workstation') ||
+          isWhiteListPage()
+        ) {
+          // 如果没有项目id，或访问的是系统设置下的页面/白名单/工作台页面，则不读取项目基础信息
           return;
         }
         const res = await getProjectInfo(this.currentProjectId);
         if (!res || res.deleted) {
-          const router = useRouter();
           router.push({
             name: NO_PROJECT_ROUTE_NAME,
           });
@@ -381,9 +411,24 @@ const useAppStore = defineStore('app', {
         console.log(error);
       }
     },
+    async initFileSizeLimit() {
+      try {
+        const res = await getBaseInfo();
+        this.fileMaxSize = Number(res.fileMaxSize) || 50;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.log(error);
+      }
+    },
+    setFileMaxSize(size: number) {
+      this.fileMaxSize = size;
+    },
+    setDarkTheme(isDarkTheme: boolean) {
+      this.isDarkTheme = isDarkTheme;
+    },
   },
   persist: {
-    paths: ['currentOrgId', 'currentProjectId', 'pageConfig', 'menuCollapse'],
+    paths: ['currentOrgId', 'currentProjectId', 'pageConfig', 'menuCollapse', 'isDarkTheme'],
   },
 });
 

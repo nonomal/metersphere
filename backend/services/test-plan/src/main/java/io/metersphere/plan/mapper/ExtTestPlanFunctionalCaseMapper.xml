@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="io.metersphere.plan.mapper.ExtTestPlanFunctionalCaseMapper">
+    <resultMap id="BaseResultMapDTO" type="io.metersphere.plan.dto.response.TestPlanCasePageResponse">
+        <result column="tags" jdbcType="VARCHAR" property="tags" typeHandler="io.metersphere.handler.ListTypeHandler" />
+    </resultMap>
+
     <update id="updatePos">
         UPDATE
             test_plan_functional_case
@@ -53,29 +57,29 @@
         </if>
     </select>
 
-    <select id="getIds"  resultType="java.lang.String">
+    <select id="getIds" resultType="java.lang.String">
         SELECT
-        tpfc.id as id
+        test_plan_functional_case.id as id
         FROM
-        test_plan_functional_case tpfc
-        LEFT JOIN functional_case ON tpfc.functional_case_id = functional_case.id
+        test_plan_functional_case
+        LEFT JOIN functional_case ON test_plan_functional_case.functional_case_id = functional_case.id
         WHERE
-        tpfc.test_plan_id = #{request.testPlanId}
+        test_plan_functional_case.test_plan_id = #{request.testPlanId}
         AND functional_case.deleted = #{deleted}
         <include refid="queryWhereConditionByBatchQueryRequest"/>
     </select>
 
-    <select id="selectDragInfoById" resultType="io.metersphere.plan.dto.AssociationNode">
+    <select id="selectDragInfoById" resultType="io.metersphere.project.dto.DropNode">
         SELECT id, pos
         FROM test_plan_functional_case
         WHERE id = #{0}
     </select>
     <select id="selectNodeByPosOperator"
             parameterType="io.metersphere.project.dto.NodeSortQueryParam"
-            resultType="io.metersphere.plan.dto.AssociationNode">
+            resultType="io.metersphere.project.dto.DropNode">
         SELECT id, pos
         FROM test_plan_functional_case
-        WHERE test_plan_id = #{parentId}
+        WHERE test_plan_collection_id = #{parentId}
         <if test="operator == 'moreThan'">
             AND pos &gt; #{pos}
         </if>
@@ -89,37 +93,39 @@
         LIMIT 1
     </select>
 
-    <select id="getCasePage" resultType="io.metersphere.plan.dto.response.TestPlanCasePageResponse">
-        SELECT
-            functional_case.id as caseId,
-            functional_case.num,
-            functional_case.NAME,
-            functional_case.module_id as moduleId,
-            functional_case.version_id as versionId,
-            project_version.name as versionName,
-            functional_case.case_edit_type as caseEditType,
-            functional_case.create_user as createUser,
-            functional_case.create_time as createTime,
-            functional_case.update_user as updateUser,
-            functional_case.update_time as updateTime,
-            functional_case.review_status as reviewStatus,
-            functional_case.last_execute_result as lastExecuteResult,
-            functional_case.tags,
-            test_plan_functional_case.execute_user as executeUser,
-            test_plan_functional_case.last_exec_time as lastExecTime,
-            test_plan_functional_case.last_exec_result as lastExecResult,
-            test_plan_functional_case.test_plan_id as testPlanId,
-            test_plan_functional_case.id,
-            project.name as projectName,
-            project.id as projectId
-        FROM
-            functional_case
+    <select id="getCasePage" resultMap="BaseResultMapDTO">
+        select
+        functional_case.id as caseId,
+        functional_case.num,
+        functional_case.NAME,
+        functional_case.module_id as moduleId,
+        functional_case.version_id as versionId,
+        project_version.name as versionName,
+        functional_case.case_edit_type as caseEditType,
+        functional_case.create_user as createUser,
+        functional_case.create_time as createTime,
+        functional_case.update_user as updateUser,
+        functional_case.update_time as updateTime,
+        functional_case.review_status as reviewStatus,
+        functional_case.last_execute_result as lastExecuteResult,
+        functional_case.tags,
+        test_plan_functional_case.execute_user as executeUser,
+        test_plan_functional_case.last_exec_time as lastExecTime,
+        if(test_plan_functional_case.last_exec_result = '', 'PENDING', test_plan_functional_case.last_exec_result) as lastExecResult,
+        test_plan_functional_case.test_plan_id as testPlanId,
+        test_plan_functional_case.id,
+        project.name as projectName,
+        project.id as projectId,
+        test_plan_functional_case.test_plan_collection_id as testPlanCollectionId,
+        test_plan_collection.name as testPlanCollectionName
+        from
+        functional_case
         inner join project on functional_case.project_id = project.id
         inner join test_plan_functional_case on functional_case.id = test_plan_functional_case.functional_case_id
-        LEFT JOIN project_version ON  functional_case.version_id = project_version.id
+        inner join project_version ON functional_case.version_id = project_version.id
+        inner join test_plan_collection on test_plan_collection.id = test_plan_functional_case.test_plan_collection_id
         where functional_case.deleted = #{deleted}
         and test_plan_functional_case.test_plan_id = #{request.testPlanId}
-          and functional_case.project_id = #{request.projectId}
         <include refid="queryWhereCondition"/>
         order by
         <if test="sort != null and sort != ''">
@@ -133,30 +139,37 @@
     <sql id="queryWhereCondition">
         <if test="request.moduleIds != null and request.moduleIds.size() > 0">
             and functional_case.module_id in
-            <foreach collection="request.moduleIds" item="moduleId" separator="," open="(" close=")">
-                #{moduleId}
+            <foreach collection="request.moduleIds" item="nodeId" separator="," open="(" close=")">
+                <choose>
+                    <when test="nodeId.contains('_root')">
+                        'root'
+                    </when>
+                    <otherwise>
+                        #{nodeId}
+                    </otherwise>
+                </choose>
             </foreach>
         </if>
         <if test="request.keyword != null and request.keyword != ''">
             and (
             functional_case.name like concat('%', #{request.keyword},'%')
             or functional_case.num like concat('%', #{request.keyword},'%')
-            or functional_case.tags like concat('%', #{request.keyword},'%')
             )
+        </if>
+        <if test="request.collectionId != null and request.collectionId != ''">
+            and test_plan_functional_case.test_plan_collection_id = #{request.collectionId}
+        </if>
+        <if test="request.projectId != null and request.projectId!=''">
+            and functional_case.project_id = #{request.projectId}
         </if>
         <include refid="filters">
             <property name="filter" value="request.filter"/>
+            <property name="nullExecutorKey" value="request.nullExecutorKey"/>
         </include>
-        <choose>
-            <when test='request.searchMode == "AND"'>
-                AND <include refid="queryCombine"/>
-            </when>
-            <when test='request.searchMode == "OR"'>
-                and (
-                <include refid="queryCombine"/>
-                )
-            </when>
-        </choose>
+        <include refid="combine">
+            <property name="combineSearch" value="request.combineSearch"/>
+            <property name="planId" value="${request.testPlanId}"/>
+        </include>
         <include refid="queryVersionCondition">
             <property name="versionTable" value="functional_case"/>
         </include>
@@ -166,35 +179,39 @@
         <if test="request.moduleIds != null and request.moduleIds.size() > 0">
             and functional_case.module_id in
             <foreach collection="request.moduleIds" item="moduleId" separator="," open="(" close=")">
-                #{moduleId}
+                <choose>
+                    <when test="moduleId.contains('_root')">
+                        'root'
+                    </when>
+                    <otherwise>
+                        #{moduleId}
+                    </otherwise>
+                </choose>
             </foreach>
         </if>
         <if test="request.condition.keyword != null">
             and (
-            functional_case.name like concat('%', #{request.keyword},'%')
-            or functional_case.num like concat('%', #{request.keyword},'%')
-            or functional_case.tags like concat('%', #{request.keyword},'%')
+            functional_case.name like concat('%', #{request.condition.keyword},'%')
+            or functional_case.num like concat('%', #{request.condition.keyword},'%')
+            or functional_case.tags like concat('%', #{request.condition.keyword},'%')
             )
+        </if>
+        <if test="request.collectionId != null and request.collectionId != ''">
+            and test_plan_functional_case.test_plan_collection_id = #{request.collectionId}
         </if>
         <include refid="filters">
             <property name="filter" value="request.condition.filter"/>
+            <property name="nullExecutorKey" value="request.nullExecutorKey"/>
         </include>
-        <choose>
-            <when test='request.condition.searchMode == "AND"'>
-                AND <include refid="batchQueryCombine"/>
-            </when>
-            <when test='request.condition.searchMode == "OR"'>
-                and (
-                <include refid="batchQueryCombine"/>
-                )
-            </when>
-        </choose>
+        <include refid="combine">
+            <property name="combineSearch" value="request.condition.combineSearch"/>
+        </include>
     </sql>
 
     <sql id="filters">
         <if test="${filter} != null and ${filter}.size() > 0">
             <foreach collection="${filter}.entrySet()" index="key" item="values">
-                <if test="values != null and values.size() > 0">
+                <if test="(values != null and values.size() > 0) or key == 'executeUserName'">
                     <choose>
                         <!-- 评审状态 -->
                         <when test="key=='reviewStatus'">
@@ -202,8 +219,8 @@
                             <include refid="io.metersphere.system.mapper.BaseMapper.filterInWrapper"/>
                         </when>
                         <!-- 执行结果 -->
-                        <when test="key=='lastExecuteResult'">
-                            and functional_case.last_execute_result in
+                        <when test="key=='lastExecResult'">
+                            and test_plan_functional_case.last_exec_result in
                             <include refid="io.metersphere.system.mapper.BaseMapper.filterInWrapper"/>
                         </when>
                         <!-- 版本 -->
@@ -223,7 +240,8 @@
                         <!-- 自定义多选 -->
                         <when test="key.startsWith('custom_multiple')">
                             and functional_case.id in (
-                            select field_id from functional_case_custom_field where concat('custom_multiple-',field_id) =
+                            select field_id from functional_case_custom_field where concat('custom_multiple-',field_id)
+                            =
                             #{key}
                             and JSON_CONTAINS(`value`, json_array(#{value}))
                         </when>
@@ -249,137 +267,240 @@
                             and functional_case.delete_user in
                             <include refid="io.metersphere.system.mapper.BaseMapper.filterInWrapper"/>
                         </when>
+                        <!-- 执行人 -->
+                        <when test="key == 'executeUserName' and values.size() > 0">
+                            and (
+                                test_plan_functional_case.execute_user in
+                                <include refid="io.metersphere.system.mapper.BaseMapper.filterInWrapper"/>
+                                <if test="${nullExecutorKey} == true">
+                                    or test_plan_functional_case.execute_user is null or test_plan_functional_case.execute_user = ''
+                                </if>
+                            )
+                        </when>
+                        <when test="key == 'executeUserName' and values.size() == 0">
+                            and (
+                                <if test="${nullExecutorKey} == true">
+                                    test_plan_functional_case.execute_user is null or test_plan_functional_case.execute_user = ''
+                                </if>
+                                <if test="${nullExecutorKey} == false">
+                                    1=1
+                                </if>
+                            )
+                        </when>
                     </choose>
                 </if>
             </foreach>
         </if>
     </sql>
 
-    <sql id="batchQueryCombine">
-        <if test="request.condition.combine != null">
-            <include refid="combine">
-                <property name="condition" value="request.condition.combine"/>
-                <property name="searchMode" value="request.condition.searchMode"/>
-            </include>
-        </if>
-        1=1
-    </sql>
-
-    <sql id="queryCombine">
-        <if test="request.combine != null">
-            <include refid="combine">
-                <property name="condition" value="request.combine"/>
-                <property name="searchMode" value="request.searchMode"/>
-            </include>
-        </if>
-        1=1
-    </sql>
 
     <sql id="combine">
-        <!-- 名称 -->
-        <if test='${condition}.name != null'>
-            functional_case.name
-            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                <property name="object" value="${condition}.name"/>
-            </include>
-            <include refid="queryType">
-                <property name="searchMode" value="${searchMode}"/>
-            </include>
-        </if>
-        <!-- id -->
-        <if test='${condition}.id != null'>
-            functional_case.num
-            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                <property name="object" value="${condition}.id"/>
-            </include>
-            <include refid="queryType">
-                <property name="searchMode" value="${searchMode}"/>
-            </include>
-        </if>
-        <!-- 所属模块 -->
-        <if test='${condition}.moduleId != null'>
-            functional_case.moduleId
-            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                <property name="object" value="${condition}.moduleId"/>
-            </include>
-            <include refid="queryType">
-                <property name="searchMode" value="${searchMode}"/>
-            </include>
-        </if>
-        <!-- 创建人 -->
-        <if test='${condition}.createUser != null'>
-            functional_case.create_user
-            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                <property name="object" value="${condition}.createUser"/>
-            </include>
-            <include refid="queryType">
-                <property name="searchMode" value="${searchMode}"/>
-            </include>
-        </if>
-        <!-- 创建时间 -->
-        <if test='${condition}.createTime != null'>
-            functional_case.create_time
-            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                <property name="object" value="${condition}.createTime"/>
-            </include>
-            <include refid="queryType">
-                <property name="searchMode" value="${searchMode}"/>
-            </include>
-        </if>
-        <!-- 更新人 -->
-        <if test='${condition}.updateUser != null'>
-            functional_case.update_user
-            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                <property name="object" value="${condition}.updateUser"/>
-            </include>
-            <include refid="queryType">
-                <property name="searchMode" value="${searchMode}"/>
-            </include>
-        </if>
-        <!-- 更新时间 -->
-        <if test='${condition}.updateTime != null'>
-            functional_case.update_time
-            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                <property name="object" value="${condition}.updateTime"/>
-            </include>
-            <include refid="queryType">
-                <property name="searchMode" value="${searchMode}"/>
-            </include>
-        </if>
-        <!-- 标签 -->
-        <if test='${condition}.tags != null'>
-            <include refid="queryTag">
-                <property name="searchMode" value="${searchMode}"/>
-                <property name="combineTag" value="${condition}.tags"/>
-            </include>
-        </if>
-        <if test="${condition}.customs != null and ${condition}.customs.size() > 0">
-            <foreach collection="${condition}.customs" item="custom" separator="" open="" close="">
-                functional_case.id ${custom.operator} (
-                select case_id from functional_case_custom_field where field_id = #{custom.id}
+        <trim prefix="AND">
+            <trim prefix="(" suffix=")" suffixOverrides="AND|OR">
+                <if test="${combineSearch} != null">
+                    <foreach collection="${combineSearch}.userViewConditions" item="condition">
+                        <if test="condition.name == 'createUser'">
+                            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
+                                <property name="condition" value="condition"/>
+                                <property name="column" value="functional_case.create_user"/>
+                            </include>
+                        </if>
+                        <include refid="io.metersphere.system.mapper.BaseMapper.queryType">
+                            <property name="searchMode" value="${combineSearch}.searchMode"/>
+                        </include>
+                    </foreach>
+                    <foreach collection="${combineSearch}.systemFieldConditions" item="condition">
+                        <include refid="io.metersphere.system.mapper.BaseMapper.baseSystemFieldConditions">
+                            <property name="condition" value="condition"/>
+                            <property name="tablePrefix" value="functional_case"/>
+                        </include>
+                        <!-- 所属模块(项目ID_模块ID 组合查询) -->
+                        <if test="condition.name == 'moduleId'">
+                            <choose>
+                                <when test="condition.operator == 'IN'">
+                                    concat(functional_case.project_id, '_', functional_case.module_id)  in
+                                    <foreach collection="condition.value" item="v" separator="," open="(" close=")">
+                                        <choose>
+                                            <when test="v.contains('_root')">
+                                                #{v}
+                                            </when>
+                                            <otherwise>
+                                                concat(functional_case.project_id, '_', #{v})
+                                            </otherwise>
+                                        </choose>
+                                    </foreach>
+                                </when>
+                                <when test="condition.operator == 'NOT_IN'">
+                                    concat(functional_case.project_id, '_', functional_case.module_id) not in
+                                    <foreach collection="condition.value" item="v" separator="," open="(" close=")">
+                                        <choose>
+                                            <when test="v.contains('_root')">
+                                                #{v}
+                                            </when>
+                                            <otherwise>
+                                                concat(functional_case.project_id, '_', #{v})
+                                            </otherwise>
+                                        </choose>
+                                    </foreach>
+                                </when>
+                            </choose>
+                        </if>
+                        <!-- 测试点 -->
+                        <if test="condition.name == 'testPlanCollectionId'">
+                            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
+                                <property name="condition" value="condition"/>
+                                <property name="column" value="test_plan_collection.id"/>
+                            </include>
+                        </if>
+                        <!-- 所属项目 -->
+                        <if test="condition.name == 'projectName'">
+                            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
+                                <property name="condition" value="condition"/>
+                                <property name="column" value="functional_case.project_id"/>
+                            </include>
+                        </if>
+                        <!-- 评审结果 -->
+                        <if test="condition.name == 'reviewStatus'">
+                            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
+                                <property name="condition" value="condition"/>
+                                <property name="column" value="functional_case.review_status"/>
+                            </include>
+                        </if>
+                        <!-- 执行人 -->
+                        <if test="condition.name == 'executeUser'">
+                            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
+                                <property name="condition" value="condition"/>
+                                <property name="column" value="test_plan_functional_case.execute_user"/>
+                            </include>
+                        </if>
+                        <!-- 执行结果 -->
+                        <if test="condition.name == 'lastExecResult'">
+                            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
+                                <property name="condition" value="condition"/>
+                                <property name="column" value="test_plan_functional_case.last_exec_result"/>
+                            </include>
+                        </if>
+                        <!-- 关联需求 -->
+                        <if test="condition.name == 'demand'">
+                            <include refid="io.metersphere.system.mapper.BaseMapper.associationCondition">
+                                <property name="mainIdColumn" value="functional_case.id"/>
+                                <property name="associationTable" value="functional_case_demand"/>
+                                <property name="associationIdColumn" value="case_id"/>
+                                <property name="searchColumn" value="demand_name"/>
+                                <property name="condition" value="condition"/>
+                            </include>
+                        </if>
+                        <!-- 关联附件 -->
+                        <if test="condition.name == 'attachment'">
+                            <include refid="io.metersphere.system.mapper.BaseMapper.associationCondition">
+                                <property name="mainIdColumn" value="functional_case.id"/>
+                                <property name="associationTable" value="functional_case_attachment"/>
+                                <property name="associationIdColumn" value="case_id"/>
+                                <property name="searchColumn" value="file_name"/>
+                                <property name="condition" value="condition"/>
+                            </include>
+                            <choose>
+                                <when test="condition.operator == 'NOT_IN' or condition.operator == 'NOT_EQUALS' or condition.operator == 'NOT_CONTAINS'">
+                                    and
+                                </when>
+                                <otherwise>
+                                    or
+                                </otherwise>
+                            </choose>
+                            <include refid="associationAttachmentCondition">
+                                <property name="condition" value="condition"/>
+                            </include>
+                        </if>
+                        <!-- 缺陷数 -->
+                        <if test="condition.name == 'bugCount'">
+                            <choose>
+                                <when test="condition.operator == 'NOT_EMPTY'">
+                                    test_plan_functional_case.id in (
+                                        select distinct brc.test_plan_case_id from bug_relation_case brc join bug b on brc.bug_id = b.id
+                                        where b.deleted = false and brc.test_plan_id = '${planId}' and brc.case_type = 'FUNCTIONAL'
+                                    )
+                                </when>
+                                <when test="condition.operator == 'EMPTY'">
+                                    test_plan_functional_case.id not in (
+                                        select distinct brc.test_plan_case_id from bug_relation_case brc join bug b on brc.bug_id = b.id
+                                        where b.deleted = false and brc.test_plan_id = '${planId}' and brc.case_type = 'FUNCTIONAL'
+                                    )
+                                </when>
+                                <when test="(condition.operator == 'LT' and condition.value &lt; 1) or (condition.operator == 'EQUALS' and condition.value &lt; 0)">
+                                    1=2
+                                </when>
+                                <otherwise>
+                                    <if test="condition.operator == 'LT' or (condition.operator == 'EQUALS' and condition.value == 0)">
+                                        test_plan_functional_case.id not in (
+                                            select distinct brc.test_plan_case_id from bug_relation_case brc join bug b on brc.bug_id = b.id
+                                            where b.deleted = false and brc.test_plan_id = '${planId}' and brc.case_type = 'FUNCTIONAL'
+                                        )
+                                        <if test="condition.value &gt; 1">
+                                            OR
+                                        </if>
+                                    </if>
+                                    <if test="(condition.operator == 'EQUALS' and condition.value &gt; 0) or (condition.operator == 'LT' and condition.value &gt; 1) or condition.operator == 'GT'">
+                                        test_plan_functional_case.id in (
+                                            select brc.test_plan_case_id from bug_relation_case brc join bug b on brc.bug_id = b.id
+                                            where b.deleted = false and brc.test_plan_id = '${planId}' and brc.case_type = 'FUNCTIONAL' group by brc.test_plan_case_id having
+                                            <include refid="io.metersphere.system.mapper.BaseMapper.condition">
+                                                <property name="condition" value="condition"/>
+                                                <property name="column" value="count(brc.id)"/>
+                                            </include>
+                                        )
+                                    </if>
+                                </otherwise>
+                            </choose>
+                        </if>
+                        <include refid="io.metersphere.system.mapper.BaseMapper.queryType">
+                            <property name="searchMode" value="${combineSearch}.searchMode"/>
+                        </include>
+                    </foreach>
+                    <include refid="io.metersphere.system.mapper.BaseMapper.customFiledConditions">
+                        <property name="mainIdColumn" value="functional_case.id"/>
+                        <property name="associationTable" value="functional_case_custom_field"/>
+                        <property name="associationIdColumn" value="case_id"/>
+                        <property name="combineSearch" value="${combineSearch}"/>
+                    </include>
+                </if>
+            </trim>
+        </trim>
+    </sql>
+
+    <sql id="associationAttachmentCondition">
+        <choose>
+            <when test="${condition}.operator == 'EMPTY'">
+                functional_case.id not in (
+                select file_association.source_id from file_association where file_association.source_type = 'FUNCTIONAL_CASE'
+                )
+            </when>
+            <otherwise>
+                (
+                functional_case.id
+                <if test="${condition}.operator == 'NOT_IN' or ${condition}.operator == 'NOT_EQUALS' or ${condition}.operator == 'NOT_CONTAINS'">
+                    not
+                </if>
+                in (
+                select file_association.source_id from file_association join file_metadata on file_association.file_id = file_metadata.id
+                and file_association.source_type = 'FUNCTIONAL_CASE' and
                 <choose>
-                    <when test="custom.type == 'List'">
-                        and JSON_CONTAINS(`value`, json_array(#{custom.value}))
-                    </when>
-                    <when test="custom.type == 'date' or custom.type == 'datetime'">
-                        and `value`
-                        <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                            <property name="object" value="custom"/>
+                    <when test="${condition}.operator == 'NOT_IN' or ${condition}.operator == 'NOT_EQUALS' or ${condition}.operator == 'NOT_CONTAINS'">
+                        <include refid="io.metersphere.system.mapper.BaseMapper.associationReversalCondition">
+                            <property name="condition" value="${condition}"/>
+                            <property name="column" value="file_metadata.original_name"/>
                         </include>
                     </when>
                     <otherwise>
-                        and trim(both '"' from `value`)
                         <include refid="io.metersphere.system.mapper.BaseMapper.condition">
-                            <property name="object" value="custom"/>
+                            <property name="condition" value="${condition}"/>
+                            <property name="column" value="file_metadata.original_name"/>
                         </include>
                     </otherwise>
                 </choose>
                 )
-                <include refid="queryType">
-                    <property name="searchMode" value="${searchMode}"/>
-                </include>
-            </foreach>
-        </if>
+                )
+            </otherwise>
+        </choose>
     </sql>
 
     <sql id="queryVersionCondition">
@@ -444,7 +565,7 @@
                  LEFT JOIN test_plan_functional_case tpfc ON tpfc.functional_case_id = fc.id
                  LEFT JOIN project p ON fc.project_id = p.id
         WHERE tpfc.test_plan_id = #{testPlanId}
-          AND fc.deleted = false AND fc.module_id = 'root'
+          AND fc.deleted = false
         ORDER BY fc.pos
     </select>
 
@@ -453,32 +574,39 @@
         FROM functional_case_module fcm
                  LEFT JOIN project p ON fcm.project_id = p.id
         WHERE fcm.id IN
-              (SELECT fc.module_id FROM functional_case fc LEFT JOIN test_plan_functional_case tpfc ON tpfc.functional_case_id = fc.id WHERE tpfc.test_plan_id = #{testPlanId} AND fc.deleted = false)
+              (SELECT fc.module_id
+               FROM functional_case fc
+                        LEFT JOIN test_plan_functional_case tpfc ON tpfc.functional_case_id = fc.id
+               WHERE tpfc.test_plan_id = #{testPlanId}
+                 AND fc.deleted = false)
         ORDER BY pos
     </select>
 
-    <select id="countModuleIdByRequest"  resultType="io.metersphere.functional.dto.FunctionalCaseModuleCountDTO">
-        SELECT functional_case.module_id AS moduleId, count(functional_case.id) AS dataCount, functional_case.project_id AS projectId, project.name AS projectName
-        FROM test_plan_functional_case tpfc
-        LEFT JOIN functional_case ON tpfc.functional_case_id = functional_case.id
+    <select id="countModuleIdByRequest" resultType="io.metersphere.functional.dto.FunctionalCaseModuleCountDTO">
+        SELECT CASE WHEN functional_case.module_id = 'root' THEN concat(functional_case.project_id, '_',
+        functional_case.module_id) ElSE functional_case.module_id END AS moduleId,
+        count(functional_case.id) As dataCount, functional_case.project_id As projectId, project.name As projectName
+        FROM test_plan_functional_case
+        LEFT JOIN functional_case ON test_plan_functional_case.functional_case_id = functional_case.id
         LEFT JOIN project ON functional_case.project_id = project.id
-        WHERE tpfc.test_plan_id = #{request.testPlanId}
+        WHERE test_plan_functional_case.test_plan_id = #{request.testPlanId}
         AND functional_case.deleted = #{deleted}
         <include refid="queryWhereCondition"/>
-        GROUP BY module_id
+        GROUP BY moduleId
     </select>
 
     <select id="caseCount"
             resultType="java.lang.Long">
         SELECT count(functional_case.id)
-        FROM test_plan_functional_case tpfc LEFT JOIN functional_case ON tpfc.functional_case_id = functional_case.id
-        WHERE tpfc.test_plan_id = #{request.testPlanId}
+        FROM test_plan_functional_case LEFT JOIN functional_case ON test_plan_functional_case.functional_case_id =
+        functional_case.id
+        WHERE test_plan_functional_case.test_plan_id = #{request.testPlanId}
         AND functional_case.deleted = #{deleted}
         <include refid="queryWhereCondition"/>
     </select>
 
     <select id="getPlanFunctionalCaseByIds" resultType="io.metersphere.plan.domain.TestPlanFunctionalCase">
-        select tpfc.test_plan_id testPlanId, tpfc.functional_case_id functionalCaseId, tpfc.last_exec_result lastExecResult
+        select tpfc.test_plan_id testPlanId, tpfc.functional_case_id functionalCaseId, tpfc.last_exec_result lastExecResult, tpfc.execute_user executeUser
         from test_plan_functional_case tpfc join functional_case fc on fc.id = tpfc.functional_case_id
         <where>
             fc.deleted = false
@@ -491,12 +619,40 @@
         </where>
     </select>
 
+    <select id="getPlanCaseNotDeletedByCollectionIds" resultType="io.metersphere.plan.domain.TestPlanFunctionalCase">
+        SELECT t.*
+        from test_plan_functional_case t
+        INNER JOIN functional_case f ON t.functional_case_id = f.id
+        WHERE t.test_plan_collection_id IN
+        <foreach collection="collectionIds" item="collectionId" separator="," open="(" close=")">
+            #{collectionId}
+        </foreach>
+        AND f.deleted = false
+    </select>
+
+    <select id="selectCaseExecResultCount" resultType="io.metersphere.plan.dto.TestPlanCaseRunResultCount">
+        select test_plan_functional_case.last_exec_result as result, count(test_plan_functional_case.id) as resultCount
+        from test_plan_functional_case
+                 INNER JOIN functional_case ON test_plan_functional_case.functional_case_id = functional_case.id
+        where test_plan_id = #{0}
+          AND functional_case.deleted = false
+        group by last_exec_result
+    </select>
+    <select id="selectByTestPlanIdAndNotDeleted"
+            resultType="io.metersphere.plan.domain.TestPlanFunctionalCase">
+        SELECT t.*
+        from test_plan_functional_case t
+                 INNER JOIN functional_case f ON t.functional_case_id = f.id
+        WHERE test_plan_id = #{0}
+          AND f.deleted = false
+    </select>
+
 
     <update id="batchUpdate">
         update test_plan_functional_case
         set last_exec_result = #{lastExecResult},
-            last_exec_time = #{lastExecTime},
-            execute_user = #{userId}
+        last_exec_time = #{lastExecTime},
+        execute_user = #{userId}
         where id in
         <foreach collection="ids" item="id" open="(" separator="," close=")">
             #{id}
@@ -511,5 +667,175 @@
             #{id}
         </foreach>
     </update>
+
+    <select id="getMaxPosByCollectionId" resultType="java.lang.Long">
+        SELECT max(pos)
+        FROM test_plan_functional_case
+        WHERE test_plan_collection_id = #{0}
+    </select>
+
+    <select id="collectionCountByRequest" resultType="io.metersphere.project.dto.ModuleCountDTO">
+        SELECT
+        test_plan_functional_case.test_plan_collection_id AS moduleId,
+        count( test_plan_functional_case.id ) AS dataCount
+        FROM
+        functional_case
+        INNER JOIN test_plan_functional_case ON functional_case.id = test_plan_functional_case.functional_case_id
+        WHERE
+        functional_case.deleted = FALSE
+        AND test_plan_functional_case.test_plan_id = #{request.testPlanId}
+        <include refid="queryWhereCondition"/>
+        GROUP BY
+        test_plan_functional_case.test_plan_collection_id
+    </select>
+    <select id="selectDistinctExecResult" resultType="io.metersphere.plan.dto.TestPlanResourceExecResultDTO">
+        select distinct resource.test_plan_id AS testPlanId,
+                        CASE
+                            WHEN resource.last_exec_result = 'BLOCKED'
+                                THEN 'COMPLETED'
+                            WHEN resource.last_exec_result = 'FAKE_ERROR'
+                                THEN 'COMPLETED'
+                            WHEN resource.last_exec_result = 'ERROR'
+                                THEN 'COMPLETED'
+                            WHEN resource.last_exec_result = 'SUCCESS'
+                                THEN 'COMPLETED'
+                            ELSE 'PENDING'
+                            END               AS execResult,
+                        test_plan.group_id    AS testPlanGroupId
+        from test_plan_functional_case resource
+                 INNER JOIN test_plan ON test_plan.id = resource.test_plan_id
+                 INNER JOIN functional_case ON resource.functional_case_id = functional_case.id
+        where test_plan.project_id = #{projectId}
+          AND functional_case.deleted is false
+          AND test_plan.status != 'ARCHIVED'
+    </select>
+    <select id="selectTestPlanIdByFunctionCaseId" resultType="java.lang.String">
+        SELECT DISTINCT test_plan_id
+        FROM test_plan_functional_case
+        WHERE functional_case_id = #{0}
+    </select>
+    <select id="selectDistinctExecResultByTestPlanIds"
+            resultType="io.metersphere.plan.dto.TestPlanResourceExecResultDTO">
+        select distinct resource.test_plan_id AS testPlanId,
+        CASE
+        WHEN resource.last_exec_result = 'BLOCKED'
+        THEN 'COMPLETED'
+        WHEN resource.last_exec_result = 'FAKE_ERROR'
+        THEN 'COMPLETED'
+        WHEN resource.last_exec_result = 'ERROR'
+        THEN 'COMPLETED'
+        WHEN resource.last_exec_result = 'SUCCESS'
+        THEN 'COMPLETED'
+        ELSE 'PENDING'
+        END AS execResult,
+        test_plan.group_id AS testPlanGroupId
+        from test_plan_functional_case resource
+        INNER JOIN functional_case funcCase ON resource.functional_case_id = funcCase.id
+        INNER JOIN test_plan ON test_plan.id = resource.test_plan_id
+        where resource.test_plan_id IN
+        <foreach collection="testPlanIds" item="testPlanId" separator="," open="(" close=")">
+            #{testPlanId}
+        </foreach>
+        AND funcCase.deleted IS FALSE
+    </select>
+
+    <select id="selectIdsByProjectIdsOrCollectionIds" resultType="java.lang.String">
+        SELECT
+        test_plan_functional_case.id
+        FROM
+        test_plan_functional_case
+        LEFT JOIN functional_case ON test_plan_functional_case.functional_case_id = functional_case.id
+        WHERE
+        test_plan_functional_case.test_plan_id = #{request.testPlanId}
+        AND functional_case.deleted = false
+        <include refid="queryWhereConditionByBatchQueryRequest"/>
+        <if test="request.getMinderProjectIds() != null and request.getMinderProjectIds().size() > 0">
+            and functional_case.project_id in
+            <foreach collection="request.getMinderProjectIds()" item="projectId" open="(" separator="," close=")">
+                #{projectId}
+            </foreach>
+        </if>
+        <if test="request.getMinderCollectionIds() != null and request.getMinderCollectionIds().size() > 0">
+            and test_plan_functional_case.test_plan_collection_id IN
+            <foreach collection="request.getMinderCollectionIds()" item="collectionId" separator="," open="(" close=")">
+                #{collectionId}
+            </foreach>
+        </if>
+    </select>
+
+    <select id="selectProjectByModuleIds" resultType="io.metersphere.functional.domain.FunctionalCaseModule">
+        SELECT id, project_id
+        FROM functional_case_module
+        WHERE id IN
+        <foreach collection="moduleIds" item="moduleId" separator="," open="(" close=")">
+            #{moduleId}
+        </foreach>
+    </select>
+
+    <select id="selectIdsByModuleIds" resultType="java.lang.String">
+        SELECT
+        test_plan_functional_case.id
+        FROM
+        test_plan_functional_case
+        LEFT JOIN functional_case ON test_plan_functional_case.functional_case_id = functional_case.id
+        WHERE
+        test_plan_functional_case.test_plan_id = #{request.testPlanId}
+        AND functional_case.deleted = false
+        <include refid="queryWhereConditionByBatchQueryRequest"/>
+        and functional_case.module_id in
+        <foreach collection="minderModuleIds" item="moduleId" open="(" separator="," close=")">
+            #{moduleId}
+        </foreach>
+    </select>
+
+    <select id="selectIdsByRootIds" resultType="java.lang.String">
+        SELECT
+        test_plan_functional_case.id
+        FROM
+        test_plan_functional_case
+        LEFT JOIN functional_case ON test_plan_functional_case.functional_case_id = functional_case.id
+        WHERE
+            functional_case.deleted = false
+        and test_plan_functional_case.test_plan_id = #{testPlanId}
+        and functional_case.project_id in
+        <foreach collection="rootIds" item="rootId" open="(" separator="," close=")">
+            #{rootId}
+        </foreach>
+        and functional_case.module_id = 'root'
+    </select>
+    <select id="selectLastExecResultByTestPlanIds"
+            resultType="io.metersphere.plan.dto.TestPlanResourceExecResultDTO">
+        select resource.test_plan_id AS testPlanId,
+        test_plan.group_id AS testPlanGroupId,
+        CASE
+        WHEN resource.last_exec_result is null
+        THEN 'PENDING'
+        WHEN resource.last_exec_result = '-'
+        THEN 'PENDING'
+        WHEN resource.last_exec_result = ''
+        THEN 'PENDING'
+        ELSE resource.last_exec_result
+        END AS execResult
+        FROM test_plan_functional_case resource
+        INNER JOIN test_plan ON test_plan.id = resource.test_plan_id
+        INNER JOIN functional_case funcCase ON resource.functional_case_id = funcCase.id
+        WHERE resource.test_plan_id IN
+        <foreach collection="testPlanIds" item="testPlanId" separator="," open="(" close=")">
+            #{testPlanId}
+        </foreach>
+        AND funcCase.deleted IS FALSE
+    </select>
+    <select id="selectLastExecResultByProjectId"
+            resultType="io.metersphere.plan.dto.TestPlanResourceExecResultDTO">
+        select resource.test_plan_id     AS testPlanId,
+               resource.last_exec_result AS execResult,
+               test_plan.group_id        AS testPlanGroupId
+        from test_plan_functional_case resource
+                 INNER JOIN test_plan ON test_plan.id = resource.test_plan_id
+                 INNER JOIN functional_case ON resource.functional_case_id = functional_case.id
+        where test_plan.project_id = #{projectId}
+          AND functional_case.deleted is false
+          AND test_plan.status != 'ARCHIVED'
+    </select>
 
 </mapper>

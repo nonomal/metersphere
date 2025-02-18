@@ -1,5 +1,6 @@
 package io.metersphere.bug.service;
 
+import com.google.common.collect.Maps;
 import io.metersphere.bug.domain.Bug;
 import io.metersphere.bug.domain.BugLocalAttachment;
 import io.metersphere.bug.domain.BugLocalAttachmentExample;
@@ -26,7 +27,6 @@ import io.metersphere.project.mapper.FileAssociationMapper;
 import io.metersphere.project.mapper.FileMetadataMapper;
 import io.metersphere.project.service.FileAssociationService;
 import io.metersphere.project.service.FileMetadataService;
-import io.metersphere.project.service.FileService;
 import io.metersphere.sdk.constants.DefaultRepositoryDir;
 import io.metersphere.sdk.constants.LocalRepositoryDir;
 import io.metersphere.sdk.constants.StorageType;
@@ -35,24 +35,25 @@ import io.metersphere.sdk.file.FileCenter;
 import io.metersphere.sdk.file.FileCopyRequest;
 import io.metersphere.sdk.file.FileRepository;
 import io.metersphere.sdk.file.FileRequest;
-import io.metersphere.sdk.util.*;
-import io.metersphere.system.dto.sdk.OptionDTO;
+import io.metersphere.sdk.util.FileAssociationSourceUtil;
+import io.metersphere.sdk.util.LogUtils;
+import io.metersphere.sdk.util.MsFileUtils;
+import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.log.constants.OperationLogModule;
-import io.metersphere.system.mapper.BaseUserMapper;
+import io.metersphere.system.service.CommonFileService;
+import io.metersphere.system.service.FileService;
+import io.metersphere.system.service.UserToolService;
 import io.metersphere.system.uid.IDGenerator;
 import jakarta.annotation.Resource;
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.unit.DataSize;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
@@ -63,6 +64,9 @@ import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * @author song-cc-rock
+ */
 @Service
 public class BugAttachmentService {
 
@@ -70,8 +74,6 @@ public class BugAttachmentService {
     private BugMapper bugMapper;
     @Resource
     private FileService fileService;
-    @Resource
-    private BaseUserMapper baseUserMapper;
     @Resource
     private FileMetadataMapper fileMetadataMapper;
     @Resource
@@ -84,9 +86,10 @@ public class BugAttachmentService {
     private FileAssociationService fileAssociationService;
     @Resource
     private BugLocalAttachmentMapper bugLocalAttachmentMapper;
-
-    @Value("50MB")
-    private DataSize maxFileSize;
+    @Resource
+    private CommonFileService commonFileService;
+    @Resource
+    private UserToolService userToolService;
 
     /**
      * 查询缺陷的附件集合
@@ -125,8 +128,7 @@ public class BugAttachmentService {
             return bugFiles;
         }
         List<String> userIds = bugFiles.stream().map(BugFileDTO::getCreateUser).distinct().toList();
-        List<OptionDTO> userOptions = baseUserMapper.selectUserOptionByIds(userIds);
-        Map<String, String> userMap = userOptions.stream().collect(Collectors.toMap(OptionDTO::getId, OptionDTO::getName));
+        Map<String, String> userMap = userToolService.getUserMapByIds(userIds);
         return bugFiles.stream().peek(file -> file.setCreateUserName(userMap.get(file.getCreateUser()))).toList();
     }
 
@@ -249,41 +251,6 @@ public class BugAttachmentService {
     }
 
     /**
-     * 上传MD文件
-     * @param file 文件
-     * @return 文件ID
-     */
-    public String uploadMdFile(MultipartFile file) {
-        String fileName = StringUtils.trim(file.getOriginalFilename());
-        if (file.getSize() > maxFileSize.toBytes()) {
-            throw new MSException(Translator.get("file.size.is.too.large"));
-        }
-        if (StringUtils.isBlank(fileName)) {
-            throw new MSException(Translator.get("file.name.cannot.be.empty"));
-        }
-        String fileId = IDGenerator.nextStr();
-        FileRequest fileRequest = new FileRequest();
-        fileRequest.setFileName(file.getOriginalFilename());
-        fileRequest.setFolder(DefaultRepositoryDir.getSystemTempDir() + "/" + fileId);
-        try {
-            FileCenter.getDefaultRepository().saveFile(file, fileRequest);
-            String fileType = StringUtils.substring(fileName, fileName.lastIndexOf(".") + 1);
-            if (TempFileUtils.isImage(fileType)) {
-                //图片文件自动生成预览图
-                byte[] previewImg = TempFileUtils.compressPic(file.getBytes());
-                fileRequest.setFolder(DefaultRepositoryDir.getSystemTempCompressDir() + "/" + fileId);
-                fileRequest.setStorage(StorageType.MINIO.toString());
-                fileService.upload(previewImg, fileRequest);
-            }
-        } catch (Exception e) {
-            LogUtils.error(e);
-            throw new MSException(e.getMessage());
-        }
-        return fileId;
-    }
-
-
-    /**
      * 同步平台附件到MS
      * @param platform 平台对象
      * @param attachmentMap 平台附件缺陷集合
@@ -306,7 +273,7 @@ public class BugAttachmentService {
                 }
             }
 
-            // 删除Jira中不存在的附件
+            // 删除三方平台中不存在的附件
             deleteSyncAttachmentFromMs(platformAttachmentSet, allBugFiles, bugId, projectId);
         }
     }
@@ -510,7 +477,7 @@ public class BugAttachmentService {
         FileAssociation association = fileAssociationMapper.selectByPrimaryKey(refId);
         FileMetadataExample example = new FileMetadataExample();
         example.createCriteria().andIdEqualTo(association.getFileId());
-        FileMetadata fileMetadata = fileMetadataMapper.selectByExample(example).get(0);
+        FileMetadata fileMetadata = fileMetadataMapper.selectByExample(example).getFirst();
         // 取消关联的附件同步至平台
         if (!StringUtils.equals(platformName, BugPlatform.LOCAL.getName())) {
             File deleteTmpFile = new File(FilenameUtils.normalize(LocalRepositoryDir.getBugTmpDir() + File.separator + fileMetadata.getName() + "." + fileMetadata.getType()));
@@ -628,7 +595,7 @@ public class BugAttachmentService {
         if (CollectionUtils.isEmpty(bugLocalAttachments)) {
             return null;
         }
-        return bugLocalAttachments.get(0);
+        return bugLocalAttachments.getFirst();
     }
 
     /**
@@ -656,11 +623,15 @@ public class BugAttachmentService {
         FileRepository defaultRepository = FileCenter.getDefaultRepository();
         String systemTempDir = DefaultRepositoryDir.getSystemTempDir();
         // 添加文件与功能用例的关联关系
-        Map<String, String> addFileMap = new HashMap<>();
-        LogUtils.info("开始上传副文本里的附件");
-        List<BugLocalAttachment> localAttachments = fileIds.stream().map(fileId -> {
-            BugLocalAttachment localAttachment = new BugLocalAttachment();
+        Map<String, String> addFileMap = Maps.newHashMapWithExpectedSize(8);
+        LogUtils.info("开始上传富文本里的附件");
+        List<BugLocalAttachment> localAttachments = new ArrayList<>();
+        for (String fileId : fileIds) {
             String fileName = getTempFileNameByFileId(fileId);
+            if (StringUtils.isEmpty(fileName)) {
+                continue;
+            }
+            BugLocalAttachment localAttachment = new BugLocalAttachment();
             localAttachment.setId(IDGenerator.nextStr());
             localAttachment.setBugId(bugId);
             localAttachment.setFileId(fileId);
@@ -679,12 +650,16 @@ public class BugAttachmentService {
             localAttachment.setCreateUser(userId);
             localAttachment.setCreateTime(System.currentTimeMillis());
             addFileMap.put(fileId, fileName);
-            return localAttachment;
-        }).toList();
-        bugLocalAttachmentMapper.batchInsert(localAttachments);
+            localAttachments.add(localAttachment);
+        }
+        if (!CollectionUtils.isEmpty(localAttachments)) {
+            bugLocalAttachmentMapper.batchInsert(localAttachments);
+        }
         // 上传文件到对象存储
         LogUtils.info("upload to minio start");
-        uploadFileResource(DefaultRepositoryDir.getBugDir(projectId, bugId), addFileMap, projectId, bugId);
+        String bugDir = DefaultRepositoryDir.getBugDir(projectId, bugId);
+        String bugPreviewDir = DefaultRepositoryDir.getBugPreviewDir(projectId, bugId);
+        commonFileService.saveReviewImgFromTempFile(bugDir, bugPreviewDir, addFileMap);
         LogUtils.info("upload to minio end");
     }
 
@@ -692,69 +667,7 @@ public class BugAttachmentService {
      * 根据文件ID，查询MINIO中对应目录下的文件名称
      */
     public String getTempFileNameByFileId(String fileId) {
-        FileRepository defaultRepository = FileCenter.getDefaultRepository();
-        try {
-            FileRequest fileRequest = new FileRequest();
-            fileRequest.setFolder(DefaultRepositoryDir.getSystemTempDir() + "/" + fileId);
-            List<String> folderFileNames = defaultRepository.getFolderFileNames(fileRequest);
-            if (CollectionUtils.isEmpty(folderFileNames)) {
-                return null;
-            }
-            String[] pathSplit = folderFileNames.get(0).split("/");
-            return pathSplit[pathSplit.length - 1];
-
-        } catch (Exception e) {
-            LogUtils.error(e);
-            return null;
-        }
-    }
-
-    /**
-     * 上传文件到资源目录
-     * @param folder 文件夹
-     * @param addFileMap 文件ID与文件名映射
-     * @param projectId 项目ID
-     * @param bugId 缺陷ID
-     */
-    public void uploadFileResource(String folder, Map<String, String> addFileMap, String projectId, String bugId) {
-        if (MapUtils.isEmpty(addFileMap)) {
-            return;
-        }
-        FileRepository defaultRepository = FileCenter.getDefaultRepository();
-        for (String fileId : addFileMap.keySet()) {
-            String systemTempDir = DefaultRepositoryDir.getSystemTempDir();
-            try {
-                String fileName = addFileMap.get(fileId);
-                if (StringUtils.isEmpty(fileName)) {
-                    continue;
-                }
-                // 按ID建文件夹，避免文件名重复
-                FileCopyRequest fileCopyRequest = new FileCopyRequest();
-                fileCopyRequest.setCopyFolder(systemTempDir + "/" + fileId);
-                fileCopyRequest.setCopyfileName(fileName);
-                fileCopyRequest.setFileName(fileName);
-                fileCopyRequest.setFolder(folder + "/" + fileId);
-                // 将文件从临时目录复制到资源目录
-                defaultRepository.copyFile(fileCopyRequest);
-
-                String fileType = StringUtils.substring(fileName, fileName.lastIndexOf(".") + 1);
-                if (TempFileUtils.isImage(fileType)) {
-                    //图片文件自动生成预览图
-                    byte[] file = defaultRepository.getFile(fileCopyRequest);
-                    byte[] previewImg = TempFileUtils.compressPic(file);
-                    fileCopyRequest.setFolder(DefaultRepositoryDir.getBugPreviewDir(projectId, bugId) + "/" + fileId);
-                    fileCopyRequest.setStorage(StorageType.MINIO.toString());
-                    fileService.upload(previewImg, fileCopyRequest);
-                }
-                // 删除临时文件
-                fileCopyRequest.setFolder(systemTempDir + "/" + fileId);
-                fileCopyRequest.setFileName(fileName);
-                defaultRepository.delete(fileCopyRequest);
-            } catch (Exception e) {
-                LogUtils.error("上传副文本文件失败：{}",e);
-                throw new MSException(Translator.get("file_upload_fail"));
-            }
-        }
+        return commonFileService.getTempFileNameByFileId(fileId);
     }
 
     public ResponseEntity<byte[]> previewMd(String projectId, String fileId, boolean compressed) {
@@ -766,10 +679,10 @@ public class BugAttachmentService {
         if (CollectionUtils.isEmpty(bugAttachments)) {
             //在临时文件获取
             fileName = getTempFileNameByFileId(fileId);
-            bytes = getPreviewImg(fileName, fileId, compressed);
+            bytes = commonFileService.downloadTempImg(fileId, fileName, compressed);
         } else {
             //在正式目录获取
-            BugLocalAttachment attachment = bugAttachments.get(0);
+            BugLocalAttachment attachment = bugAttachments.getFirst();
             fileName = attachment.getFileName();
             FileRequest fileRequest = buildBugFileRequest(projectId, attachment.getBugId(), attachment.getFileId(), attachment.getFileName(), compressed);
             try {
@@ -782,52 +695,5 @@ public class BugAttachmentService {
                 .contentType(MediaType.parseMediaType("application/octet-stream"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
                 .body(bytes);
-    }
-
-    public byte[] getPreviewImg(String fileName, String fileId, boolean isCompressed) {
-        String systemTempDir;
-        if (isCompressed) {
-            systemTempDir = DefaultRepositoryDir.getSystemTempCompressDir();
-        } else {
-            systemTempDir = DefaultRepositoryDir.getSystemTempDir();
-        }
-        FileRequest previewRequest = new FileRequest();
-        previewRequest.setFileName(fileName);
-        previewRequest.setStorage(StorageType.MINIO.name());
-        previewRequest.setFolder(systemTempDir + "/" + fileId);
-        byte[] previewImg = null;
-        try {
-            previewImg = fileService.download(previewRequest);
-        } catch (Exception e) {
-            LogUtils.error("获取预览图失败：{}", e);
-        }
-
-        if (previewImg == null || previewImg.length == 0) {
-            try {
-                if (isCompressed) {
-                    previewImg = this.compressPicWithFileMetadata(fileName, fileId);
-                    previewRequest.setFolder(DefaultRepositoryDir.getSystemTempCompressDir() + "/" + fileId);
-                    fileService.upload(previewImg, previewRequest);
-                }
-                return previewImg;
-            } catch (Exception e) {
-                LogUtils.error("获取预览图失败：{}", e);
-            }
-        }
-        return previewImg;
-    }
-
-    //获取文件并压缩的方法需要上锁，防止并发超过一定数量时内存溢出
-    private synchronized byte[] compressPicWithFileMetadata(String fileName, String fileId) throws Exception {
-        byte[] fileBytes = this.getFile(fileName, fileId);
-        return TempFileUtils.compressPic(fileBytes);
-    }
-
-    public byte[] getFile(String fileName, String fileId) throws Exception {
-        FileRequest fileRequest = new FileRequest();
-        fileRequest.setFileName(fileName);
-        fileRequest.setFolder(DefaultRepositoryDir.getSystemTempDir() + "/" + fileId);
-        fileRequest.setStorage(StorageType.MINIO.name());
-        return fileService.download(fileRequest);
     }
 }

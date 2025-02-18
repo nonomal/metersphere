@@ -36,6 +36,7 @@ export interface MsSearchSelectProps {
   triggerProps?: TriggerProps; // 触发器属性
   loading?: boolean; // 加载状态
   fallbackOption?: boolean | ((value: string | number | boolean | Record<string, unknown>) => SelectOptionData); // 自定义值中不存在的选项
+  optionNotExitsText?: string; // 选项不存在时的提示文案
   shouldCalculateMaxTag?: boolean; // 是否需要计算最大展示选项数量
   disabled?: boolean; // 是否禁用
   size?: 'mini' | 'small' | 'medium' | 'large'; // 尺寸
@@ -43,6 +44,8 @@ export interface MsSearchSelectProps {
   optionLabelRender?: (item: SelectOptionData) => string; // 自定义 option 的 label 渲染，返回一个 html 字符串，默认使用 item.label
   optionTooltipContent?: (item: SelectOptionData) => string; // 自定义 option 的 tooltip 内容，返回一个字符串，默认使用 item.label
   remoteFilterFunc?: (options: SelectOptionData[]) => SelectOptionData[]; // 自定义过滤函数，会在远程请求返回数据后执行
+  optionTooltipPosition?: 'top' | 'tl' | 'tr' | 'bottom' | 'bl' | 'br' | 'left' | 'lt' | 'lb' | 'right' | 'rt' | 'rb'; // // label tooltip 的位置
+  fullTooltipPosition?: 'top' | 'tl' | 'tr' | 'bottom' | 'bl' | 'br' | 'left' | 'lt' | 'lb' | 'right' | 'rt' | 'rb'; // // 全选 tooltip 的位置
 }
 export interface RadioProps {
   options: SelectOptionData[];
@@ -51,7 +54,7 @@ export interface RadioProps {
 }
 
 export interface MsSearchSelectSlots {
-  prefix?: string;
+  prefix?: string | Slot<any>;
   // @ts-ignore
   header?: (() => JSX.Element) | Slot<any>;
   // @ts-ignore
@@ -68,7 +71,7 @@ export default defineComponent(
     const inputValue = ref('');
     const tempInputValue = ref('');
     const filterOptions = ref<SelectOptionData[]>([...props.options]); // 实际渲染的 options，会根据搜索关键字进行过滤
-    const remoteOriginOptions = ref<SelectOptionData[]>([...props.options]); // 远程模式下的原始 options，接口返回的数据会存储在这里
+    const remoteOriginOptions = ref<SelectOptionData[]>([...props.options]); // 远程模式下的原始 options，接口返回的数据会存储在这里；静态模式下，默认为 options
 
     const selectRef = ref();
     const { maxTagCount, getOptionComputedStyle, singleTagMaxWidth, calculateMaxTag } = useSelect({
@@ -173,7 +176,10 @@ export default defineComponent(
                 if (e[key]?.toLowerCase().includes(val.toLowerCase())) {
                   // 是否匹配
                   hasMatch = true;
-                  item[key] = e[key].replace(new RegExp(val, 'gi'), highlightedKeyword); // 高亮关键字替换
+                  item[key] = e[key].replace(
+                    new RegExp(val.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), // 转义搜索关键字中的所有特殊字符
+                    highlightedKeyword
+                  ); // 高亮关键字替换
                 }
               }
             }
@@ -235,9 +241,11 @@ export default defineComponent(
           ? [...filterOptions.value]
           : filterOptions.value.map((e) => e[props.valueKey || 'value']);
         emit('update:modelValue', innerValue.value);
+        emit('change', innerValue.value);
       } else {
         innerValue.value = [];
         emit('update:modelValue', []);
+        emit('change', []);
       }
     }
 
@@ -277,7 +285,12 @@ export default defineComponent(
       const _slots: MsSearchSelectSlots = {
         default: () =>
           filterOptions.value.map((item) => (
-            <a-tooltip content={item.tooltipContent} mouse-enter-delay={500} position="bl">
+            <a-tooltip
+              content={item.tooltipContent}
+              mouse-enter-delay={500}
+              position={props.optionTooltipPosition || 'bl'}
+              arrow-class={props.optionTooltipPosition === 'tr' ? 'absolute right-[4px] !left-auto' : ''}
+            >
               <a-option
                 key={item[props.valueKey || 'value']}
                 value={props.objectValue ? item : item[props.valueKey || 'value']}
@@ -311,6 +324,9 @@ export default defineComponent(
       }
       if (slots.header) {
         _slots.header = slots.header;
+      }
+      if (slots.prefix) {
+        _slots.prefix = slots.prefix;
       }
       if (slots.footer) {
         _slots.footer = slots.footer;
@@ -442,12 +458,42 @@ export default defineComponent(
       return props.allowClear;
     });
 
+    function checkOptionExit(value?: string) {
+      if (typeof props.optionLabelRender === 'function') {
+        return value;
+      }
+      const option = remoteOriginOptions.value.find(
+        (e) =>
+          String(e[props.valueKey || 'value']).toLowerCase() === String(value).toLowerCase() ||
+          String(e[props.labelKey || 'label']).toLowerCase() === String(value)?.toLowerCase()
+      );
+      return option ? option[props.labelKey || 'label'] : props.optionNotExitsText || t('ms.select.optionsNotExits');
+    }
+
+    function fallbackNotExitOption(value: string | number | boolean | Record<string, any>) {
+      return {
+        label: checkOptionExit(typeof value === 'object' ? value[props.labelKey || 'label'] : value),
+        value,
+        disabled: true,
+      };
+    }
+
+    const renderPrefix = () => {
+      if (slots.prefix) {
+        return slots.prefix;
+      }
+      if (props.prefix) {
+        return typeof props.prefix === 'string' ? () => t(props.prefix as string) : props.prefix;
+      }
+      return null;
+    };
+
     return () => (
       <div class="w-full">
         <a-tooltip
           content={selectFullTooltip.value}
           class={disabledTooltip.value ? 'opacity-0' : ''}
-          position="top"
+          position={props.fullTooltipPosition || 'top'}
           mouse-enter-delay={300}
           mini
         >
@@ -460,7 +506,7 @@ export default defineComponent(
             placeholder={t(props.placeholder || '')}
             allow-clear={allowClear.value}
             allow-search={props.allowSearch}
-            filter-option={true}
+            filter-option={false}
             loading={loading.value}
             multiple={props.multiple}
             max-tag-count={maxTagCount.value}
@@ -468,10 +514,11 @@ export default defineComponent(
             value-key={props.valueKey || 'value'}
             popup-container={props.popupContainer || document.body}
             trigger-props={props.triggerProps}
-            fallback-option={props.fallbackOption}
+            fallback-option={props.fallbackOption || fallbackNotExitOption}
             disabled={props.disabled}
             size={props.size}
             onChange={handleChange}
+            onBlur={emit('blur')}
             onSearch={handleSearch}
             onPopupVisibleChange={(val: boolean) => {
               popupVisible.value = val;
@@ -496,9 +543,13 @@ export default defineComponent(
               }
             }}
             onInputValueChange={handleInputValueChange}
+            onClear={() => {
+              innerValue.value = props.multiple ? [] : '';
+              emit('update:modelValue', innerValue.value);
+            }}
           >
             {{
-              prefix: props.prefix ? () => t(props.prefix || '') : null,
+              prefix: renderPrefix(),
               label: ({ data }: { data: SelectOptionData }) => (
                 // 在不限制标签数量时展示 tooltip
                 <a-tooltip content={data.label} disabled={maxTagCount.value !== Infinity && maxTagCount.value !== 0}>
@@ -506,7 +557,7 @@ export default defineComponent(
                     class="one-line-text"
                     style={singleTagMaxWidth.value > 0 ? { maxWidth: `${singleTagMaxWidth.value}px` } : {}}
                   >
-                    {slots.label ? slots.label(data) : data.label}
+                    {slots.label ? slots.label(data) : checkOptionExit(data.label)}
                   </div>
                 </a-tooltip>
               ),
@@ -546,9 +597,12 @@ export default defineComponent(
       'atLeastOne',
       'objectValue',
       'remoteFilterFunc',
+      'optionNotExitsText',
       'shouldCalculateMaxTag',
       'disabled',
       'size',
+      'optionTooltipPosition',
+      'fullTooltipPosition',
     ],
     emits: [
       'update:modelValue',
@@ -558,6 +612,7 @@ export default defineComponent(
       'remove',
       'change',
       'changeObject',
+      'blur',
     ],
   }
 );

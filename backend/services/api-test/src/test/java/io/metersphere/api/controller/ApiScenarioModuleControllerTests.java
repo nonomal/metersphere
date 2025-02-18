@@ -26,13 +26,13 @@ import io.metersphere.system.uid.IDGenerator;
 import io.metersphere.system.uid.NumGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.ResultMatcher;
-import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -402,7 +402,7 @@ public class ApiScenarioModuleControllerTests extends BaseTest {
         List<ApiScenarioModule> apiDebugModules = apiScenarioModuleMapper.selectByExample(example);
         assert CollectionUtils.isNotEmpty(apiDebugModules);
         updateRequest = new ModuleUpdateRequest();
-        updateRequest.setId(apiDebugModules.get(0).getId());
+        updateRequest.setId(apiDebugModules.getFirst().getId());
         updateRequest.setName("default-update-Project");
         requestPostPermissionTest(PermissionConstants.PROJECT_API_SCENARIO_UPDATE, URL_MODULE_UPDATE, updateRequest);
     }

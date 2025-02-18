@@ -1,7 +1,7 @@
 package io.metersphere.api.parser.jmeter.processor.assertion;
 
-import io.metersphere.project.api.assertion.MsResponseCodeAssertion;
 import io.metersphere.plugin.api.dto.ParameterConfig;
+import io.metersphere.project.api.assertion.MsResponseCodeAssertion;
 import io.metersphere.sdk.dto.api.result.ResponseAssertionResult;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jmeter.assertions.ResponseAssertion;
@@ -17,18 +17,18 @@ public class ResponseCodeAssertionConverter extends AssertionConverter<MsRespons
         if (!needParse(msAssertion, config) || !isValid(msAssertion)) {
             return;
         }
-        hashTree.add(parse2ResponseAssertion(msAssertion));
+        hashTree.add(parse2ResponseAssertion(msAssertion, isIgnoreStatus));
     }
 
     public boolean isValid(MsResponseCodeAssertion msAssertion) {
         return StringUtils.isNotBlank(msAssertion.getCondition());
     }
 
-    private ResponseAssertion parse2ResponseAssertion(MsResponseCodeAssertion msAssertion) {
+    private ResponseAssertion parse2ResponseAssertion(MsResponseCodeAssertion msAssertion, boolean isIgnoreStatus) {
         ResponseAssertion assertion = createResponseAssertion();
         String expectedValue = msAssertion.getExpectedValue();
         assertion.setEnabled(msAssertion.getEnable());
-        assertion.setAssumeSuccess(true);
+        assertion.setAssumeSuccess(isIgnoreStatus);
         assertion.setEnabled(msAssertion.getEnable());
 
         String condition = msAssertion.getCondition();

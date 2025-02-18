@@ -24,4 +24,13 @@ public class BasePlanCaseBatchRequest extends TableBatchProcessDTO implements Se
 
     @Schema(description = "模块id")
     private List<String> moduleIds;
+
+    @Schema(description = "计划集id")
+    private String collectionId;
+
+    @Schema(description = "项目Id")
+    private String projectId;
+
+    @Schema(description = "是否包含空执行人")
+    private boolean nullExecutorKey;
 }

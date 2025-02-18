@@ -9,30 +9,35 @@
     unmount-on-close
   >
     <template #title>
-      <div class="flex flex-1 items-center">
+      <div class="flex flex-1 items-center overflow-hidden">
         <!-- 如果设置了tooltipText，则优先展示-->
-        <a-tooltip :content="props.tooltipText ? props.tooltipText : props.title" position="bottom">
-          <div class="one-line-text max-w-[300px]">
-            {{ props.title }}
+        <div class="flex flex-1 items-center overflow-hidden">
+          <a-tooltip :content="props.tooltipText ? props.tooltipText : props.title" position="bottom">
+            <slot name="titleName">
+              <div class="one-line-text">
+                {{ props.title }}
+              </div>
+            </slot>
+          </a-tooltip>
+          <div class="mx-4 flex items-center">
+            <slot name="titleLeft" :loading="loading" :detail="detail"></slot>
           </div>
-        </a-tooltip>
-        <div class="ml-4 flex items-center">
-          <slot name="titleLeft" :loading="loading" :detail="detail"></slot>
         </div>
-        <MsPrevNextButton
-          ref="prevNextButtonRef"
-          v-model:loading="loading"
-          class="ml-[16px]"
-          :page-change="props.pageChange"
-          :pagination="props.pagination"
-          :get-detail-func="props.getDetailFunc"
-          :detail-id="props.detailId"
-          :detail-index="props.detailIndex"
-          :table-data="props.tableData"
-          @loading-detail="setDetailLoading"
-          @loaded="handleDetailLoaded"
-        />
         <div class="ml-auto flex items-center">
+          <MsPrevNextButton
+            v-if="props.tableData && props.pagination && props.pageChange"
+            ref="prevNextButtonRef"
+            v-model:loading="loading"
+            class="mr-[16px]"
+            :page-change="props.pageChange"
+            :pagination="props.pagination"
+            :get-detail-func="props.getDetailFunc"
+            :detail-id="props.detailId"
+            :detail-index="props.detailIndex"
+            :table-data="props.tableData"
+            @loading-detail="setDetailLoading"
+            @loaded="handleDetailLoaded"
+          />
           <slot name="titleRight" :loading="loading" :detail="detail"></slot>
         </div>
       </div>
@@ -52,15 +57,15 @@
     width: number;
     detailId: string; // 详情 id
     tooltipText?: string; // tooltip内容
-    detailIndex: number; // 详情 下标
-    tableData: any[]; // 表格数据
-    pagination: MsPaginationI; // 分页器对象
+    detailIndex?: number; // 详情 下标
+    tableData?: any[]; // 表格数据
+    pagination?: MsPaginationI; // 分页器对象
     showFullScreen?: boolean; // 是否显示全屏按钮
-    pageChange: (page: number) => Promise<void>; // 分页变更函数
+    pageChange?: (page: number) => Promise<void>; // 分页变更函数
     getDetailFunc: (id: string) => Promise<any>; // 获取详情的请求函数
   }>();
 
-  const emit = defineEmits(['update:visible', 'loaded', 'loadingDetail']);
+  const emit = defineEmits(['update:visible', 'loaded', 'loadingDetail', 'getDetail']);
 
   const prevNextButtonRef = ref<InstanceType<typeof MsPrevNextButton>>();
 
@@ -108,7 +113,11 @@
     if (innerVisible.value) {
       nextTick(() => {
         // 为了确保 prevNextButtonRef 已渲染
-        initDetail();
+        if (props.tableData && props.pagination && props.pageChange) {
+          initDetail();
+        } else {
+          emit('getDetail');
+        }
       });
     }
   });

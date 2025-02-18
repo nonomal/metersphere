@@ -10,16 +10,16 @@ import io.metersphere.system.log.service.OperationLogService;
 import io.metersphere.system.log.vo.OperationLogResponse;
 import io.metersphere.system.log.vo.ProOperationLogRequest;
 import io.metersphere.system.log.vo.SystemOperationLogRequest;
-import io.metersphere.system.service.UserService;
+import io.metersphere.system.service.SimpleUserService;
 import io.metersphere.system.utils.PageUtils;
 import io.metersphere.system.utils.Pager;
 import io.metersphere.system.utils.SessionUtils;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,10 +36,10 @@ import java.util.List;
 @RequestMapping("/project/log")
 public class ProjectLogController {
 
-    @Autowired
-    private UserService userService;
+    @Resource
+    private SimpleUserService simpleUserService;
 
-    @Autowired
+    @Resource
     private OperationLogService operationLogService;
 
     @GetMapping("/user/list/{projectId}")
@@ -48,7 +48,7 @@ public class ProjectLogController {
     public List<User> getUserList(@PathVariable(value = "projectId") String projectId,
                                   @Schema(description = "查询关键字，根据邮箱和用户名查询")
                                   @RequestParam(value = "keyword", required = false) String keyword) {
-        return userService.getUserListByOrgId(StringUtils.defaultIfBlank(projectId, SessionUtils.getCurrentProjectId()), keyword);
+        return simpleUserService.getUserListByOrgId(StringUtils.defaultIfBlank(projectId, SessionUtils.getCurrentProjectId()), keyword);
     }
 
 

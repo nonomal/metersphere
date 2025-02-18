@@ -19,7 +19,7 @@
         :scroll="{ minWidth: '100%' }"
         :default-param-item="jsonPathDefaultParamItem"
         @change="(data:any[],isInit?: boolean) => handleChange(data, ResponseBodyAssertionType.JSON_PATH,isInit)"
-        @more-action-select="(e,r)=> handleExtractParamMoreActionSelect(e,r as ExpressionConfig)"
+        @more-action-select="(e, r) => handleExtractParamMoreActionSelect(e, r)"
       >
         <template #expression="{ record, rowIndex }">
           <a-popover
@@ -28,10 +28,10 @@
             class="ms-params-input-popover"
           >
             <template #content>
-              <div class="param-popover-title">
+              <div class="ms-params-popover-title">
                 {{ t('apiTestDebug.expression') }}
               </div>
-              <div class="param-popover-value">
+              <div class="ms-params-popover-value">
                 {{ record.expression }}
               </div>
             </template>
@@ -39,7 +39,6 @@
               v-model:model-value="record.expression"
               class="ms-params-input"
               :max-length="255"
-              size="mini"
               :disabled="props.disabled"
               :placeholder="t('apiTestDebug.commonPlaceholder')"
               @input="() => handleExpressionChange(rowIndex)"
@@ -62,7 +61,7 @@
                         ? 'ms-params-input-suffix-icon--disabled'
                         : 'ms-params-input-suffix-icon'
                     "
-                    @click.stop="() => showFastExtraction(record, RequestExtractExpressionEnum.JSON_PATH)"
+                    @click.stop="() => showFastExtraction(record)"
                   />
                 </a-tooltip>
               </template>
@@ -124,9 +123,9 @@
         :selectable="true"
         :columns="xPathColumns"
         :scroll="{ minWidth: '100%' }"
-        :default-param-item="defaultAssertParamsItem"
+        :default-param-item="xpathAssertParamsItem"
         @change="(data:any[],isInit?: boolean) => handleChange(data, ResponseBodyAssertionType.XPATH,isInit)"
-        @more-action-select="(e,r)=> handleExtractParamMoreActionSelect(e,r as ExpressionConfig)"
+        @more-action-select="(e, r) => handleExtractParamMoreActionSelect(e, r)"
       >
         <template #expression="{ record, rowIndex }">
           <a-popover
@@ -135,10 +134,10 @@
             class="ms-params-input-popover"
           >
             <template #content>
-              <div class="param-popover-title">
+              <div class="ms-params-popover-title">
                 {{ t('apiTestDebug.expression') }}
               </div>
-              <div class="param-popover-value">
+              <div class="ms-params-popover-value">
                 {{ record.expression }}
               </div>
             </template>
@@ -147,7 +146,6 @@
               :disabled="props.disabled"
               class="ms-params-input"
               :max-length="255"
-              size="mini"
               :placeholder="t('apiTestDebug.commonPlaceholder')"
               @input="() => handleExpressionChange(rowIndex)"
               @change="() => handleExpressionChange(rowIndex)"
@@ -168,7 +166,7 @@
                         ? 'ms-params-input-suffix-icon--disabled'
                         : 'ms-params-input-suffix-icon'
                     "
-                    @click.stop="() => showFastExtraction(record, RequestExtractExpressionEnum.X_PATH)"
+                    @click.stop="() => showFastExtraction(record)"
                   />
                 </a-tooltip>
               </template>
@@ -273,7 +271,7 @@
         :scroll="{ minWidth: '100%' }"
         :default-param-item="regexDefaultParamItem"
         @change="(data) => handleChange(data, ResponseBodyAssertionType.REGEX)"
-        @more-action-select="(e,r)=> handleExtractParamMoreActionSelect(e,r as ExpressionConfig)"
+        @more-action-select="(e, r) => handleExtractParamMoreActionSelect(e, r)"
       >
         <template #expression="{ record, rowIndex }">
           <a-popover
@@ -282,10 +280,10 @@
             class="ms-params-input-popover"
           >
             <template #content>
-              <div class="param-popover-title">
+              <div class="ms-params-popover-title">
                 {{ t('apiTestDebug.expression') }}
               </div>
-              <div class="param-popover-value">
+              <div class="ms-params-popover-value">
                 {{ record.expression }}
               </div>
             </template>
@@ -294,7 +292,6 @@
               :disabled="props.disabled"
               class="ms-params-input"
               :max-length="255"
-              size="mini"
               @input="() => handleExpressionChange(rowIndex)"
               @change="() => handleExpressionChange(rowIndex)"
             >
@@ -314,7 +311,7 @@
                         ? 'ms-params-input-suffix-icon--disabled'
                         : 'ms-params-input-suffix-icon'
                     "
-                    @click.stop="() => showFastExtraction(record, RequestExtractExpressionEnum.REGEX)"
+                    @click.stop="() => showFastExtraction(record)"
                   />
                 </a-tooltip>
               </template>
@@ -357,7 +354,6 @@
 </template>
 
 <script setup lang="ts">
-  import { useVModel } from '@vueuse/core';
   import { TableColumnData, TableData } from '@arco-design/web-vue';
   import { cloneDeep } from 'lodash-es';
 
@@ -378,20 +374,13 @@
     insertNode,
   } from '@/utils/tree';
 
-  import {
-    ExecuteConditionProcessor,
-    ExpressionType,
-    JSONPathExtract,
-    RegexExtract,
-    XPathExtract,
-  } from '@/models/apiTest/common';
+  import { JSONPathExtract, RegexExtract, XPathExtract } from '@/models/apiTest/common';
   import { RequestExtractExpressionEnum, ResponseBodyAssertionType } from '@/enums/apiEnum';
 
   import {
-    defaultAssertParamsItem,
-    defaultExtractParamItem,
     jsonPathDefaultParamItem,
     regexDefaultParamItem,
+    xpathAssertParamsItem,
   } from '@/views/api-test/components/config';
 
   const { t } = useI18n();
@@ -403,7 +392,6 @@
 
   const props = withDefaults(
     defineProps<{
-      data: Param;
       response?: string;
       disabled?: boolean;
       showExtraction?: boolean;
@@ -414,13 +402,14 @@
   );
 
   const emit = defineEmits<{
-    (e: 'update:data', data: ExecuteConditionProcessor): void;
     (e: 'copy'): void;
     (e: 'delete', id: number): void;
     (e: 'change', param: Param): void;
   }>();
 
-  const condition = useVModel(props, 'data', emit);
+  const condition = defineModel<Param>('data', {
+    required: true,
+  });
 
   const rootId = 0; // 1970-01-01 00:00:00 UTC
 
@@ -442,7 +431,7 @@
   // const disabledExpressionSuffix = ref(false);
   export type ExpressionConfig = (RegexExtract | JSONPathExtract | XPathExtract) & Record<string, any>;
 
-  const activeRecord = ref({ ...defaultExtractParamItem }); // 用于暂存当前操作的提取参数表格项
+  const activeRecord = ref<any>({ ...xpathAssertParamsItem, id: '' }); // 用于暂存当前操作的提取参数表格项
 
   const responseRadios = [
     { label: 'ms.assertion.jsonPath', value: ResponseBodyAssertionType.JSON_PATH },
@@ -489,6 +478,27 @@
     },
   ];
 
+  onBeforeMount(() => {
+    condition.value.jsonPathAssertion.assertions = condition.value.jsonPathAssertion.assertions?.map((e: Param) => {
+      return {
+        ...e,
+        extractType: RequestExtractExpressionEnum.JSON_PATH,
+      };
+    });
+    condition.value.xpathAssertion.assertions = condition.value.xpathAssertion.assertions?.map((e: Param) => {
+      return {
+        ...e,
+        extractType: RequestExtractExpressionEnum.X_PATH,
+      };
+    });
+    condition.value.regexAssertion.assertions = condition.value.regexAssertion.assertions?.map((e: Param) => {
+      return {
+        ...e,
+        extractType: RequestExtractExpressionEnum.REGEX,
+      };
+    });
+  });
+
   const handleChange = (data: any[], type: string, isInit?: boolean) => {
     switch (type) {
       case ResponseBodyAssertionType.JSON_PATH:
@@ -496,7 +506,6 @@
         if (!isInit) {
           emit('change', { ...condition.value });
         }
-
         break;
       case ResponseBodyAssertionType.XPATH:
         condition.value.xpathAssertion.assertions = data;
@@ -603,7 +612,7 @@
       showDrag: true,
       columnSelectorDisabled: true,
       addLineDisabled: true,
-      typeOptions: [
+      options: [
         { label: 'object', value: 'object' },
         { label: 'array', value: 'array' },
         { label: 'string', value: 'string' },
@@ -639,7 +648,6 @@
   ];
 
   const documentDefaultParamItem = {
-    id: new Date().getTime(),
     paramsName: '',
     mustInclude: false,
     typeChecking: false,
@@ -700,14 +708,14 @@
    */
   function handleFastExtractionApply(
     config: RegexExtract | JSONPathExtract | XPathExtract,
-    matchResult: Record<string, any>
+    matchResult: string[] | string
   ) {
     condition.value.jsonPathAssertion.assertions = condition.value.jsonPathAssertion.assertions?.map((e: Param) => {
       if (e.id === activeRecord.value.id) {
         return {
           ...e,
           ...config,
-          expectedValue: matchResult.join(''),
+          expectedValue: Array.isArray(matchResult) ? JSON.stringify(matchResult) : matchResult,
         };
       }
       return e;
@@ -808,7 +816,7 @@
   /**
    * 处理提取参数表格更多操作
    */
-  function handleExtractParamMoreActionSelect(event: ActionsItem, record: ExpressionConfig) {
+  function handleExtractParamMoreActionSelect(event: ActionsItem, record: Record<string, any>) {
     activeRecord.value = { ...record };
     if (event.eventTag === 'copy') {
       copyItem(record);
@@ -817,14 +825,9 @@
     }
   }
 
-  /**
-   * 删除列表项
-   */
-  function deleteListItem(id: string | number) {}
-
-  function showFastExtraction(record: ExpressionConfig, type: ExpressionType) {
+  function showFastExtraction(record: Record<string, any>) {
     if (props.disabled || !props.response) return;
-    activeRecord.value = { ...record, extractType: type };
+    activeRecord.value = { ...record };
     fastExtractionVisible.value = true;
   }
   // 新增子项
@@ -920,9 +923,5 @@
         };
       }
     }
-  };
-
-  const handleScriptChange = (data: ExecuteConditionProcessor) => {
-    condition.value.script = data;
   };
 </script>

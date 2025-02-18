@@ -7,7 +7,7 @@ import io.metersphere.api.domain.ApiTestCaseRecord;
 import io.metersphere.api.service.BaseResourcePoolTestService;
 import io.metersphere.api.service.definition.ApiReportService;
 import io.metersphere.api.service.scenario.ApiScenarioReportService;
-import io.metersphere.sdk.constants.ApiReportStatus;
+import io.metersphere.sdk.constants.ExecStatus;
 import io.metersphere.sdk.constants.ResourcePoolTypeEnum;
 import io.metersphere.sdk.constants.SessionConstants;
 import io.metersphere.sdk.constants.TaskCenterResourceType;
@@ -19,7 +19,7 @@ import io.metersphere.system.domain.TestResourcePoolBlob;
 import io.metersphere.system.dto.pool.TestResourceDTO;
 import io.metersphere.system.dto.pool.TestResourceNodeDTO;
 import io.metersphere.system.dto.pool.TestResourcePoolDTO;
-import io.metersphere.system.dto.sdk.BaseCondition;
+import io.metersphere.sdk.dto.BaseCondition;
 import io.metersphere.system.dto.table.TableBatchProcessDTO;
 import io.metersphere.system.dto.taskcenter.request.TaskCenterBatchRequest;
 import io.metersphere.system.dto.taskcenter.request.TaskCenterPageRequest;
@@ -242,9 +242,10 @@ public class ApiTaskCenterControllerTests extends BaseTest {
             apiReport.setEnvironmentId("api-environment-id" + i);
             apiReport.setRunMode("api-run-mode" + i);
             if (i % 2 == 0) {
-                apiReport.setStatus(ApiReportStatus.PENDING.name());
+                apiReport.setTestPlanCaseId("task-api-resource-id" + i);
+                apiReport.setStatus(ExecStatus.PENDING.name());
             } else {
-                apiReport.setStatus(ApiReportStatus.RUNNING.name());
+                apiReport.setStatus(ExecStatus.RUNNING.name());
             }
             apiReport.setTriggerMode("task-MANUAL");
             reports.add(apiReport);
@@ -266,9 +267,10 @@ public class ApiTaskCenterControllerTests extends BaseTest {
             scenarioReport.setCreateUser("admin");
             scenarioReport.setUpdateUser("admin");
             if (i % 2 == 0) {
-                scenarioReport.setStatus(ApiReportStatus.PENDING.name());
+                scenarioReport.setTestPlanScenarioId("task-api-resource-id" + i);
+                scenarioReport.setStatus(ExecStatus.PENDING.name());
             } else {
-                scenarioReport.setStatus(ApiReportStatus.RUNNING.name());
+                scenarioReport.setStatus(ExecStatus.RUNNING.name());
             }
             scenarioReport.setUpdateTime(System.currentTimeMillis());
             scenarioReport.setPoolId("api-pool-id");
@@ -292,7 +294,7 @@ public class ApiTaskCenterControllerTests extends BaseTest {
         testResourcePool.setCreateUser("admin");
         testResourcePool.setAllOrg(true);
         testResourcePool.setEnable(true);
-        testResourcePool.setType(ResourcePoolTypeEnum.NODE.name());
+        testResourcePool.setType(ResourcePoolTypeEnum.NODE.getName());
         TestResourcePoolBlob testResourcePoolBlob = new TestResourcePoolBlob();
         testResourcePoolBlob.setId("api-pool-id");
         TestResourceDTO testResourceDTO = new TestResourceDTO();
@@ -309,7 +311,7 @@ public class ApiTaskCenterControllerTests extends BaseTest {
 
         baseResourcePoolTestService.insertResourcePoolProject(testResourcePool);
         baseResourcePoolTestService.insertProjectApplication(testResourcePool);
-
+        
     }
 
 

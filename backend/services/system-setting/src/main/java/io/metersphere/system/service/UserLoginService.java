@@ -167,7 +167,7 @@ public class UserLoginService {
                 organizationExample.createCriteria().andIdIn(orgIds).andEnableEqualTo(true);
                 List<Organization> organizationsList = organizationMapper.selectByExample(organizationExample);
                 if (CollectionUtils.isNotEmpty(organizationsList)) {
-                    String wsId = organizationsList.get(0).getId();
+                    String wsId = organizationsList.getFirst().getId();
                     switchUserResource(wsId, user);
                 }
             } else {
@@ -178,7 +178,7 @@ public class UserLoginService {
             }
         } else {
             UserRoleRelation userRoleRelation = project.stream().filter(p -> StringUtils.isNotBlank(p.getSourceId()))
-                    .toList().get(0);
+                    .toList().getFirst();
             String projectId = userRoleRelation.getSourceId();
             Project p = projectMapper.selectByPrimaryKey(projectId);
             String wsId = p.getOrganizationId();
@@ -199,7 +199,7 @@ public class UserLoginService {
                 example.createCriteria().andIdEqualTo(user.getLastProjectId()).andEnableEqualTo(true);
                 List<Project> projects = projectMapper.selectByExample(example);
                 if (CollectionUtils.isNotEmpty(projects)) {
-                    Project project = projects.get(0);
+                    Project project = projects.getFirst();
                     if (StringUtils.equals(project.getOrganizationId(), user.getLastOrganizationId())) {
                         return true;
                     }
@@ -221,7 +221,7 @@ public class UserLoginService {
                 example.createCriteria().andIdEqualTo(user.getLastProjectId()).andEnableEqualTo(true);
                 List<Project> projects = projectMapper.selectByExample(example);
                 if (CollectionUtils.isNotEmpty(projects)) {
-                    Project project = projects.get(0);
+                    Project project = projects.getFirst();
                     if (StringUtils.equals(project.getOrganizationId(), user.getLastOrganizationId())) {
                         return true;
                     }
@@ -237,35 +237,31 @@ public class UserLoginService {
                 organizationExample.createCriteria().andIdEqualTo(user.getLastOrganizationId()).andEnableEqualTo(true);
                 List<Organization> organizations = organizationMapper.selectByExample(organizationExample);
                 if (CollectionUtils.isNotEmpty(organizations)) {
-                    Organization organization = organizations.get(0);
+                    Organization organization = organizations.getFirst();
                     ProjectExample projectExample = new ProjectExample();
                     projectExample.createCriteria().andOrganizationIdEqualTo(organization.getId()).andEnableEqualTo(true);
                     List<Project> projectList = projectMapper.selectByExample(projectExample);
                     if (CollectionUtils.isNotEmpty(projectList)) {
-                        Project project = projectList.get(0);
+                        Project project = projectList.getFirst();
                         user.setLastProjectId(project.getId());
                         updateUser(user);
+                        return true;
+                    } else {
+                        // 组织下无项目, 走前端逻辑, 跳转到无项目的路由
+                        updateUser(user);
+                        return true;
                     }
-                    return true;
                 }
             }
             //项目和组织都没有权限
-            OrganizationExample organizationExample = new OrganizationExample();
-            organizationExample.createCriteria().andEnableEqualTo(true);
-            List<Organization> organizations = organizationMapper.selectByExample(organizationExample);
-            if (CollectionUtils.isNotEmpty(organizations)) {
-                Organization organization = organizations.get(0);
-                ProjectExample projectExample = new ProjectExample();
-                projectExample.createCriteria().andOrganizationIdEqualTo(organization.getId()).andEnableEqualTo(true);
-                List<Project> projectList = projectMapper.selectByExample(projectExample);
-                if (CollectionUtils.isNotEmpty(projectList)) {
-                    Project project = projectList.get(0);
-                    user.setLastProjectId(project.getId());
-                    user.setLastOrganizationId(organization.getId());
-                    updateUser(user);
-                    return true;
-                }
+            Project project = baseUserMapper.getEnableProjectAndOrganization();
+            if (project != null) {
+                user.setLastProjectId(project.getId());
+                user.setLastOrganizationId(project.getOrganizationId());
+                updateUser(user);
+                return true;
             }
+            return true;
 
         }
         return false;
@@ -315,7 +311,7 @@ public class UserLoginService {
                     updateUser(user);
                     return true;
                 }
-                Optional<Project> first = projects.stream().filter(p -> StringUtils.equals(intersection.get(0), p.getId())).findFirst();
+                Optional<Project> first = projects.stream().filter(p -> StringUtils.equals(intersection.getFirst(), p.getId())).findFirst();
                 if (first.isPresent()) {
                     Project project = first.get();
                     String wsId = project.getOrganizationId();
@@ -340,7 +336,7 @@ public class UserLoginService {
         user.setLastProjectId(StringUtils.EMPTY);
         List<Project> projects = getProjectListByWsAndUserId(sessionUser.getId(), sourceId);
         if (CollectionUtils.isNotEmpty(projects)) {
-            user.setLastProjectId(projects.get(0).getId());
+            user.setLastProjectId(projects.getFirst().getId());
         }
         BeanUtils.copyProperties(user, newUser);
         // 切换组织或组织之后更新 session 里的 user
@@ -371,7 +367,7 @@ public class UserLoginService {
                 // 如果传入的 last_project_id 是 last_organization_id 下面的
                 boolean present = projects.stream().anyMatch(p -> StringUtils.equals(p.getId(), user.getLastProjectId()));
                 if (!present) {
-                    user.setLastProjectId(projects.get(0).getId());
+                    user.setLastProjectId(projects.getFirst().getId());
                 }
             } else {
                 user.setLastProjectId(StringUtils.EMPTY);
@@ -419,7 +415,7 @@ public class UserLoginService {
             return null;
         }
 
-        return getUserDTO(users.get(0).getId());
+        return getUserDTO(users.getFirst().getId());
     }
 
     public boolean checkUserPassword(String userId, String password) {

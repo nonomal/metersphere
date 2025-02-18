@@ -6,6 +6,7 @@
       ref="treeRef"
       v-model:selected-keys="selectedKeys"
       v-model:checked-keys="checkedKeys"
+      v-model:half-checked-keys="halfCheckedKeys"
       :data="filterTreeData"
       class="ms-tree"
       :allow-drop="handleAllowDrop"
@@ -30,14 +31,17 @@
               <icon-caret-down v-if="_props.expanded" class="text-[var(--color-text-4)]" />
               <icon-caret-right v-else class="text-[var(--color-text-4)]" />
             </div>
-            <div v-else class="h-full w-[16px]"></div>
+            <div v-else-if="!props.hideSwitcherIfNoChildren" class="h-full w-[16px]"></div>
           </template>
           <a-tooltip
             v-if="$slots['title']"
-            :content="_props[props.fieldNames.title]"
+            :content="
+              _props.disabled && props.nodeDisabledTip?.length ? props.nodeDisabledTip : _props[props.fieldNames.title]
+            "
             :mouse-enter-delay="300"
             :position="props.titleTooltipPosition"
             :disabled="props.disabledTitleTooltip"
+            :arrow-class="props.titleTooltipPosition === 'tr' ? 'absolute right-[4px] !left-auto' : ''"
           >
             <span :class="props.titleClass || 'ms-tree-node-title'">
               <slot name="title" v-bind="_props"></slot>
@@ -49,7 +53,7 @@
         <slot name="title" v-bind="_props"></slot>
       </template>
       <template v-if="$slots['extra'] || props.nodeMoreActions" #extra="_props">
-        <div class="sticky right-[8px] flex items-center justify-between">
+        <div class="sticky right-0 flex items-center justify-between">
           <div v-if="_props.hideMoreAction !== true" class="ms-tree-node-extra">
             <slot name="extra" v-bind="_props"></slot>
             <MsTableMoreAction
@@ -90,14 +94,14 @@
 </template>
 
 <script setup lang="ts">
-  import { nextTick, onBeforeMount, Ref, ref, watch } from 'vue';
   import { TreeInstance } from '@arco-design/web-vue';
-  import { debounce } from 'lodash-es';
+  import { cloneDeep, debounce } from 'lodash-es';
 
   import MsTableMoreAction from '@/components/pure/ms-table-more-action/index.vue';
   import type { ActionsItem } from '@/components/pure/ms-table-more-action/types';
 
   import useContainerShadow from '@/hooks/useContainerShadow';
+  import { findNodeByKey, mapTree, traverseTree } from '@/utils';
 
   import type { MsTreeExpandedData, MsTreeFieldNames, MsTreeNodeData, MsTreeSelectedData } from './types';
   import { VirtualListProps } from '@arco-design/web-vue/es/_components/virtual-list-v2/interface';
@@ -119,11 +123,18 @@
       emptyText?: string; // 空数据时的文案
       checkable?: boolean; // 是否可选中
       checkedStrategy?: 'all' | 'parent' | 'child'; // 选中节点时的策略
+      checkStrictly?: boolean; // 是否取消父子节点关联
       virtualListProps?: VirtualListProps; // 虚拟滚动列表的属性
       disabledTitleTooltip?: boolean; // 是否禁用标题 tooltip
+      nodeDisabledTip?: string; // 节点disabled的时候显示的内容
       actionOnNodeClick?: 'expand'; // 点击节点时的操作
       nodeHighlightClass?: string; // 节点高亮背景色
       hideSwitcher?: boolean; // 隐藏展开折叠图标
+      hideSwitcherIfNoChildren?: boolean; // 隐藏无子节点的节点的展开折叠图标
+      handleDrop?: boolean; // 是否处理拖拽
+      // 是否使用新的映射数据
+      // (使用映射数据代表会根据传入的 data 深拷贝出新的 filterTreeData 树，此时针对 slot 传入的 node 节点的操作都不会影响data；不使用则代表 data 和 filterTreeData 节点数据是共用的，区别只在搜索展示数量不同)
+      useMapData?: boolean;
       titleTooltipPosition?:
         | 'top'
         | 'tl'
@@ -153,6 +164,8 @@
         isLeaf: 'isLeaf',
       }),
       disabledTitleTooltip: false,
+      useMapData: true,
+      hideSwitcherIfNoChildren: false,
     }
   );
 
@@ -167,8 +180,8 @@
     ): void;
     (e: 'moreActionSelect', item: ActionsItem, node: MsTreeNodeData): void;
     (e: 'moreActionsClose'): void;
-    (e: 'check', val: Array<string | number>): void;
-    (e: 'expand', node: MsTreeExpandedData): void;
+    (e: 'check', val: Array<string | number>, node: MsTreeNodeData): void;
+    (e: 'expand', node: MsTreeExpandedData, _expandKeys: Array<string | number>): void;
   }>();
 
   const data = defineModel<MsTreeNodeData[]>('data', {
@@ -180,9 +193,13 @@
   const checkedKeys = defineModel<(string | number)[]>('checkedKeys', {
     default: [],
   });
+  const halfCheckedKeys = defineModel<(string | number)[]>('halfCheckedKeys', {
+    default: [],
+  });
   const focusNodeKey = defineModel<string | number>('focusNodeKey', {
     default: '',
   });
+  const expandKeys = ref<Set<string | number>>(new Set([]));
 
   const treeContainerRef: Ref = ref(null);
   const treeRef = ref<TreeInstance>();
@@ -190,26 +207,22 @@
     overHeight: 32,
     containerClassName: 'ms-tree-container',
   });
+  const filterTreeData = ref<MsTreeNodeData[]>([]); // 初始化时全量的树数据或在非搜索情况下更新后的全量树数据
 
   function init(isFirstInit = false) {
-    nextTick(() => {
-      if (isFirstInit) {
-        if (props.defaultExpandAll) {
-          treeRef.value?.expandAll(true);
-        }
-        if (!isInitListener.value && treeRef.value) {
-          setContainer(
-            props.virtualListProps?.height
-              ? (treeRef.value.$el.querySelector('.arco-virtual-list') as HTMLElement)
-              : treeRef.value.$el
-          );
-          initScrollListener();
-        }
+    if (isFirstInit) {
+      if (!isInitListener.value && treeRef.value) {
+        setContainer(
+          props.virtualListProps?.height
+            ? (treeRef.value.$el.querySelector('.arco-virtual-list') as HTMLElement)
+            : treeRef.value.$el
+        );
+        initScrollListener();
       }
-    });
+    }
   }
 
-  onBeforeMount(() => {
+  onMounted(() => {
     init(true);
   });
 
@@ -221,17 +234,20 @@
     const search = (_data: MsTreeNodeData[]) => {
       const result: MsTreeNodeData[] = [];
       _data.forEach((item) => {
-        if (item[props.fieldNames.title].toLowerCase().includes(keyword.toLowerCase())) {
-          result.push({ ...item, expanded: true });
-        } else if (item[props.fieldNames.children]) {
-          const filterData = search(item[props.fieldNames.children]);
-          if (filterData.length) {
-            result.push({
-              ...item,
-              expanded: true,
-              [props.fieldNames.children]: filterData,
-            });
-          }
+        // 判断当前节点是否符合搜索关键字
+        const titleMatches = item[props.fieldNames.title].toLowerCase().includes(keyword.toLowerCase());
+        // 递归搜索子节点
+        let filteredChildren: MsTreeNodeData[] = [];
+        if (item[props.fieldNames.children]) {
+          filteredChildren = search(item[props.fieldNames.children]);
+        }
+        // 当前节点符合关键字，或有符合关键字的子节点
+        if (titleMatches || filteredChildren.length > 0) {
+          result.push({
+            ...item,
+            expanded: true,
+            [props.fieldNames.children]: filteredChildren,
+          });
         }
       });
       return result;
@@ -239,8 +255,6 @@
 
     return search(data.value);
   }
-
-  const filterTreeData = ref<MsTreeNodeData[]>([]); // 初始化时全量的树数据或在非搜索情况下更新后的全量树数据
 
   // 防抖搜索
   const updateDebouncedSearch = debounce(() => {
@@ -253,18 +267,46 @@
     }
   }, props.searchDebounce);
 
+  onBeforeMount(() => {
+    if (props.useMapData) {
+      filterTreeData.value = mapTree(data.value, (node) => {
+        node.expanded = props.defaultExpandAll;
+        return node;
+      });
+    } else {
+      traverseTree(data.value, (node) => {
+        node.expanded = props.defaultExpandAll;
+      });
+      filterTreeData.value = data.value;
+    }
+    nextTick(() => {
+      if (props.defaultExpandAll && treeRef.value) {
+        treeRef.value.expandAll(true);
+      }
+    });
+  });
+
   watch(
     () => data.value,
-    (val) => {
+    debounce((val) => {
       if (!props.keyword) {
-        filterTreeData.value = val;
+        if (props.useMapData) {
+          filterTreeData.value = mapTree(val, (node) => {
+            node.expanded = expandKeys.value.has(node[props.fieldNames.key]);
+            return node;
+          });
+        } else {
+          traverseTree(val, (node) => {
+            node.expanded = expandKeys.value.has(node[props.fieldNames.key]);
+          });
+          filterTreeData.value = val;
+        }
       } else {
         updateDebouncedSearch();
       }
-    },
+    }, 0),
     {
       deep: true,
-      immediate: true,
     }
   );
 
@@ -272,7 +314,20 @@
     () => props.keyword,
     (val) => {
       if (!val) {
-        filterTreeData.value = data.value;
+        if (props.useMapData) {
+          filterTreeData.value = mapTree(data.value, (node) => {
+            node.expanded = props.defaultExpandAll;
+            return node;
+          });
+        } else {
+          traverseTree(data.value, (node) => {
+            node.expanded = props.defaultExpandAll;
+          });
+          filterTreeData.value = data.value;
+        }
+        nextTick(() => {
+          treeRef.value?.expandAll(props.defaultExpandAll ?? false);
+        });
       } else {
         updateDebouncedSearch();
       }
@@ -325,6 +380,10 @@
     dropNode: MsTreeNodeData; // 放入的节点
     dropPosition: number; // 放入的位置，-1 为放入节点前，1 为放入节点后，0 为放入节点内
   }) {
+    if (props.handleDrop) {
+      emit('drop', data.value, dragNode, dropNode, dropPosition);
+      return;
+    }
     loop(data.value, dragNode.key, (item, index, arr) => {
       arr.splice(index, 1);
     });
@@ -352,11 +411,15 @@
    * 处理树节点选中（非复选框）
    */
   function select(_selectedKeys: Array<string | number>, _data: MsTreeSelectedData) {
-    emit('select', _selectedKeys, _data.selectedNodes[0]);
+    const selectNode: MsTreeNodeData = cloneDeep(_data.selectedNodes[0]);
+    loop(data.value, selectNode[props.fieldNames.key], (item) => {
+      selectNode.children = item.children;
+    });
+    emit('select', _selectedKeys, selectNode);
   }
 
-  function checked(_checkedKeys: Array<string | number>) {
-    emit('check', _checkedKeys);
+  function checked(_checkedKeys: Array<string | number>, checkedNodes: MsTreeNodeData) {
+    emit('check', _checkedKeys, checkedNodes);
   }
 
   const focusEl = ref<HTMLElement | null>(); // 存储聚焦的节点元素
@@ -392,17 +455,28 @@
     (val) => {
       if (typeof val === 'boolean') {
         treeRef.value?.expandAll(val);
+        traverseTree(filterTreeData.value, (node) => {
+          node.expanded = val;
+          return node;
+        });
       }
     }
   );
 
   function handleExpand(node: MsTreeNodeData) {
     node.expanded = !node.expanded;
+    if (props.useMapData) {
+      const realNode = findNodeByKey<MsTreeNodeData>(data.value, node[props.fieldNames.key]);
+      if (realNode) {
+        realNode.expanded = node.expanded;
+      }
+    }
     treeRef.value?.expandNode(node[props.fieldNames.key], node.expanded);
   }
 
-  function expand(expandKeys: Array<string | number>, node: MsTreeExpandedData) {
-    emit('expand', node);
+  function expand(_expandKeys: Array<string | number>, node: MsTreeExpandedData) {
+    expandKeys.value = new Set(_expandKeys);
+    emit('expand', node, _expandKeys);
   }
 
   function checkAll(val: boolean) {
@@ -452,7 +526,7 @@
         .arco-tree-node-plus-icon {
           border: 1px solid var(--color-text-4);
           border-radius: var(--border-radius-mini);
-          background-color: white;
+          background-color: var(--color-text-fff);
           &::after,
           &::before {
             background-color: var(--color-text-4);
@@ -466,8 +540,11 @@
           //   color: var(--color-text-4);
           // }
         }
+        .arco-tree-node-title-draggable::before {
+          height: 4px;
+        }
         .arco-tree-node-title-highlight {
-          background-color: transparent;
+          background-color: var(--color-primary-light-1);
         }
         .arco-tree-node-title {
           &:hover {
@@ -484,12 +561,14 @@
           }
         }
         .arco-tree-node-title-block {
+          overflow: hidden; // 防止 ms-tree-node-extra 里换行
           width: 60%;
         }
         .ms-tree-node-extra {
           @apply invisible flex w-0 items-center;
 
           margin-left: -4px;
+          padding-right: 8px;
           height: 32px;
           border-radius: var(--border-radius-small);
           background-color: rgb(var(--primary-1));
@@ -533,7 +612,7 @@
         .arco-tree-node-plus-icon {
           border: 1px solid rgb(var(--primary-5));
           border-radius: var(--border-radius-mini);
-          background-color: white;
+          background-color: var(--color-text-fff);
           &::after,
           &::before {
             background-color: rgb(var(--primary-5));
@@ -556,6 +635,9 @@
       }
       .arco-tree-node-disabled {
         &:hover {
+          background-color: transparent;
+        }
+        .ms-tree-node-extra {
           background-color: transparent;
         }
         * {

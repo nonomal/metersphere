@@ -1,9 +1,12 @@
 <template>
   <div>
-    <div class="mb-4 grid grid-cols-4 gap-2">
+    <div class="mb-[16px] grid grid-cols-4 gap-2">
       <div class="col-span-2">
         <a-button v-permission="['PROJECT_USER:READ+ADD']" class="mr-3" type="primary" @click="addMember">
           {{ t('project.member.addMember') }}
+        </a-button>
+        <a-button v-permission="['PROJECT_USER:READ+INVITE']" type="outline" class="mr-3" @click="inviteVisible = true">
+          {{ t('system.user.emailInvite') }}
         </a-button>
       </div>
       <div>
@@ -30,30 +33,43 @@
     <MsBaseTable
       v-bind="propsRes"
       :action-config="tableBatchActions"
-      :selectable="hasAnyPermission(['ORGANIZATION_MEMBER:READ+UPDATE'])"
+      :selectable="hasAnyPermission(['PROJECT_USER:READ+UPDATE', 'PROJECT_USER:READ+DELETE'])"
       @selected-change="handleTableSelect"
       v-on="propsEvent"
       @batch-action="handleTableBatch"
     >
-      <template #userRole="{ record }">
+      <template #userRoles="{ record }">
         <MsTagGroup
           v-if="!record.showUserSelect"
           :tag-list="record.userRoles || []"
           type="primary"
           theme="outline"
+          allow-edit
+          show-table
           @click="changeUser(record)"
         />
-        <a-select
+        <MsSelect
           v-else
-          v-model="record.selectUserList"
-          :popup-visible="record.showUserSelect"
-          multiple
-          class="w-[260px]"
-          :max-tag-count="2"
-          @popup-visible-change="(value) => userGroupChange(value, record)"
-        >
-          <a-option v-for="item of userGroupOptions" :key="item.id" :value="item.id">{{ item.name }}</a-option>
-        </a-select>
+          v-model:model-value="record.selectUserList"
+          v-model:loading="dialogLoading"
+          :max-tag-count="1"
+          class="w-full"
+          :options="userGroupOptions"
+          :search-keys="['name']"
+          value-key="id"
+          label-key="name"
+          allow-search
+          :multiple="true"
+          :placeholder="t('common.pleaseSelect')"
+          :at-least-one="true"
+          :fallback-option="
+              (val:any) => ({
+                label: userGroupOptions.find((e) => e.id === val)?.name || (val as string),
+                value: val,
+              })
+            "
+          @popup-visible-change="(value:boolean) => userGroupChange(value as boolean, record)"
+        />
       </template>
       <template #enable="{ record }">
         <div v-if="record.enable" class="flex items-center">
@@ -90,6 +106,7 @@
     :current-select-count="batchParams.currentSelectCount"
     @add-user-group="addUserGroup"
   />
+  <inviteModal v-model:visible="inviteVisible" :user-group-options="userGroupOptions" range="project"></inviteModal>
 </template>
 
 <script setup lang="ts">
@@ -102,7 +119,9 @@
   import MsTagGroup from '@/components/pure/ms-tag/ms-tag-group.vue';
   import MsBatchModal from '@/components/business/ms-batch-modal/index.vue';
   import MsRemoveButton from '@/components/business/ms-remove-button/MsRemoveButton.vue';
+  import MsSelect from '@/components/business/ms-select';
   import AddMemberModal from './addMemberModal.vue';
+  import inviteModal from '@/views/setting/system/components/inviteModal.vue';
 
   import {
     addOrUpdateProjectMember,
@@ -135,6 +154,13 @@
   const hasOperationPermission = computed(() => hasAnyPermission(['PROJECT_USER:READ+DELETE']));
   const columns: MsTableColumn = [
     {
+      title: 'system.user.userName',
+      dataIndex: 'email',
+      showTooltip: true,
+      sortIndex: 0,
+      showDrag: false,
+    },
+    {
       title: 'project.member.tableColumnName',
       slotName: 'name',
       dataIndex: 'name',
@@ -146,7 +172,7 @@
       slotName: 'email',
       dataIndex: 'email',
       showTooltip: true,
-      showDrag: true,
+      showDrag: false,
     },
     {
       title: 'project.member.tableColumnPhone',
@@ -157,15 +183,18 @@
     },
     {
       title: 'project.member.tableColumnUserGroup',
-      slotName: 'userRole',
-      dataIndex: 'userRoleIdNameMap',
+      slotName: 'userRoles',
+      dataIndex: 'userRoles',
       showDrag: true,
+      isTag: true,
+      allowEditTag: true,
       width: 300,
     },
     {
       title: 'project.member.tableColumnStatus',
       slotName: 'enable',
       dataIndex: 'enable',
+      showDrag: true,
       width: 150,
     },
     {
@@ -298,6 +327,7 @@
           loadList();
           resetSelector();
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.log(error);
         }
       },
@@ -330,24 +360,24 @@
   const batchModalRef = ref();
   // 添加到用户组
   const addUserGroup = async (target: string[]) => {
-    const { selectedIds, excludeIds, selectAll } = batchParams.value;
-    const params = {
-      projectId: lastProjectId.value,
-      userIds: batchParams.value.selectedIds || [],
-      selectAll: !!selectAll,
-      excludeIds: excludeIds || [],
-      selectIds: selectedIds || [],
-      roleIds: target,
-      condition: {
-        keyword: keyword.value,
-        filter: {
-          ...propsRes.value.filter,
-          roleIds: roleIds.value ? [roleIds.value] : [],
-        },
-        combine: batchParams.value.condition,
-      },
-    };
     try {
+      const { selectedIds, excludeIds, selectAll } = batchParams.value;
+      const params = {
+        projectId: lastProjectId.value,
+        userIds: batchParams.value.selectedIds || [],
+        selectAll: !!selectAll,
+        excludeIds: excludeIds || [],
+        selectIds: selectedIds || [],
+        roleIds: target,
+        condition: {
+          keyword: keyword.value,
+          filter: {
+            ...propsRes.value.filter,
+            roleIds: roleIds.value ? [roleIds.value] : [],
+          },
+          combine: batchParams.value.condition,
+        },
+      };
       await batchModalRef.value.batchRequestFun(addProjectUserGroup, params);
       resetSelector();
       initData();
@@ -378,15 +408,17 @@
     addMemberVisible.value = true;
     projectMemberRef.value.initProjectMemberOptions();
   };
+  const dialogLoading = ref(false);
 
   // 编辑项目成员
   const editProjectMember = async (record: ProjectMemberItem) => {
-    const params: ActionProjectMember = {
-      projectId: lastProjectId.value,
-      userId: record.id,
-      roleIds: record.selectUserList,
-    };
     try {
+      dialogLoading.value = true;
+      const params: ActionProjectMember = {
+        projectId: lastProjectId.value,
+        userId: record.id,
+        roleIds: record.selectUserList,
+      };
       await addOrUpdateProjectMember(params);
       Message.success(t('project.member.batchUpdateSuccess'));
       record.showUserSelect = false;
@@ -394,6 +426,8 @@
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
+    } finally {
+      dialogLoading.value = false;
     }
   };
 
@@ -424,6 +458,8 @@
     }
     editProjectMember(record);
   };
+
+  const inviteVisible = ref(false);
 
   onBeforeMount(async () => {
     await initOptions();

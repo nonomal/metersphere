@@ -23,6 +23,29 @@ public class TestPlanTableRequest extends BasePageRequest {
     @NotBlank(message = "{test_plan.type.not_blank}")
     private String type;
 
+    @Schema(description = "通过Keyword过滤出的测试子计划的测试计划组id")
+    private List<String> keywordFilterIds;
+
+    @Schema(description = "通过其他条件查询出来的，必须要包含的测试计划ID")
+    private List<String> innerIds;
+    private List<String> combineInnerIds;
+    private String combineOperator;
+
+    @Schema(description = "是否我的待办, 默认查询全部")
+    private boolean myTodo = false;
+
+    @Schema(description = "我的待办用户ID, 组合使用: myTodo=true, myTodoUserId=xxx")
+    private String myTodoUserId;
+
+    @Schema(description = "已办的测试计划ID集合 (用作待办排除)")
+    private List<String> doneExcludeIds;
+
+    @Schema(description = "额外的子计划ID集合")
+    private List<String> extraIncludeChildIds;
+
+
+    @Schema(description = "应当包含的子测试计划ID （用于程序内部筛选过滤）")
+    private List<String> includeItemTestPlanIds;
 
     public String getSortString() {
         if (StringUtils.isEmpty(super.getSortString())) {

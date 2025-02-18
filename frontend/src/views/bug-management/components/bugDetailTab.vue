@@ -1,9 +1,16 @@
 <template>
   <!-- 所属平台一致, 详情展示 -->
-  <div v-if="props.currentPlatform === props.detailInfo.platform" class="relative">
+  <div
+    v-if="props.detailInfo.platform === 'Local' || props.currentPlatform === props.detailInfo.platform"
+    class="relative"
+  >
     <div class="header">
       <div v-permission="['PROJECT_BUG:READ+UPDATE']" class="header-action">
-        <a-button type="text" @click="contentEditAble = !contentEditAble">
+        <a-button
+          type="text"
+          :disabled="props.currentPlatform !== props.detailInfo.platform"
+          @click="contentEditAble = !contentEditAble"
+        >
           <template #icon> <MsIconfont type="icon-icon_edit_outlined" /> </template>
           {{ t('bugManagement.edit.contentEdit') }}
         </a-button>
@@ -17,7 +24,7 @@
             {{ t('bugManagement.edit.content') }}
           </strong>
         </div>
-        <div class="mb-4 mt-[16px]" :class="{ 'max-h-[260px]': contentEditAble }">
+        <div class="mb-4 mt-[16px]">
           <MsRichText
             v-if="contentEditAble"
             v-model:raw="form.description"
@@ -25,7 +32,8 @@
             :disabled="!contentEditAble"
             :placeholder="t('editor.placeholder')"
             :upload-image="handleUploadImage"
-            :preview-url="EditorPreviewFileUrl"
+            :preview-url="`${EditorPreviewFileUrl}/${appStore.currentProjectId}`"
+            auto-height
           />
           <div v-else v-dompurify-html="form?.description || '-'" class="markdown-body"></div>
         </div>
@@ -39,19 +47,20 @@
       <!-- 特殊布局内容(平台默认模板时展示) -->
       <div v-if="isPlatformDefaultTemplate" class="special-content">
         <div v-for="(item, index) in platformSystemFields" :key="index">
-          <div v-if="item.fieldId !== 'summary'">
+          <div v-if="item.fieldId !== 'summary' && item.fieldId !== 'title'">
             <h1 class="header-title">
               <strong>{{ item.fieldName }}</strong>
             </h1>
-            <div class="mb-4 mt-[16px]" :class="{ 'max-h-[260px]': contentEditAble }">
+            <div class="mb-4 mt-[16px]">
               <MsRichText
                 v-if="contentEditAble"
                 v-model:raw="item.defaultValue"
                 v-model:filed-ids="descriptionFileIdMap[item.fieldId]"
                 :disabled="!contentEditAble"
+                :auto-height="false"
                 :placeholder="t('editor.placeholder')"
                 :upload-image="handleUploadImage"
-                :preview-url="EditorPreviewFileUrl"
+                :preview-url="`${EditorPreviewFileUrl}/${appStore.currentProjectId}`"
               />
               <div v-else v-dompurify-html="item?.defaultValue || '-'" class="markdown-body"></div>
             </div>
@@ -83,33 +92,38 @@
       }"
       :upload-func="uploadOrAssociationFile"
       :handle-delete="deleteFileHandler"
-      :show-delete="props.allowEdit"
       :init-file-save-tips="t('ms.upload.waiting_save')"
+      :show-delete="false"
       @finish="uploadFileOver"
     >
       <template #actions="{ item }">
         <div>
           <!-- 本地文件 -->
-          <div v-if="item.local || item.status === 'init'" class="flex flex-nowrap">
+          <div v-if="item.local || item.status === 'init'" class="flex items-center font-normal">
             <MsButton
               v-if="item.status !== 'init' && item.status !== 'uploading' && item.file.type.includes('image')"
               type="button"
               status="primary"
-              class="!mr-[4px]"
+              class="!mx-0"
               @click="handlePreview(item)"
             >
               {{ t('ms.upload.preview') }}
             </MsButton>
+            <a-divider
+              v-if="item.status !== 'init' && item.status !== 'uploading' && item.file.type.includes('image')"
+              direction="vertical"
+            />
             <MsButton
               v-if="item.status === 'done' && hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])"
               type="button"
               status="primary"
-              class="!mr-[4px]"
+              class="!mx-0"
               @click="transferHandler(item)"
             >
               {{ t('caseManagement.featureCase.storage') }}
             </MsButton>
             <SaveAsFilePopover
+              v-if="item.uid === activeTransferFileParams?.uid"
               v-model:visible="transferVisible"
               :saving-file="activeTransferFileParams"
               :file-save-as-source-id="props.detailInfo.id"
@@ -118,44 +132,72 @@
               source-id-key="bugId"
               @finish="emit('updateSuccess')"
             />
+            <a-divider
+              v-if="item.status === 'done' && hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])"
+              direction="vertical"
+            />
             <MsButton
               v-if="item.status === 'done'"
               type="button"
               status="primary"
-              class="!mr-[4px]"
+              class="!mx-0"
               @click="downloadFile(item)"
             >
               {{ t('caseManagement.featureCase.download') }}
             </MsButton>
+            <a-divider v-if="item.status === 'done'" direction="vertical" />
+            <MsButton
+              v-if="item.status !== 'uploading' && hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])"
+              type="button"
+              :status="item.deleteContent ? 'primary' : 'danger'"
+              class="!mx-0"
+              @click="deleteFileHandler(item)"
+            >
+              {{ t(item.deleteContent) || t('ms.upload.delete') }}
+            </MsButton>
           </div>
           <!-- 关联文件 -->
-          <div v-else class="flex flex-nowrap">
+          <div v-else class="flex items-center font-normal">
             <MsButton
               v-if="item.status !== 'init' && item.file.type.includes('image')"
               type="button"
               status="primary"
-              class="!mr-[4px]"
+              class="!mx-0"
               @click="handlePreview(item)"
             >
               {{ t('ms.upload.preview') }}
             </MsButton>
+            <a-divider v-if="item.status !== 'init' && item.file.type.includes('image')" direction="vertical" />
+
             <MsButton
               v-if="item.status === 'done'"
               type="button"
               status="primary"
-              class="!mr-[4px]"
+              class="!mx-0"
               @click="downloadFile(item)"
             >
               {{ t('caseManagement.featureCase.download') }}
             </MsButton>
+            <a-divider v-if="item.status === 'done'" direction="vertical" />
+
             <MsButton
               v-if="item.isUpdateFlag && hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])"
               type="button"
               status="primary"
-              class="!mr-[4px]"
+              class="!mx-0"
               @click="handleUpdateFile(item)"
             >
               {{ t('common.update') }}
+            </MsButton>
+            <a-divider v-if="item.isUpdateFlag && hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])" direction="vertical" />
+            <MsButton
+              v-if="item.status === 'done' && hasAnyPermission(['PROJECT_BUG:READ+UPDATE'])"
+              type="button"
+              :status="item.deleteContent ? 'primary' : 'danger'"
+              class="!mx-0"
+              @click="deleteFileHandler(item)"
+            >
+              {{ t(item.deleteContent) }}
             </MsButton>
           </div>
         </div>
@@ -177,11 +219,12 @@
       v-model:file-list="fileList"
       accept="none"
       :auto-upload="false"
-      :sub-text="acceptType === 'jar' ? '' : t('project.fileManagement.normalFileSubText', { size: 50 })"
+      :sub-text="
+        acceptType === 'jar' ? '' : t('project.fileManagement.normalFileSubText', { size: appStore.getFileMaxSize })
+      "
       multiple
       draggable
       size-unit="MB"
-      :max-size="50"
       :is-all-screen="true"
       class="mb-[16px]"
     />
@@ -201,7 +244,6 @@
   import { Message } from '@arco-design/web-vue';
 
   import MsButton from '@/components/pure/ms-button/index.vue';
-  import { FormRuleItem } from '@/components/pure/ms-form-create/types';
   import MsIconfont from '@/components/pure/ms-icon-font/index.vue';
   import MsRichText from '@/components/pure/ms-rich-text/MsRichText.vue';
   import MsFileList from '@/components/pure/ms-upload/fileList.vue';
@@ -231,13 +273,17 @@
   import { useAppStore } from '@/store';
   import { downloadByteFile, sleep } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
-  import { findParents, Option } from '@/utils/recursion';
 
-  import { BugEditCustomField, BugEditCustomFieldItem, BugEditFormObject } from '@/models/bug-management';
+  import {
+    BugEditCustomField,
+    BugEditCustomFieldItem,
+    BugEditFormObject,
+    type CustomFieldItem,
+  } from '@/models/bug-management';
   import { AssociatedList, AttachFileInfo } from '@/models/caseManagement/featureCase';
   import { TableQueryParams } from '@/models/common';
 
-  import { convertToFileByBug, convertToFileByDetail } from '@/views/bug-management/utils';
+  import { convertToFileByBug, getCurrentText } from '@/views/bug-management/utils';
 
   defineOptions({
     name: 'BugDetailTab',
@@ -247,11 +293,12 @@
 
   const props = defineProps<{
     detailInfo: BugEditFormObject;
-    formItem: FormRuleItem[];
+    // formItem: FormRuleItem[];
     allowEdit?: boolean; // 是否允许编辑
     isPlatformDefaultTemplate: boolean; // 是否是平台默认模板
     platformSystemFields: BugEditCustomField[]; // 平台系统字段
     currentPlatform: string; // 当前平台
+    currentCustomFields: CustomFieldItem[];
   }>();
 
   const emit = defineEmits<{
@@ -355,8 +402,6 @@
   // 预览图片
   async function handlePreview(item: MsFileItem) {
     try {
-      imageUrl.value = '';
-      previewVisible.value = true;
       if (item.status !== 'init') {
         const res = await previewFile({
           projectId: currentProjectId.value,
@@ -369,6 +414,7 @@
       } else {
         imageUrl.value = item.url || '';
       }
+      previewVisible.value = true;
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -452,35 +498,43 @@
     return fileIds;
   }
 
+  function getDetailCustomFields() {
+    return props.currentCustomFields.map((field) => {
+      const filterField = props.detailInfo.customFields.filter((item: any) => item.id === field.fieldId)[0];
+      return {
+        id: field.fieldId,
+        name: field.fieldName,
+        type: field.type,
+        value: field.fieldId === 'status' ? props.detailInfo.status : filterField?.value,
+      };
+    });
+  }
+
   // 保存操作
   async function handleSave() {
     try {
       confirmLoading.value = true;
-      const { formItem } = props;
-      const customFields: BugEditCustomFieldItem[] = [];
-      if (formItem && formItem.length) {
-        formItem.forEach((item: FormRuleItem) => {
-          let itemVal = item.value;
-          if (item.sourceType === 'CASCADER') {
-            itemVal = findParents(item.options as Option[], item.value as string, []) || '';
-          }
-          customFields.push({
-            id: item.field as string,
-            name: item.title as string,
-            type: item.sourceType as string,
-            value: Array.isArray(itemVal) ? JSON.stringify(itemVal) : (itemVal as string),
-          });
-        });
-      }
+      let customFields: BugEditCustomFieldItem[] = getDetailCustomFields();
+      customFields = customFields.map((e: any) => {
+        return {
+          ...e,
+          text: getCurrentText(e, props.currentCustomFields, 'id'),
+        };
+      });
       if (props.isPlatformDefaultTemplate) {
         // 平台系统默认字段插入自定义集合
         props.platformSystemFields.forEach((item) => {
-          customFields.push({
-            id: item.fieldId,
-            name: item.fieldName,
-            type: item.type,
-            value: item.defaultValue,
-          });
+          const systemField = customFields.filter((field) => field.id === item.fieldId)[0];
+          if (systemField) {
+            systemField.value = item.defaultValue;
+          } else {
+            customFields.push({
+              id: item.fieldId,
+              name: item.fieldName,
+              type: item.type,
+              value: item.defaultValue,
+            });
+          }
         });
       }
       const tmpObj: BugEditFormObject = {
@@ -515,14 +569,12 @@
   }
 
   // 关联文件
-  async function saveSelectAssociatedFile(fileData: AssociatedList[]) {
-    const fileResultList = fileData.map(convertToFileByDetail);
-    fileList.value.push(...fileResultList);
+  async function saveSelectAssociatedFile(fileData: AssociatedList[], selectFileIds?: string[]) {
     const params = {
       request: {
         bugId: bugId.value as string,
         projectId: currentProjectId.value,
-        selectIds: fileResultList.map((item: any) => item.uid),
+        selectIds: selectFileIds || [],
       },
     };
     await uploadOrAssociationFile(params);

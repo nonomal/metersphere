@@ -60,7 +60,7 @@
     <a-spin
       v-show="innerIsExpanded"
       :loading="props.loading"
-      :class="[isResponseModel ? 'h-[381px] w-full' : 'w-full px-[16px] pb-[16px]']"
+      :class="[isResponseModel ? 'h-[381px] w-full' : 'w-full flex-1 px-[16px] pb-[16px]']"
     >
       <edit
         v-if="props.isEdit && activeResponseType === 'content' && responseDefinition"
@@ -71,6 +71,7 @@
       <result
         v-else-if="!props.isEdit || (props.isEdit && activeResponseType === 'result')"
         v-model:active-tab="activeTab"
+        :loading="props.loading"
         :request-result="props.requestResult"
         :console="props.console"
         :is-http-protocol="props.isHttpProtocol"
@@ -183,8 +184,9 @@
         if (!item.body.jsonBody) {
           item.body.jsonBody = {
             jsonValue: '',
-            enableJsonSchema: false,
+            enableJsonSchema: true,
             enableTransition: false,
+            jsonSchemaTableData: [],
           };
           if (!item.body.xmlBody) {
             item.body.xmlBody = {
@@ -235,7 +237,7 @@
   .response-head {
     @apply flex flex-wrap items-center justify-between border-b;
 
-    padding: 13px 16px;
+    padding: 11px 16px;
     border-color: var(--color-text-n8);
     gap: 8px;
   }

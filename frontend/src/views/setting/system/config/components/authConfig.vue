@@ -17,11 +17,18 @@
       </div>
       <ms-base-table v-bind="propsRes" no-disable v-on="propsEvent">
         <template #name="{ record }">
-          <a-button type="text" class="w-full overflow-hidden px-0" @click="openAuthDetail(record.id)">
+          <a-button
+            type="text"
+            class="max-w-full justify-start overflow-hidden px-0"
+            @click="openAuthDetail(record.id)"
+          >
             <div class="one-line-text">
               {{ record.name }}
             </div>
           </a-button>
+        </template>
+        <template #type="{ record }">
+          <div>{{ record.type === 'OAUTH2' ? 'OAuth 2.0' : record.type }}</div>
         </template>
         <template #action="{ record }">
           <MsButton v-permission="['SYSTEM_PARAMETER_SETTING_AUTH:READ+UPDATE']" @click="editAuth(record)">
@@ -99,7 +106,7 @@
             allow-clear
           ></a-input>
         </a-form-item>
-        <a-form-item :label="t('system.config.auth.desc')" field="description" asterisk-position="end">
+        <a-form-item :label="t('common.desc')" field="description" asterisk-position="end">
           <a-textarea
             v-model:model-value="activeAuthForm.description"
             :max-length="1000"
@@ -109,7 +116,9 @@
         </a-form-item>
         <a-form-item :label="t('system.config.auth.addResource')" field="type" asterisk-position="end">
           <a-radio-group v-model:model-value="activeAuthForm.type" type="button" :disabled="!!activeAuthForm.id">
-            <a-radio v-for="item of authTypeList" :key="item" :value="item">{{ item }}</a-radio>
+            <a-radio v-for="item of authTypeList" :key="item" :value="item">
+              {{ item === 'OAUTH2' ? 'OAuth 2.0' : item }}
+            </a-radio>
           </a-radio-group>
         </a-form-item>
         <template v-if="activeAuthForm.type === 'CAS'">
@@ -154,7 +163,7 @@
               :max-length="255"
               :placeholder="
                 t('system.config.auth.commonUrlPlaceholder', {
-                  url: 'http://<meteresphere-endpoint>/sso/callback/cas/suthld',
+                  url: 'http://<meteresphere-endpoint>/sso/callback/cas/{authId}',
                 })
               "
               allow-clear
@@ -270,14 +279,14 @@
             :rules="[{ required: true, message: t('system.config.auth.clientSecretRequired') }]"
             required
           >
-            <a-input
+            <a-input-password
               v-model:model-value="activeAuthForm.configuration.secret"
               :max-length="255"
               :placeholder="t('system.config.auth.clientSecretPlaceholder')"
               allow-clear
-            ></a-input>
+            ></a-input-password>
           </a-form-item>
-          <a-form-item
+          <!--          <a-form-item
             :label="t('system.config.auth.logoutSessionUrl')"
             field="configuration.logoutUrl"
             asterisk-position="end"
@@ -294,8 +303,8 @@
               "
               allow-clear
             ></a-input>
-          </a-form-item>
-          <a-form-item :label="t('system.config.auth.loginUrl')" field="configuration.loginUrl" asterisk-position="end">
+          </a-form-item>-->
+          <!--          <a-form-item :label="t('system.config.auth.loginUrl')" field="configuration.loginUrl" asterisk-position="end">
             <a-input
               v-model:model-value="activeAuthForm.configuration.loginUrl"
               :max-length="255"
@@ -303,9 +312,9 @@
               allow-clear
             ></a-input>
             <MsFormItemSub :text="t('system.config.auth.loginUrlTip')" :show-fill-icon="false" />
-          </a-form-item>
+          </a-form-item>-->
         </template>
-        <template v-else-if="activeAuthForm.type === 'OAuth2'">
+        <template v-else-if="activeAuthForm.type === 'OAUTH2'">
           <a-form-item
             :label="t('system.config.auth.authUrl')"
             field="configuration.authUrl"
@@ -318,7 +327,7 @@
               :max-length="255"
               :placeholder="
                 t('system.config.auth.commonUrlPlaceholder', {
-                  url: 'http://<keyclock>auth/realms/<metersphere>/protocol/openid-connect/auth',
+                  url: 'http://<meteresphere-endpoint>/login/oauth/authorize',
                 })
               "
               allow-clear
@@ -336,7 +345,7 @@
               :max-length="255"
               :placeholder="
                 t('system.config.auth.commonUrlPlaceholder', {
-                  url: 'http://<keyclock>auth/realms/<metersphere>/protocol/openid-connect/token',
+                  url: 'https://<meteresphere-endpoint>/login/oauth/access_token',
                 })
               "
               allow-clear
@@ -354,7 +363,7 @@
               :max-length="255"
               :placeholder="
                 t('system.config.auth.commonUrlPlaceholder', {
-                  url: 'http://<keyclock>auth/realms/<metersphere>/protocol/openid-connect/userinfo',
+                  url: 'https://<meteresphere-endpoint>/user',
                 })
               "
               allow-clear
@@ -372,7 +381,7 @@
               :max-length="255"
               :placeholder="
                 t('system.config.auth.commonUrlPlaceholder', {
-                  url: 'http://<meteresphere-endpoint>/sso/callback/cas/suthld',
+                  url: 'http://<meteresphere-endpoint>/sso/callback/oauth2',
                 })
               "
               allow-clear
@@ -399,12 +408,12 @@
             :rules="[{ required: true, message: t('system.config.auth.clientSecretRequired') }]"
             required
           >
-            <a-input
+            <a-input-password
               v-model:model-value="activeAuthForm.configuration.secret"
               :max-length="255"
-              :placeholder="t('system.config.auth.clientSecretPlaceholder')"
+              :placeholder="t('system.config.auth.oauth.clientSecretPlaceholder')"
               allow-clear
-            ></a-input>
+            ></a-input-password>
           </a-form-item>
           <a-form-item
             :label="t('system.config.auth.propertyMap')"
@@ -420,7 +429,7 @@
               allow-clear
             ></a-input>
           </a-form-item>
-          <a-form-item
+          <!--          <a-form-item
             :label="t('system.config.auth.logoutSessionUrl')"
             field="configuration.logoutUrl"
             asterisk-position="end"
@@ -435,7 +444,7 @@
               "
               allow-clear
             ></a-input>
-          </a-form-item>
+          </a-form-item>-->
           <a-form-item :label="t('system.config.auth.linkRange')" field="configuration.scope" asterisk-position="end">
             <a-input
               v-model:model-value="activeAuthForm.configuration.scope"
@@ -444,7 +453,7 @@
               allow-clear
             ></a-input>
           </a-form-item>
-          <a-form-item :label="t('system.config.auth.loginUrl')" field="configuration.loginUrl" asterisk-position="end">
+          <!--          <a-form-item :label="t('system.config.auth.loginUrl')" field="configuration.loginUrl" asterisk-position="end">
             <a-input
               v-model:model-value="activeAuthForm.configuration.loginUrl"
               :max-length="255"
@@ -452,7 +461,7 @@
               allow-clear
             ></a-input>
             <MsFormItemSub :text="t('system.config.auth.loginUrlTip')" :show-fill-icon="false" />
-          </a-form-item>
+          </a-form-item>-->
         </template>
         <template v-else-if="activeAuthForm.type === 'LDAP'">
           <a-form-item
@@ -671,17 +680,24 @@
       dataIndex: 'enable',
     },
     {
-      title: 'system.config.auth.desc',
+      title: 'system.config.auth.type',
+      slotName: 'type',
+      dataIndex: 'type',
+    },
+    {
+      title: 'common.desc',
       dataIndex: 'description',
       showTooltip: true,
     },
     {
       title: 'system.config.auth.createTime',
       dataIndex: 'createTime',
+      width: 180,
     },
     {
       title: 'system.config.auth.updateTime',
       dataIndex: 'updateTime',
+      width: 180,
     },
     {
       title: hasOperationPermission.value ? 'system.config.auth.action' : '',
@@ -696,7 +712,7 @@
   const { propsRes, propsEvent, loadList, setLoadListParams } = useTable(getAuthList, {
     tableKey: TableKeyEnum.SYSTEM_AUTH,
     columns,
-    scroll: { y: 'auto' },
+    scroll: { y: 'auto', x: '100%' },
     selectable: false,
     showSelectAll: false,
   });
@@ -790,6 +806,7 @@
           Message.success(t('system.config.auth.deleteSuccess'));
           loadList();
         } catch (error) {
+          // eslint-disable-next-line no-console
           console.log(error);
         }
       },
@@ -838,7 +855,7 @@
       const { configuration } = activeAuthDetail.value;
       let description: Description[] = [
         {
-          label: t('system.config.auth.desc'),
+          label: t('common.desc'),
           value: activeAuthDetail.value.description,
         },
       ];
@@ -899,7 +916,7 @@
             },
           ]);
           break;
-        case 'OAuth2':
+        case 'OAUTH2':
           description = description.concat([
             {
               label: t('system.config.auth.authUrl'),
@@ -984,8 +1001,7 @@
   const showDrawer = ref(false);
   const drawerLoading = ref(false);
   const authFormRef = ref<FormInstance>();
-  // const authTypeList = ['CAS', 'OIDC', 'OAuth2', 'LDAP'];
-  const authTypeList = ['LDAP'];
+  const authTypeList = ['CAS', 'OIDC', 'OAUTH2', 'LDAP'];
   const defaultAuth = {
     id: '',
     enable: true,
@@ -1023,6 +1039,7 @@
           typeof res.configuration === 'string' ? JSON.parse(res.configuration || '{}') : res.configuration,
       };
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       drawerLoading.value = false;
@@ -1151,7 +1168,7 @@
             loginUrl: configuration.loginUrl,
           };
           break;
-        case 'OAuth2':
+        case 'OAUTH2':
           _configuration = {
             authUrl: configuration.authUrl,
             tokenUrl: configuration.tokenUrl,
@@ -1195,8 +1212,10 @@
           showDrawer.value = false;
         }
       }
+      authFormRef.value?.resetFields();
       loadList();
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       drawerLoading.value = false;

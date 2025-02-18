@@ -21,9 +21,6 @@
             "id": "PROJECT_API_DEBUG:READ+DELETE"
           },
           {
-            "id": "PROJECT_API_DEBUG:READ+IMPORT"
-          },
-          {
             "id": "PROJECT_API_DEBUG:READ+EXECUTE"
           }
         ]
@@ -53,6 +50,10 @@
           },
           {
             "id": "PROJECT_API_DEFINITION:READ+EXPORT"
+          },
+          {
+            "id": "PROJECT_API_DEFINITION:READ+SHARE",
+            "name": "permission.api_doc.share"
           }
         ]
       },
@@ -93,19 +94,6 @@
           },
           {
             "id": "PROJECT_API_DEFINITION_MOCK:READ+DELETE"
-          }
-        ]
-      },
-      {
-        "id": "PROJECT_API_DEFINITION_DOC",
-        "name": "permission.api_doc.name",
-        "permissions": [
-          {
-            "id": "PROJECT_API_DEFINITION_DOC:READ"
-          },
-          {
-            "id": "PROJECT_API_DEFINITION_DOC:READ+SHARE",
-            "name": "permission.api_doc.share"
           }
         ]
       },
@@ -153,9 +141,13 @@
           {
             "id": "PROJECT_API_REPORT:READ+SHARE",
             "name": "permission.api_doc.share"
+          },
+          {
+            "id": "PROJECT_API_REPORT:READ+EXPORT"
           }
         ]
       }
-    ]
+    ],
+    "order": 7
   }
 ]

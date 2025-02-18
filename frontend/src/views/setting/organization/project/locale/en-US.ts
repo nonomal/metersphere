@@ -22,7 +22,6 @@ export default {
   'system.organization.organizationAdmin': 'Organization administrator',
   'system.organization.organizationAdminPlaceholder':
     'The organization administrator defaults to the person who created the organization',
-  'system.organization.description': 'Description',
   'system.project.affiliatedOrgExtra':
     'After selecting an organization, prompt the user to confirm the selected organization. After the project is successfully created, the organization cannot be changed',
   'system.organization.descriptionPlaceholder': 'Please describe the organization',
@@ -42,7 +41,6 @@ export default {
   'system.organization.email': 'Email',
   'system.organization.phone': 'Phone',
   'system.organization.addSuccess': 'Add success',
-  'system.organization.deleteName': 'Are you sure to delete {name}',
   'system.organization.deleteTip':
     'Delete the organization and delete the project data under that organization together. Please be cautious!',
   'system.organization.revokeDeleteToolTip': 'The organization will be deleted automatically after 30 days',
@@ -76,6 +74,11 @@ export default {
   'system.project.createProjectSuccess': 'Create project success',
   'system.project.updateProjectSuccess': 'Update project success',
   'system.project.resourcePool': 'Resource pool',
+  'system.project.resourcePoolPlaceholder':
+    'Please select the execution machine for interface testing, supporting multiple selections',
   'system.project.removeName': 'Confirm remove the {name}',
   'system.project.descriptionPlaceholder': 'Please describe the project.',
+  'system.project.enterProject': 'Enter project',
+  'system.project.allResPool': 'All resource pool',
+  'system.project.specifyResPool': 'Specify resource pool',
 };

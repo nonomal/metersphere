@@ -9,13 +9,14 @@ import io.metersphere.system.controller.handler.ResultHolder;
 import io.metersphere.system.domain.UserExample;
 import io.metersphere.system.domain.UserExtend;
 import io.metersphere.system.domain.UserExtendExample;
+import io.metersphere.system.dto.request.user.PersonalLocaleRequest;
 import io.metersphere.system.dto.request.user.PersonalUpdatePasswordRequest;
 import io.metersphere.system.dto.request.user.PersonalUpdateRequest;
 import io.metersphere.system.dto.user.UserDTO;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.mapper.UserExtendMapper;
 import io.metersphere.system.mapper.UserMapper;
-import io.metersphere.system.service.UserService;
+import io.metersphere.system.service.SimpleUserService;
 import io.metersphere.system.uid.IDGenerator;
 import io.metersphere.system.utils.user.PersonalRequestUtils;
 import jakarta.annotation.Resource;
@@ -39,7 +40,7 @@ public class PersonalControllerTests extends BaseTest {
     @Resource
     private UserMapper userMapper;
     @Resource
-    private UserService userService;
+    private SimpleUserService simpleUserService;
 
     @Test
     @Order(0)
@@ -63,7 +64,7 @@ public class PersonalControllerTests extends BaseTest {
     @Order(1)
     void testPersonalUpdateInfo() throws Exception {
         //方法测试
-        userService.checkUserEmail(IDGenerator.nextStr(), "admin_update@metersphere.io");
+        simpleUserService.checkUserEmail(IDGenerator.nextStr(), "admin_update@metersphere.io");
 
         PersonalUpdateRequest request = new PersonalUpdateRequest();
         request.setId(loginUser);
@@ -76,7 +77,7 @@ public class PersonalControllerTests extends BaseTest {
 
         boolean methodCheck = false;
         try {
-            userService.checkUserEmail(IDGenerator.nextStr(), "admin_update@metersphere.io");
+            simpleUserService.checkUserEmail(IDGenerator.nextStr(), "admin_update@metersphere.io");
         } catch (Exception e) {
             methodCheck = true;
         }
@@ -87,7 +88,7 @@ public class PersonalControllerTests extends BaseTest {
         example.createCriteria().andIdEqualTo(loginUser);
         List<UserExtend> userExtends = userExtendMapper.selectByExample(example);
         if (!userExtends.isEmpty()) {
-            Assertions.assertNull(userExtends.get(0).getAvatar());
+            Assertions.assertNull(userExtends.getFirst().getAvatar());
         }
 
         request = new PersonalUpdateRequest();
@@ -166,8 +167,28 @@ public class PersonalControllerTests extends BaseTest {
         }
     }
 
+
     @Test
     @Order(2)
+    void testPersonalUpdateLanguage() throws Exception {
+        PersonalLocaleRequest request = new PersonalLocaleRequest();
+        request.setLanguage("zh-CN");
+        this.requestPostWithOk(PersonalRequestUtils.URL_PERSONAL_UPDATE_LANGUAGE, request);
+        Assertions.assertEquals(userMapper.selectByPrimaryKey(loginUser).getLanguage(), "zh-CN");
+
+        request.setLanguage("en-US");
+        this.requestPostWithOk(PersonalRequestUtils.URL_PERSONAL_UPDATE_LANGUAGE, request);
+        Assertions.assertEquals(userMapper.selectByPrimaryKey(loginUser).getLanguage(), "en-US");
+
+        request.setLanguage(null);
+        this.requestPost(PersonalRequestUtils.URL_PERSONAL_UPDATE_LANGUAGE, request).andExpect(status().isBadRequest());
+
+        request.setLanguage("ABCDE");
+        this.requestPost(PersonalRequestUtils.URL_PERSONAL_UPDATE_LANGUAGE, request).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @Order(3)
     void testPersonalUpdatePassword() throws Exception {
         RsaKey rsaKey = RsaUtils.getRsaKey();
 

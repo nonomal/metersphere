@@ -47,7 +47,7 @@
         </a-dropdown>
       </div>
       <div v-if="!props.onlyButton" class="!hover:bg-[rgb(var(--primary-1))] !text-[var(--color-text-4)]">
-        {{ t('system.orgTemplate.addAttachmentTip') }}
+        {{ t('system.orgTemplate.addAttachmentTip', { size: appStore.getFileMaxSize }) }}
       </div>
     </div>
   </a-form-item>
@@ -70,18 +70,21 @@
         :file-module-options-api="props.fileModuleOptionsApi"
         @finish="handleSaveFileFinish"
       />
-      <a-popover
-        v-model:popup-visible="inputFilesPopoverVisible"
-        trigger="click"
-        position="bl"
-        :disabled="inputFiles.length === 0"
-        content-class="ms-add-attachment-files-popover"
-        arrow-class="hidden"
-        :popup-offset="0"
+      <filesPopover
+        v-model:visible="inputFilesPopoverVisible"
+        v-model:file-list="fileList"
+        v-model:input-files="inputFiles"
+        :disabled="props.disabled"
+        :input-class="props.inputClass"
+        :input-size="props.inputSize"
+        :fields="props.fields"
+        :tag-size="props.tagSize"
+        @open-save-as="handleOpenSaveAs"
+        @delete-file="emit('deleteFile', $event)"
       >
-        <div class="h-full flex-1">
+        <div class="h-full w-[calc(100%-24px)]">
           <MsTagsInput
-            v-model:model-value="inputFiles"
+            :model-value="inputFiles"
             :input-class="props.inputClass"
             placeholder=" "
             :disabled="props.disabled"
@@ -106,93 +109,11 @@
             </template>
           </MsTagsInput>
         </div>
-        <template #content>
-          <div class="flex w-[200px] flex-col gap-[8px]">
-            <template v-if="alreadyDeleteFiles.length > 0">
-              <div class="flex items-center gap-[4px]">
-                <icon-exclamation-circle-fill class="!text-[rgb(var(--warning-6))]" :size="18" />
-                <div class="text-[var(--color-text-4)]">{{ t('ms.add.attachment.alreadyDelete') }}</div>
-                <MsButton type="text" :disabled="props.disabled" @click="clearDeletedFiles">
-                  {{ t('ms.add.attachment.quickClear') }}
-                </MsButton>
-              </div>
-              <div class="file-list">
-                <div v-for="file of alreadyDeleteFiles" :key="file.value" class="file-list-item">
-                  <a-tooltip :content="file.label" :mouse-enter-delay="300">
-                    <MsTag size="small" max-width="100%">
-                      {{ file.label }}
-                    </MsTag>
-                  </a-tooltip>
-                  <a-tooltip :content="t('ms.add.attachment.remove')">
-                    <MsButton type="text" status="secondary" :disabled="props.disabled" @click="handleClose(file)">
-                      <MsIcon
-                        type="icon-icon_unlink"
-                        :class="props.disabled ? '' : 'hover:text-[rgb(var(--primary-5))]'"
-                        size="16"
-                      />
-                    </MsButton>
-                  </a-tooltip>
-                </div>
-              </div>
-            </template>
-            <template v-if="otherFiles.length > 0">
-              <div v-if="alreadyDeleteFiles.length > 0" class="mt-[4px] text-[var(--color-text-4)]">
-                {{ t('ms.add.attachment.other') }}
-              </div>
-              <div class="file-list">
-                <div v-for="file of otherFiles" :key="file.value" class="file-list-item">
-                  <a-tooltip :content="file.label" :mouse-enter-delay="300">
-                    <MsTag size="small" max-width="100%">
-                      {{ file.label }}
-                    </MsTag>
-                  </a-tooltip>
-                  <div v-if="file.local === true" class="flex items-center">
-                    <template v-if="hasAnyPermission(['PROJECT_FILE_MANAGEMENT:READ+ADD'])">
-                      <a-tooltip :content="t('ms.add.attachment.saveAs')">
-                        <MsButton
-                          type="text"
-                          status="secondary"
-                          class="!mr-0"
-                          :disabled="props.disabled"
-                          @click="handleOpenSaveAs(file)"
-                        >
-                          <MsIcon
-                            type="icon-icon_unloading"
-                            :class="props.disabled ? '' : 'hover:text-[rgb(var(--primary-5))]'"
-                            size="16"
-                          />
-                        </MsButton>
-                      </a-tooltip>
-                      <a-divider direction="vertical" :margin="4"></a-divider>
-                    </template>
-                    <a-tooltip :content="t('ms.add.attachment.remove')">
-                      <MsButton type="text" status="secondary" :disabled="props.disabled" @click="handleClose(file)">
-                        <MsIcon
-                          type="icon-icon_delete-trash_outlined"
-                          :class="props.disabled ? '' : 'hover:text-[rgb(var(--primary-5))]'"
-                          size="16"
-                        />
-                      </MsButton>
-                    </a-tooltip>
-                  </div>
-                  <a-tooltip v-else :content="t('ms.add.attachment.cancelAssociate')">
-                    <MsButton type="text" status="secondary" :disabled="props.disabled" @click="handleClose(file)">
-                      <MsIcon
-                        type="icon-icon_unlink"
-                        :class="props.disabled ? '' : 'hover:text-[rgb(var(--primary-5))]'"
-                        size="16"
-                      />
-                    </MsButton>
-                  </a-tooltip>
-                </div>
-              </div>
-            </template>
-          </div>
-        </template>
-      </a-popover>
+      </filesPopover>
     </div>
     <div v-else class="flex w-full items-center gap-[4px]">
       <dropdownMenu
+        :file-list="fileList"
         :accept="props.accept"
         :disabled="props.disabled"
         @link-file="associatedFile"
@@ -205,8 +126,17 @@
         :size="props.inputSize"
         allow-clear
         readonly
-        @clear="handleFileClear"
       >
+        <template v-if="fileList[0]?.delete" #prefix>
+          <a-tooltip :content="t('ms.add.attachment.fileDeletedTip')">
+            <icon-exclamation-circle-fill class="!text-[rgb(var(--warning-6))]" :size="18" />
+          </a-tooltip>
+        </template>
+        <template v-if="inputFileName" #suffix>
+          <div class="arco-icon-hover arco-input-icon-hover arco-input-clear-btn" @click.stop="handleFileClear">
+            <icon-close />
+          </div>
+        </template>
       </a-input>
     </div>
   </template>
@@ -225,7 +155,6 @@
 <script setup lang="ts">
   import { TagData } from '@arco-design/web-vue';
 
-  import MsButton from '@/components/pure/ms-button/index.vue';
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
   import MsTag, { Size } from '@/components/pure/ms-tag/ms-tag.vue';
   import MsTagsInput from '@/components/pure/ms-tags-input/index.vue';
@@ -233,12 +162,13 @@
   import type { MsFileItem, UploadType } from '@/components/pure/ms-upload/types';
   import LinkFileDrawer from '@/components/business/ms-link-file/associatedFileDrawer.vue';
   import dropdownMenu from './dropdownMenu.vue';
+  import filesPopover from './filesPopover.vue';
   import saveAsFilePopover from './saveAsFilePopover.vue';
 
   import { getAssociatedFileListUrl } from '@/api/modules/case-management/featureCase';
   import { getModules, getModulesCount } from '@/api/modules/project-management/fileManagement';
   import { useI18n } from '@/hooks/useI18n';
-  import { hasAnyPermission } from '@/utils/permission';
+  import useAppStore from '@/store/modules/app';
 
   import { AssociatedList } from '@/models/caseManagement/featureCase';
   import { TableQueryParams, TransferFileParams } from '@/models/common';
@@ -280,6 +210,7 @@
   }>();
 
   const { t } = useI18n();
+  const appStore = useAppStore();
 
   const fileList = defineModel<MsFileItem[]>('fileList', {
     // TODO:这里的文件含有组件内部定义的属性，应该继承MsFileItem类型并扩展声明组件定义的类型属性
@@ -295,26 +226,35 @@
   });
   const buttonDropDownVisible = ref(false);
 
-  onBeforeMount(() => {
-    // 回显文件
-    const defaultFiles = fileList.value.filter((item) => item) || [];
-    if (defaultFiles.length > 0) {
-      if (props.multiple) {
-        inputFiles.value = defaultFiles.map((item) => ({
-          ...item,
-          // 这里取自定义的字段名，因为存在查看的场景时不会与刚选择的文件信息一样
-          value: item?.[props.fields.id] || item.uid || '', // 取uid是因为有可能是本地上传然后组件卸载然后重新挂载，这时候取自定义 id 会是空的
-          label: item?.[props.fields.name] || item?.name || '',
-        }));
+  watch(
+    () => fileList.value,
+    () => {
+      // 回显文件
+      const defaultFiles = fileList.value.filter((item) => item) || [];
+      if (defaultFiles.length > 0) {
+        if (props.multiple) {
+          inputFiles.value = defaultFiles.map((item) => ({
+            ...item,
+            // 这里取自定义的字段名，因为存在查看的场景时不会与刚选择的文件信息一样
+            value: item?.[props.fields.id] || item.uid || '', // 取uid是因为有可能是本地上传然后组件卸载然后重新挂载，这时候取自定义 id 会是空的
+            label: item?.[props.fields.name] || item?.name || '',
+          }));
+        } else {
+          inputFileName.value = defaultFiles[0]?.[props.fields.name] || defaultFiles[0]?.name || '';
+        }
+        getListFunParams.value.combine.hiddenIds = defaultFiles
+          .filter((item) => !item?.local)
+          .map((item) => item?.[props.fields.id] || '')
+          .filter((item) => item);
       } else {
-        inputFileName.value = defaultFiles[0]?.[props.fields.name] || defaultFiles[0]?.name || '';
+        inputFileName.value = '';
+        inputFiles.value = [];
       }
-      getListFunParams.value.combine.hiddenIds = defaultFiles
-        .filter((item) => !item?.local)
-        .map((item) => item?.[props.fields.id] || '')
-        .filter((item) => item);
+    },
+    {
+      immediate: true,
     }
-  });
+  );
 
   function handleChange(_fileList: MsFileItem[], fileItem: MsFileItem) {
     if (props.multiple) {
@@ -358,6 +298,7 @@
 
   // 处理关联文件
   function saveSelectAssociatedFile(fileData: AssociatedList[]) {
+    // TODO : 这里需要优化选择跨页的数据
     const fileResultList = fileData.map((fileInfo) => convertToFile(fileInfo));
     if (props.mode === 'button') {
       fileList.value.push(...fileResultList);
@@ -376,20 +317,16 @@
       fileList.value = [{ ...file, fileId: file.uid || '', fileName: file.name || '' }];
       inputFileName.value = file.name || '';
     }
-    emit('change', fileList.value);
+    nextTick(() => {
+      // fileList赋值以后需要 nextTick 才能获取到更新后的值
+      emit('change', fileList.value);
+    });
   }
 
   const inputFilesPopoverVisible = ref(false);
   const alreadyDeleteFiles = computed(() => {
     return inputFiles.value.filter((item) => item.delete);
   });
-  const otherFiles = computed(() => {
-    return inputFiles.value.filter((item) => !item.delete);
-  });
-
-  function clearDeletedFiles() {
-    inputFiles.value = inputFiles.value.filter((item) => !item.delete);
-  }
 
   function handleClose(data: TagData) {
     inputFiles.value = inputFiles.value.filter((item) => item.value !== data.value);
@@ -439,28 +376,7 @@
   }
 </script>
 
-<style lang="less">
-  .ms-add-attachment-files-popover {
-    padding: 16px;
-    .arco-popover-content {
-      margin-top: 0;
-    }
-  }
-</style>
-
 <style lang="less" scoped>
-  .file-list {
-    @apply flex flex-col overflow-y-auto overflow-x-hidden;
-    .ms-scroll-bar();
-
-    gap: 8px;
-    max-height: 200px;
-    .file-list-item {
-      @apply flex items-center justify-between;
-
-      gap: 8px;
-    }
-  }
   :deep(.arco-input-tag-has-prefix) {
     padding-left: 4px;
   }

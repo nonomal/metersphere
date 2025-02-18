@@ -2,11 +2,13 @@
   <condition
     ref="conditionRef"
     v-model:list="innerConfig.processors"
+    condition-type="postOperation"
     :condition-types="conditionTypes"
     add-text="apiTestDebug.postCondition"
     :response="props.response"
     :disabled="props.disabled"
     :sql-code-editor-height="props.sqlCodeEditorHeight"
+    show-quick-copy
     @change="emit('change')"
   >
     <template v-if="$slots.dropdownAppend" #dropdownAppend>

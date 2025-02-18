@@ -1,6 +1,7 @@
 package io.metersphere.api.service;
 
 import io.metersphere.api.domain.ApiDefinition;
+import io.metersphere.api.domain.ApiReportRelateTask;
 import io.metersphere.api.dto.ApiDefinitionExecuteInfo;
 import io.metersphere.api.dto.ApiFile;
 import io.metersphere.api.dto.definition.ResponseBinaryBody;
@@ -12,6 +13,7 @@ import io.metersphere.api.dto.request.http.body.BinaryBody;
 import io.metersphere.api.dto.request.http.body.Body;
 import io.metersphere.api.dto.request.http.body.FormDataBody;
 import io.metersphere.api.dto.request.http.body.FormDataKV;
+import io.metersphere.api.utils.ApiDataUtils;
 import io.metersphere.plugin.api.spi.AbstractMsTestElement;
 import io.metersphere.project.api.KeyValueParam;
 import io.metersphere.project.api.assertion.MsScriptAssertion;
@@ -22,22 +24,45 @@ import io.metersphere.project.domain.CustomFunctionBlob;
 import io.metersphere.project.domain.FileAssociation;
 import io.metersphere.project.domain.FileMetadata;
 import io.metersphere.project.dto.CommonScriptInfo;
+import io.metersphere.project.dto.environment.EnvironmentInfoDTO;
+import io.metersphere.project.dto.environment.MsEnvAssertionConfig;
+import io.metersphere.project.dto.environment.processors.*;
 import io.metersphere.project.service.CustomFunctionService;
 import io.metersphere.project.service.FileAssociationService;
 import io.metersphere.project.service.FileMetadataService;
+import io.metersphere.sdk.constants.ApplicationNumScope;
+import io.metersphere.sdk.constants.DefaultRepositoryDir;
+import io.metersphere.sdk.constants.ExecStatus;
+import io.metersphere.sdk.constants.TaskItemErrorMessage;
+import io.metersphere.sdk.dto.api.task.GetRunScriptRequest;
+import io.metersphere.sdk.dto.api.task.TaskBatchRequestDTO;
+import io.metersphere.sdk.dto.api.task.TaskItem;
+import io.metersphere.sdk.dto.api.task.TaskRequestDTO;
+import io.metersphere.sdk.exception.MSException;
 import io.metersphere.sdk.util.BeanUtils;
+import io.metersphere.sdk.util.CommonBeanFactory;
 import io.metersphere.sdk.util.JSON;
+import io.metersphere.sdk.util.LogUtils;
+import io.metersphere.system.domain.ExecTask;
+import io.metersphere.system.domain.ExecTaskItem;
+import io.metersphere.system.domain.ExecTaskItemExample;
+import io.metersphere.system.mapper.ExecTaskItemMapper;
+import io.metersphere.system.mapper.ExecTaskMapper;
+import io.metersphere.system.uid.IDGenerator;
+import io.metersphere.system.uid.NumGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.BooleanUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.ibatis.session.ExecutorType;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
+import org.mybatis.spring.SqlSessionUtils;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -54,6 +79,12 @@ public class ApiCommonService {
     private FileMetadataService fileMetadataService;
     @Resource
     private CustomFunctionService customFunctionService;
+    @Resource
+    private ExecTaskItemMapper execTaskItemMapper;
+    @Resource
+    private ApiFileResourceService apiFileResourceService;
+    @Resource
+    private ExecTaskMapper execTaskMapper;
 
     /**
      * 根据 fileId 查找 MsHTTPElement 中的 ApiFile
@@ -133,10 +164,10 @@ public class ApiCommonService {
                 linkFile.setDelete(true);
                 List<FileAssociation> fileAssociations = fileAssociationService.getByFileIdAndSourceId(resourceId, linkFile.getFileId());
                 if (CollectionUtils.isNotEmpty(fileAssociations)) {
-                    linkFile.setFileAlias(fileAssociations.get(0).getDeletedFileName());
+                    linkFile.setFileAlias(fileAssociations.getFirst().getDeletedFileName());
                 }
             } else {
-                String fileName = fileMetadata.getName() + fileMetadata.getType();
+                String fileName = fileMetadata.getName();
                 if (StringUtils.isNotBlank(fileMetadata.getType())) {
                     // 前端展示别名加后缀
                     fileName += "." + fileMetadata.getType();
@@ -221,7 +252,7 @@ public class ApiCommonService {
      */
     public void setScriptElementEnableCommonScriptInfo(List<MsScriptElement> msScriptElements) {
         List<CommonScriptInfo> commonScriptInfos = msScriptElements.stream()
-                .filter(msScriptElement -> BooleanUtils.isTrue(msScriptElement.getEnableCommonScript()) && msScriptElement.getEnableCommonScript() != null)
+                .filter(msScriptElement -> BooleanUtils.isTrue(msScriptElement.getEnableCommonScript()))
                 .map(MsScriptElement::getCommonScriptInfo)
                 .toList();
 
@@ -246,6 +277,87 @@ public class ApiCommonService {
         commonScriptInfos.addAll(assertionsCommonScriptInfos);
 
         setEnableCommonScriptInfo(commonScriptInfos);
+    }
+
+    /**
+     * 设置环境前后置的公共脚本信息
+     *
+     * @param envConfig
+     */
+    public void setEnvCommonScriptInfo(EnvironmentInfoDTO envConfig) {
+        if (envConfig == null || envConfig.getConfig() == null) {
+            return;
+        }
+        try {
+            // 获取脚本
+            List<ScriptProcessor> scriptsProcessors = getEnableCommonScriptProcessors(envConfig.getConfig().getPreProcessorConfig());
+            scriptsProcessors.addAll(getEnableCommonScriptProcessors(envConfig.getConfig().getPostProcessorConfig()));
+
+            // 获取断言
+            List<MsScriptAssertion> scriptAssertions = getEnableCommonScriptAssertion(envConfig.getConfig().getAssertionConfig());
+
+            List<CommonScriptInfo> commonScriptInfos = scriptsProcessors.stream()
+                    .map(ScriptProcessor::getCommonScriptInfo)
+                    .collect(Collectors.toList());
+
+            List<CommonScriptInfo> assertionsCommonScriptInfos = scriptAssertions.stream()
+                    .map(MsScriptAssertion::getCommonScriptInfo)
+                    .toList();
+
+            commonScriptInfos.addAll(assertionsCommonScriptInfos);
+            // 设置最新的公共脚本信息
+            setEnableCommonScriptInfo(commonScriptInfos);
+        } catch (Exception e) {
+            LogUtils.error(e);
+        }
+    }
+
+    /**
+     * 获取环境使用公共脚本的前后置
+     *
+     * @param envProcessorConfig
+     * @return
+     */
+    private List<ScriptProcessor> getEnableCommonScriptProcessors(EnvProcessorConfig envProcessorConfig) {
+        if (envProcessorConfig == null) {
+            return new ArrayList<>(0);
+        }
+        ApiEnvProcessorConfig apiProcessorConfig = envProcessorConfig.getApiProcessorConfig();
+        ApiEnvPlanProcessorConfig planProcessorConfig = apiProcessorConfig.getPlanProcessorConfig();
+        ApiEnvScenarioProcessorConfig scenarioProcessorConfig = apiProcessorConfig.getScenarioProcessorConfig();
+        ApiEnvRequestProcessorConfig requestProcessorConfig = apiProcessorConfig.getRequestProcessorConfig();
+
+        List<MsProcessor> processors = new ArrayList<>();
+        processors.addAll(planProcessorConfig.getProcessors());
+        processors.addAll(scenarioProcessorConfig.getProcessors());
+        processors.addAll(requestProcessorConfig.getProcessors());
+
+        // 获取使用公共脚本的前后置
+        return processors.stream()
+                .filter(processor -> processor instanceof ScriptProcessor)
+                .map(processor -> (ScriptProcessor) processor)
+                .filter(ScriptProcessor::isEnableCommonScript)
+                .filter(ScriptProcessor::isValid)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 获取使用公共脚本的前后置
+     *
+     * @param envAssertionConfig
+     * @return
+     */
+    private List<MsScriptAssertion> getEnableCommonScriptAssertion(MsEnvAssertionConfig envAssertionConfig) {
+        if (envAssertionConfig == null || CollectionUtils.isEmpty(envAssertionConfig.getAssertions())) {
+            return List.of();
+        }
+        return envAssertionConfig.getAssertions()
+                .stream()
+                .filter(assertion -> assertion instanceof MsScriptAssertion)
+                .map(msAssertion -> (MsScriptAssertion) msAssertion)
+                .filter(MsScriptAssertion::isEnableCommonScript)
+                .filter(MsScriptAssertion::isValid)
+                .toList();
     }
 
     private void setEnableCommonScriptInfo(List<CommonScriptInfo> commonScriptInfos) {
@@ -277,12 +389,9 @@ public class ApiCommonService {
                 List<KeyValueParam> commonParams = JSON.parseArray(new String(paramsBlob), KeyValueParam.class);
                 // 替换用户输入值
                 commonParams.forEach(commonParam ->
-                        Optional.ofNullable(commonScriptInfo.getParams()).ifPresent(params ->
-                                params.stream()
-                                        .filter(param -> StringUtils.equals(commonParam.getKey(), param.getKey()))
-                                        .findFirst()
-                                        .ifPresent(param -> commonParam.setValue(param.getValue()))
-                        )
+                        Optional.ofNullable(commonScriptInfo.getParams()).flatMap(params -> params.stream()
+                                .filter(param -> StringUtils.equals(commonParam.getKey(), param.getKey()))
+                                .findFirst()).ifPresent(param -> commonParam.setValue(param.getValue()))
                 );
                 commonScriptInfo.setParams(commonParams);
             });
@@ -311,13 +420,12 @@ public class ApiCommonService {
         }
 
         // 获取使用公共脚本的前后置
-        List<ScriptProcessor> scriptsProcessors = processors.stream()
+        return processors.stream()
                 .filter(processor -> processor instanceof ScriptProcessor)
                 .map(processor -> (ScriptProcessor) processor)
                 .filter(ScriptProcessor::isEnableCommonScript)
                 .filter(ScriptProcessor::isValid)
                 .collect(Collectors.toList());
-        return scriptsProcessors;
     }
 
     /**
@@ -364,10 +472,9 @@ public class ApiCommonService {
      * @return
      */
     public Map<String, ApiDefinitionExecuteInfo> getApiDefinitionExecuteInfoMap(Function<List<String>, List<ApiDefinitionExecuteInfo>> getDefinitionInfoFunc, List<String> resourceIds) {
-        Map<String, ApiDefinitionExecuteInfo> resourceModuleMap = getDefinitionInfoFunc.apply(resourceIds)
+        return getDefinitionInfoFunc.apply(resourceIds)
                 .stream()
                 .collect(Collectors.toMap(ApiDefinitionExecuteInfo::getResourceId, Function.identity()));
-        return resourceModuleMap;
     }
 
     /**
@@ -393,5 +500,143 @@ public class ApiCommonService {
      */
     public void setApiDefinitionExecuteInfo(AbstractMsTestElement msTestElement, ApiDefinition apiDefinition) {
         setApiDefinitionExecuteInfo(msTestElement, BeanUtils.copyBean(new ApiDefinitionExecuteInfo(), apiDefinition));
+    }
+
+    public ExecTask newExecTask(String projectId, String userId) {
+        ExecTask execTask = new ExecTask();
+        execTask.setNum(NumGenerator.nextNum(ApplicationNumScope.TASK));
+        execTask.setProjectId(projectId);
+        execTask.setId(IDGenerator.nextStr());
+        execTask.setCreateTime(System.currentTimeMillis());
+        execTask.setCreateUser(userId);
+        execTask.setStatus(ExecStatus.PENDING.name());
+        return execTask;
+    }
+
+    public ExecTaskItem newExecTaskItem(String taskId, String projectId, String userId) {
+        ExecTaskItem execTaskItem = new ExecTaskItem();
+        execTaskItem.setCreateTime(System.currentTimeMillis());
+        execTaskItem.setId(IDGenerator.nextStr());
+        execTaskItem.setTaskId(taskId);
+        execTaskItem.setProjectId(projectId);
+        execTaskItem.setExecutor(userId);
+        execTaskItem.setStatus(ExecStatus.PENDING.name());
+        execTaskItem.setResourcePoolId(StringUtils.EMPTY);
+        execTaskItem.setResourcePoolNode(StringUtils.EMPTY);
+        return execTaskItem;
+    }
+
+    public ApiReportRelateTask getApiReportRelateTask(String taskItemId, String reportId) {
+        ApiReportRelateTask apiReportRelateTask = new ApiReportRelateTask();
+        apiReportRelateTask.setReportId(reportId);
+        apiReportRelateTask.setTaskResourceId(taskItemId);
+        return apiReportRelateTask;
+    }
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void batchUpdateTaskItemErrorMassage(TaskItemErrorMessage errorMessage, TaskBatchRequestDTO batchRequest) {
+        SqlSessionFactory sqlSessionFactory = CommonBeanFactory.getBean(SqlSessionFactory.class);
+        SqlSession sqlSession = sqlSessionFactory.openSession(ExecutorType.BATCH);
+        try {
+            if (CollectionUtils.isNotEmpty(batchRequest.getTaskItems())) {
+                ExecTaskItemMapper batchExecTaskItemMapper = sqlSession.getMapper(ExecTaskItemMapper.class);
+                batchRequest.getTaskItems().forEach(taskItem -> {
+                    // 更新任务项的异常信息
+                    ExecTaskItem execTaskItem = new ExecTaskItem();
+                    execTaskItem.setId(taskItem.getId());
+                    execTaskItem.setErrorMessage(errorMessage.name());
+                    batchExecTaskItemMapper.updateByPrimaryKeySelective(execTaskItem);
+                });
+            }
+        } finally {
+            sqlSession.flushStatements();
+            SqlSessionUtils.closeSqlSession(sqlSession, sqlSessionFactory);
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void batchUpdateTaskItemErrorMassage(TaskItemErrorMessage errorMessage, TaskRequestDTO taskRequestDTO) {
+        // 更新任务项的异常信息
+        ExecTaskItem execTaskItem = new ExecTaskItem();
+        execTaskItem.setId(taskRequestDTO.getTaskItem().getId());
+        execTaskItem.setErrorMessage(errorMessage.name());
+        execTaskItemMapper.updateByPrimaryKeySelective(execTaskItem);
+    }
+
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void updateTaskItemErrorMassage(String taskItemId, TaskItemErrorMessage errorMessage) {
+        // 更新任务项的异常信息
+        ExecTaskItem execTaskItem = new ExecTaskItem();
+        execTaskItem.setId(taskItemId);
+        execTaskItem.setErrorMessage(errorMessage.name());
+        execTaskItemMapper.updateByPrimaryKeySelective(execTaskItem);
+    }
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void updateTaskRunningStatus(String taskId) {
+        ExecTask execTask = new ExecTask();
+        execTask.setId(taskId);
+        execTask.setStartTime(System.currentTimeMillis());
+        execTask.setStatus(ExecStatus.RUNNING.name());
+        execTaskMapper.updateByPrimaryKeySelective(execTask);
+    }
+
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRES_NEW)
+    public void updateTaskItemRunningStatus(GetRunScriptRequest request) {
+        TaskItem taskItem = request.getTaskItem();
+        // 更新任务项状态
+        ExecTaskItem execTaskItem = new ExecTaskItem();
+        execTaskItem.setId(taskItem.getId());
+        execTaskItem.setStartTime(System.currentTimeMillis());
+        execTaskItem.setStatus(ExecStatus.RUNNING.name());
+        execTaskItem.setThreadId(request.getThreadId());
+        execTaskItemMapper.updateByPrimaryKeySelective(execTaskItem);
+    }
+
+    public ExecTaskItem getRerunTaskItem(String id) {
+        ExecTaskItemExample example = new ExecTaskItemExample();
+        example.createCriteria().andTaskIdEqualTo(id).andRerunEqualTo(true);
+        List<ExecTaskItem> execTaskItems = execTaskItemMapper.selectByExample(example);
+        if (org.apache.commons.collections4.CollectionUtils.isEmpty(execTaskItems)) {
+            throw new MSException("No test cases to rerun");
+        }
+        ExecTaskItem execTaskItem = execTaskItems.getFirst();
+        return execTaskItem;
+    }
+
+    public AbstractMsTestElement getAbstractMsTestElement(byte[] msTestElementByte) {
+        return getAbstractMsTestElement(new String(msTestElementByte));
+    }
+
+    public AbstractMsTestElement getAbstractMsTestElement(String msTestElementStr) {
+        try {
+            return ApiDataUtils.parseObject(msTestElementStr, AbstractMsTestElement.class);
+            // 如果插件删除，会转换异常
+        } catch (Exception e) {
+            LogUtils.error(e);
+        }
+        return null;
+    }
+
+    /**
+     * 复制文件到临时目录
+     * @param fileIds
+     * @param sourceDir
+     * @return
+     */
+    public Map<String, String> copyFiles2TempDir(List<String> fileIds, String sourceDir) {
+        Map<String, String> uploadFileMap = new HashMap<>();
+        for (String fileId : fileIds) {
+            String newFileId = IDGenerator.nextStr();
+            String targetDir = DefaultRepositoryDir.getSystemTempDir();
+            String fileName = apiFileResourceService.getFileNameByFileId(fileId, sourceDir);
+            // 复制文件到临时目录
+            apiFileResourceService.copyFile(sourceDir + "/" + fileId,
+                    targetDir + "/" + newFileId,
+                    fileName);
+            uploadFileMap.put(fileId, newFileId);
+        }
+        return uploadFileMap;
     }
 }

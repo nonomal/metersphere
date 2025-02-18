@@ -56,14 +56,23 @@
     </template>
     <div class="wrapper-preview">
       <div class="preview-left pr-4">
-        <DefectTemplateLeftContent v-if="route.query.type === 'BUG'" :defect-form="defectForm" />
-        <CaseTemplateLeftContent v-else />
+        <DefectTemplateLeftContent
+          v-if="route.query.type === 'BUG'"
+          v-model:uploadImgFileIds="uploadBugImgFileIds"
+          v-model:defaultForm="defaultBugForm"
+          :mode="props.mode"
+        />
+        <CaseTemplateLeftContent
+          v-else
+          v-model:uploadImgFileIds="uploadCaseImgFileIds"
+          v-model:defaultForm="defaultCaseForm"
+          :mode="props.mode"
+        />
       </div>
       <div class="preview-right px-4">
         <!-- 系统内置的字段 {处理人, 状态...} -->
         <DefectTemplateRightSystemField v-if="route.query.type === 'BUG'" />
         <CaseTemplateRightSystemField v-else />
-
         <!-- 自定义字段开始 -->
         <VueDraggable v-model="selectData" handle=".form" ghost-class="ghost" @change="changeDrag">
           <div v-for="(formItem, index) of selectData" :key="formItem.id" class="customWrapper">
@@ -71,10 +80,12 @@
               <span class="required">
                 <a-checkbox
                   v-model="formItem.required"
+                  :disabled="formItem.internal && formItem.internalFieldKey === 'functional_priority'"
                   class="mr-1"
                   @change="(value) => changeState(value, formItem as DefinedFieldItem)"
-                  >{{ t('system.orgTemplate.required') }}</a-checkbox
                 >
+                  {{ t('system.orgTemplate.required') }}
+                </a-checkbox>
               </span>
               <div class="actionList">
                 <a-tooltip :content="t('system.orgTemplate.toTop')">
@@ -111,7 +122,7 @@
                 <a-tooltip :content="t('common.delete')">
                   <MsIcon
                     v-if="formItem.fieldName != t('case.caseLevel')"
-                    type="icon-icon_delete-trash_outlined"
+                    type="icon-icon_delete-trash_outlined1"
                     size="16"
                     @click="deleteSelectedField(formItem as DefinedFieldItem)"
                   />
@@ -126,11 +137,29 @@
               }"
               @click="activeHandler(index)"
             >
+              <div class="mb-[8px] flex w-full items-center">
+                <a-tooltip
+                  :content="formItem.formRules && formItem.formRules[0] ? formItem?.formRules[0]?.title : ''"
+                  position="left"
+                >
+                  <div class="one-line-text max-w-[calc(100%-200px)]">{{
+                    formItem.formRules && formItem.formRules[0] ? formItem?.formRules[0]?.title : ''
+                  }}</div>
+                </a-tooltip>
+                <div v-if="formItem.required" class="ml-[2px] flex items-center">
+                  <svg-icon
+                    width="6px"
+                    height="18px"
+                    name="form-star"
+                    class="-mt-[2px] text-[12px] font-medium text-[rgb(var(--danger-6))]"
+                /></div>
+              </div>
               <!-- 表单 -->
               <MsFormCreate
                 v-model:api="formItem.fApi"
                 v-model:rule="formItem.formRules"
                 :option="configOptions"
+                is-in-for
                 @click="activeHandler(index)"
               />
               <a-form
@@ -222,6 +251,7 @@
   import { ref } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { Message } from '@arco-design/web-vue';
+  import { cloneDeep } from 'lodash-es';
   import { VueDraggable } from 'vue-draggable-plus';
 
   import MsCard from '@/components/pure/ms-card/index.vue';
@@ -245,13 +275,20 @@
     updateOrganizeTemplateInfo,
     updateProjectTemplateInfo,
   } from '@/api/modules/setting/template';
+  import { defaultTemplateBugDetail, defaultTemplateCaseDetail } from '@/config/template';
   import { useI18n } from '@/hooks/useI18n';
   import useLeaveUnSaveTip from '@/hooks/useLeaveUnSaveTip';
   import { useAppStore } from '@/store';
   import { sleep } from '@/utils';
   import { scrollIntoView } from '@/utils/dom';
 
-  import type { ActionTemplateManage, CustomField, DefinedFieldItem } from '@/models/setting/template';
+  import type {
+    ActionTemplateManage,
+    CustomField,
+    defaultBugField,
+    defaultCaseField,
+    DefinedFieldItem,
+  } from '@/models/setting/template';
   import { ProjectManagementRouteEnum, SettingRouteEnum } from '@/enums/routeEnum';
 
   import { getTemplateName, getTotalFieldOptionList } from './fieldSetting';
@@ -281,6 +318,7 @@
     scopeId: props.mode === 'organization' ? currentOrgId.value : currentProjectId.value,
     enableThirdPart: false,
     platForm: '',
+    uploadImgFileIds: [],
   };
 
   const initBugForm = {
@@ -327,6 +365,28 @@
   const totalTemplateField = ref<DefinedFieldItem[]>([]);
   const selectData = ref<DefinedFieldItem[]>([]);
 
+  // 用例默认字段
+  const defaultCaseForm = ref<defaultCaseField>(cloneDeep(defaultTemplateCaseDetail));
+  // 缺陷默认字段
+  const defaultBugForm = ref<defaultBugField>(cloneDeep(defaultTemplateBugDetail));
+
+  const uploadBugImgFileIds = ref<string[]>([]);
+  const uploadCaseImgFileIds = ref<string[]>([]);
+
+  // 获取系统默认字段
+  function getSystemFields(form: Record<string, any>) {
+    const tempFormField: Record<string, any>[] = [];
+    Object.keys(form).forEach((key: any) => {
+      if (form[key]) {
+        tempFormField.push({
+          fieldId: key,
+          defaultValue: form[key],
+        });
+      }
+    });
+    return tempFormField;
+  }
+
   // 获取模板参数
   function getTemplateParams(): ActionTemplateManage {
     const result = selectData.value.map((item) => {
@@ -348,6 +408,11 @@
       return [];
     });
 
+    const systemFields: Record<string, any>[] =
+      route.query.type === 'BUG' ? getSystemFields(defaultBugForm.value) : getSystemFields(defaultCaseForm.value);
+
+    const uploadImgFileIds = route.query.type === 'BUG' ? uploadBugImgFileIds.value : uploadCaseImgFileIds.value;
+
     const { name, remark, enableThirdPart, id } = templateForm.value;
     return {
       id,
@@ -357,6 +422,8 @@
       customFields: result as CustomField[],
       scopeId: props.mode === 'organization' ? currentOrgId.value : currentProjectId.value,
       scene: route.query.type,
+      systemFields,
+      uploadImgFileIds,
     };
   }
 
@@ -378,6 +445,19 @@
     try {
       loading.value = true;
       const params = getTemplateParams();
+      let isSysErr = false;
+      if (params.systemFields) {
+        params.systemFields.forEach((item) => {
+          if (item.fieldId === 'description' && item.defaultValue && item.defaultValue.length > 1500) {
+            Message.error(t('system.orgTemplate.description.too.long'));
+            isSysErr = true;
+          }
+        });
+      }
+      if (isSysErr) {
+        // 系统字段错误, 不保存
+        return;
+      }
       if (!templateForm.value.name) {
         isError.value = true;
         Message.error(t('system.orgTemplate.templateNamePlaceholder'));
@@ -421,24 +501,8 @@
   // 保存
   function saveHandler(isContinue = false) {
     isContinueFlag.value = isContinue;
-    formRef.value?.validate().then((res) => {
+    formRef.value?.validate().then(async (res) => {
       if (!res) {
-        // const allThirdApi = selectData.value.filter(
-        //   (item: any) =>
-        //     item.formRules[0].value || (Array.isArray(item.formRules[0].value) && item.formRules[0].value.length)
-        // );
-
-        // const allThirdApiIds = allThirdApi.map((item) => item.fieldId);
-        // const allValidatePromises = Object.keys(refStepMap).map((key) => {
-        //   return refStepMap[key].validate();
-        // });
-
-        // Promise.all(allValidatePromises).then((results) => {
-        //   const allValid = results.every((result) => !result);
-        //   if (allValid) {
-        //     return save();
-        //   }
-        // });
         return save();
       }
       return scrollIntoView(document.querySelector('.arco-form-item-message'), { block: 'center' });
@@ -448,7 +512,9 @@
   // 处理表单数据格式
   const getFieldOptionList = () => {
     totalTemplateField.value = getTotalFieldOptionList(totalTemplateField.value as DefinedFieldItem[]);
-    selectData.value = totalTemplateField.value.filter((item) => item.internal);
+    if (!isEdit.value) {
+      selectData.value = totalTemplateField.value.filter((item) => item.internal);
+    }
   };
 
   // 获取字段列表数据
@@ -475,7 +541,6 @@
       title.value = t('system.orgTemplate.createTemplateType', {
         type: getTemplateName('organization', route.query.type as string),
       });
-      // templateForm.value.name = title.value;
     }
   });
 
@@ -543,18 +608,13 @@
 
   function changeState(value: boolean | (string | number | boolean)[], formItem: DefinedFieldItem) {
     formItem.required = !!value;
-    if (formItem.formRules) {
-      formItem.formRules[0].effect.required = value;
-    }
   }
-
-  const systemFieldData = ref<CustomField[]>([]);
 
   function getSelectData(customFields: DefinedFieldItem[]) {
     return customFields.map((item: any) => {
       const currentFormRules = FieldTypeFormRules[item.type];
       let selectOptions: any = [];
-      const multipleType = ['MULTIPLE_SELECT', 'CHECKBOX', 'MULTIPLE_MEMBER', 'MULTIPLE_INPUT'];
+      const multipleType = ['MULTIPLE_SELECT', 'CHECKBOX', 'MULTIPLE_MEMBER'];
       if (item.options && item.options.length) {
         selectOptions = item.options.map((optionItem: any) => {
           return {
@@ -582,7 +642,6 @@
       } else {
         initValue = item.defaultValue;
       }
-
       return {
         ...item,
         id: item.fieldId,
@@ -592,7 +651,7 @@
             title: item.fieldName,
             field: item.fieldId,
             effect: {
-              required: item.required,
+              required: false,
             },
             value: initValue,
             props: {
@@ -606,6 +665,18 @@
         fApi: null,
         required: item.required,
       };
+    });
+  }
+
+  // 设置系统表单默认字段
+  function setCaseSystemFormField(systemFields: CustomField[]) {
+    systemFields.forEach((item: CustomField) => {
+      const key = item.fieldId;
+      if (route.query.type === 'BUG') {
+        defaultBugForm.value[key] = item.defaultValue;
+      } else {
+        defaultCaseForm.value[key] = item.defaultValue;
+      }
     });
   }
 
@@ -628,7 +699,7 @@
         templateForm.value.id = undefined;
       }
       selectData.value = getSelectData(customFields);
-      systemFieldData.value = systemFields;
+      setCaseSystemFormField(systemFields || []);
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -707,6 +778,8 @@
       'asterisk-position': 'end',
       'validate-trigger': ['change'],
       'row-class': 'selfClass',
+      'hide-asterisk': true,
+      'hide-label': true,
     },
   });
 </script>
@@ -743,7 +816,7 @@
           top: -12px;
           right: 16px;
           z-index: 9 !important;
-          background: white;
+          background: var(--color-text-fff);
           opacity: 0;
           @apply flex items-center justify-end;
           .actionList {
@@ -784,30 +857,6 @@
   :deep(.selfClass) {
     margin-bottom: 0;
   }
-
-  // :deep(.contentClass > .arco-input-wrapper) {
-  // border-color: transparent;
-  // &:hover {
-  //   border-color: var(--color-text-input-border);
-  // }
-  // &:hover > .arco-input {
-  //   font-weight: normal;
-  //   text-decoration: none;
-  //   color: var(--color-text-1);
-  // }
-  // & > .arco-input {
-  //   font-weight: 500;
-  //   text-decoration: underline;
-  //   color: var(--color-text-1);
-  // }
-  // }
-  // :deep(.contentClass > .arco-input-focus) {
-  //   border-color: rgb(var(--primary-5));
-  //   & > .arco-input {
-  //     font-weight: normal;
-  //     text-decoration: none;
-  //   }
-  // }
   .ghost {
     border: 1px solid rgba(var(--primary-5));
     background-color: var(--color-text-n9);
@@ -846,5 +895,16 @@
   }
   :deep(.arco-form-item-content) {
     overflow-wrap: anywhere;
+  }
+  :deep(.label-validate-star) {
+    .arco-form-item-label::after {
+      display: inline-block;
+      margin-top: -3px;
+      content: '';
+      width: 7px;
+      height: 7px;
+      vertical-align: middle;
+      background: url('@/assets/svg/icons/validateStar.svg') center/cover;
+    }
   }
 </style>

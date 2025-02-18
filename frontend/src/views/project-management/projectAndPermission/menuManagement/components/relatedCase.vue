@@ -35,6 +35,10 @@
         :form-rule="platformRules"
         @mounted="handleMounted"
       />
+      <!-- 同步频率 -->
+      <a-form-item field="CRON_EXPRESSION" :label="t('project.menu.CRON_EXPRESSION')">
+        <MsCronSelect v-model:model-value="form.CRON_EXPRESSION" />
+      </a-form-item>
     </a-form>
     <template v-if="platformOption.length" #footerLeft>
       <div class="flex flex-row items-center gap-[4px]">
@@ -72,8 +76,10 @@
 </template>
 
 <script lang="ts" setup>
-  import { FormInstance } from '@arco-design/web-vue';
+  import { ref } from 'vue';
+  import { FormInstance, Message } from '@arco-design/web-vue';
 
+  import MsCronSelect from '@/components/pure/ms-cron-select/index.vue';
   import MsDrawer from '@/components/pure/ms-drawer/index.vue';
   import MsFormCreate from '@/components/pure/ms-form-create/ms-form-create.vue';
   import type { FormItem, FormRuleItem } from '@/components/pure/ms-form-create/types';
@@ -110,7 +116,9 @@
 
   const form = reactive({
     PLATFORM_KEY: '',
-    CASE_ENABLE: 'false', // 同步开关
+    CASE_ENABLE: 'false', // 关联需求开关
+    SYNC_ENABLE: 'true', // 同步开关
+    CRON_EXPRESSION: '0 0 0 * * ?', // 同步频率
   });
 
   const formCreateValue = ref<Record<string, any>>({});
@@ -168,6 +176,7 @@
           { ...form, DEMAND_PLATFORM_CONFIG: JSON.stringify(formData) },
           currentProjectId.value
         );
+        Message.success(t('common.linkSuccess'));
         handleCancel(true);
         emit('ok');
       } catch (error) {
@@ -196,11 +205,13 @@
       await initPlatformOption();
       const res = await getCaseRelatedInfo(currentProjectId.value);
       if (res && res.platform_key) {
-        form.CASE_ENABLE = res.case_enable;
-        form.PLATFORM_KEY = res.platform_key;
         formCreateValue.value = JSON.parse(res.demand_platform_config);
         // 如果平台key存在调用平台change拉取插件字段
         await handlePlatformChange(res.platform_key);
+        form.CASE_ENABLE = res.case_enable;
+        form.PLATFORM_KEY = res.platform_key;
+        form.SYNC_ENABLE = res.sync_enable;
+        form.CRON_EXPRESSION = res.cron_expression;
       }
     } catch (e) {
       // eslint-disable-next-line no-console

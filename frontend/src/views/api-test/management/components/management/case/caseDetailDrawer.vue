@@ -19,7 +19,7 @@
           {{ t('common.edit') }}
         </MsButton>
         <MsButton type="icon" status="secondary" @click="caseDerailRef?.share()">
-          <MsIcon type="icon-icon_share1" />
+          <MsIcon type="icon-icon_link-copy_outlined" />
           {{ t('common.share') }}
         </MsButton>
         <MsButton
@@ -46,7 +46,7 @@
                 value="delete"
                 class="error-6 text-[rgb(var(--danger-6))]"
               >
-                <MsIcon type="icon-icon_delete-trash_outlined" class="text-[rgb(var(--danger-6))]" />
+                <MsIcon type="icon-icon_delete-trash_outlined1" class="text-[rgb(var(--danger-6))]" />
                 {{ t('common.delete') }}
               </a-doption>
             </template>

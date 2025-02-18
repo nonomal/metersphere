@@ -11,6 +11,7 @@ import io.metersphere.system.domain.*;
 import io.metersphere.system.dto.builder.LogDTOBuilder;
 import io.metersphere.system.dto.request.user.*;
 import io.metersphere.system.dto.table.TableBatchProcessDTO;
+import io.metersphere.system.dto.user.UserCreateInfo;
 import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.log.constants.OperationLogType;
 import io.metersphere.system.log.dto.LogDTO;
@@ -45,7 +46,7 @@ public class UserLogService {
     private UserRoleMapper userRoleMapper;
 
     //批量添加用户记录日志
-    public List<LogDTO> getBatchAddLogs(@Valid List<User> userList, String requestPath) {
+    public List<LogDTO> getBatchAddLogs(@Valid List<UserCreateInfo> userList, String operator, String requestPath) {
         List<LogDTO> logs = new ArrayList<>();
         userList.forEach(user -> {
             LogDTO log = LogDTOBuilder.builder()
@@ -58,7 +59,7 @@ public class UserLogService {
                     .sourceId(user.getId())
                     .content(user.getName() + "(" + user.getEmail() + ")")
                     .originalValue(JSON.toJSONBytes(user))
-                    .createUser(user.getCreateUser())
+                    .createUser(operator)
                     .build().getLogDTO();
             logs.add(log);
         });
@@ -95,7 +96,7 @@ public class UserLogService {
                     .method(HttpMethodConstants.POST.name())
                     .path("/personal/update-password")
                     .sourceId(request.getId())
-                    .content(user.getName() + StringUtils.SPACE + Translator.get("personal.change.password"))
+                    .content(Translator.get("personal.change.password"))
                     .originalValue(JSON.toJSONBytes(user))
                     .build().getLogDTO();
             return dto;
@@ -195,7 +196,7 @@ public class UserLogService {
                         .method(HttpMethodConstants.POST.name())
                         .path("/system/user/delete")
                         .sourceId(user.getId())
-                        .content(Translator.get("user.delete") + " : " + user.getName())
+                        .content(user.getName())
                         .originalValue(JSON.toJSONBytes(user))
                         .build().getLogDTO();
                 logDTOList.add(dto);
@@ -293,15 +294,24 @@ public class UserLogService {
         operationLogService.batchAdd(logs);
     }
 
-    public void addEmailInviteLog(List<UserInvite> userInviteList, String inviteUserId) {
+    public void addEmailInviteLog(List<UserInvite> userInviteList, String projectId, String orgId, String inviteUserId) {
+        String module = null;
+        if (StringUtils.equals(projectId, OperationLogConstants.SYSTEM)) {
+            module = OperationLogModule.SETTING_SYSTEM_USER_SINGLE;
+        } else if (StringUtils.equals(projectId, OperationLogConstants.ORGANIZATION)) {
+            module = OperationLogModule.SETTING_ORGANIZATION_USER_ROLE;
+        } else {
+            module = OperationLogModule.PROJECT_MANAGEMENT_PERMISSION_USER_ROLE;
+        }
         User inviteUser = userMapper.selectByPrimaryKey(inviteUserId);
         List<LogDTO> saveLogs = new ArrayList<>();
+        String finalModule = module;
         userInviteList.forEach(userInvite -> {
             LogDTO log = LogDTOBuilder.builder()
-                    .projectId(OperationLogConstants.SYSTEM)
-                    .module(OperationLogModule.SETTING_SYSTEM_USER_SINGLE)
+                    .projectId(projectId)
+                    .module(finalModule)
                     .createUser(inviteUserId)
-                    .organizationId(OperationLogConstants.SYSTEM)
+                    .organizationId(orgId)
                     .sourceId(inviteUserId)
                     .type(OperationLogType.ADD.name())
                     .content(inviteUser.getName() + Translator.get("user.invite.email") + ":" + userInvite.getEmail())

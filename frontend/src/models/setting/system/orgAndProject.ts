@@ -1,4 +1,5 @@
 import { TableQueryParams } from '@/models/common';
+import type { ResourcePoolItem } from '@/models/setting/resourcePool';
 
 import { UserItem } from '../log';
 
@@ -25,6 +26,7 @@ export interface CreateOrUpdateSystemProjectParams {
   // 资源池
   resourcePoolIds: string[];
   // 列表里的
+  allResourcePool: boolean; // 默认全部资源池
 }
 
 export interface CreateOrUpdateOrgProjectParams {
@@ -59,4 +61,8 @@ export interface OrgProjectTableItem {
   memberCount: number;
   userIds: string[];
   resourcePoolIds: string[];
+  orgAdmins: Record<string, any>;
+  moduleIds: string[];
+  resourcePoolList: ResourcePoolItem[];
+  allResourcePool: boolean;
 }

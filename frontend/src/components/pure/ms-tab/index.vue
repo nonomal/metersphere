@@ -1,14 +1,20 @@
 <template>
   <a-tabs
     v-if="props.mode === 'origin'"
-    v-model:active-key="innerActiveKey"
+    v-model:active-key="tempActiveKey"
     :class="[props.class, props.noContent ? 'no-content' : '']"
+    @change="(val) => handleTabClick(val as string)"
   >
-    <a-tab-pane v-for="item of props.contentTabList" :key="item.value" :title="item.label">
+    <a-tab-pane
+      v-for="item of props.contentTabList"
+      :key="item.value"
+      :title="`${item.label}`"
+      :disabled="props.disabled"
+    >
       <template v-if="props.showBadge" #title>
         <a-badge
           v-if="props.getTextFunc(item.value) !== ''"
-          :class="item.value === innerActiveKey ? 'active-badge' : ''"
+          :class="item.value === tempActiveKey ? 'active-badge' : ''"
           :max-count="99"
           :text="props.getTextFunc(item.value)"
         >
@@ -26,9 +32,12 @@
     <div
       v-for="item of props.contentTabList"
       :key="item.value"
-      class="ms-tab--button-item"
-      :class="item.value === innerActiveKey ? 'ms-tab--button-item--active' : ''"
-      @click="innerActiveKey = item.value"
+      class="ms-tab-button-item"
+      :class="[
+        item.value === tempActiveKey ? 'ms-tab-button-item--active' : '',
+        props.buttonSize === 'small' ? 'ms-tab--button-item--small' : '',
+      ]"
+      @click="handleTabClick(item.value)"
     >
       {{ item.label }}
     </div>
@@ -39,24 +48,59 @@
   const props = withDefaults(
     defineProps<{
       mode?: 'origin' | 'button';
-      activeKey: string;
-      contentTabList: { label: string; value: string }[];
+      contentTabList: { label: string | number; value: string | number }[];
       class?: string;
       getTextFunc?: (value: any) => string;
       noContent?: boolean;
       showBadge?: boolean;
+      changeInterceptor?: (newVal: string | number, oldVal: string | number, done: () => void) => void;
+      buttonSize?: 'small' | 'default';
+      disabled?: boolean;
     }>(),
     {
       mode: 'origin',
       showBadge: true,
       getTextFunc: (value: any) => value,
       class: '',
+      buttonSize: 'default',
+    }
+  );
+  const emit = defineEmits<{
+    (e: 'change', value: string | number): void;
+  }>();
+
+  // 实际值，用于最终确认修改的 tab 值
+  const activeKey = defineModel<string | number>('activeKey', {
+    default: '',
+  });
+  // 临时值，用于组件内部变更，但未影响到实际值
+  const tempActiveKey = ref(activeKey.value);
+
+  watch(
+    () => activeKey.value,
+    (val) => {
+      tempActiveKey.value = val;
     }
   );
 
-  const innerActiveKey = defineModel<string>('activeKey', {
-    default: '',
-  });
+  function handleTabClick(value: string | number) {
+    if (value === activeKey.value) {
+      return;
+    }
+    if (props.changeInterceptor) {
+      // 存在拦截器，则先将临时值重置为实际值（此时实际值是未变更之前的值），再执行拦截器
+      tempActiveKey.value = activeKey.value;
+      props.changeInterceptor(value, activeKey.value, () => {
+        // 拦截器成功回调=》修改实际值，也将临时值修改为实际值
+        activeKey.value = value;
+        tempActiveKey.value = value;
+      });
+    } else {
+      // 不存在拦截器，直接修改实际值
+      activeKey.value = value;
+    }
+    emit('change', value);
+  }
 </script>
 
 <style lang="less" scoped>
@@ -69,12 +113,6 @@
       @apply relative right-0 top-0  transform-none shadow-none;
     }
   }
-  :deep(.active-badge) {
-    .arco-badge-text,
-    .arco-badge-number {
-      background-color: rgb(var(--primary-5));
-    }
-  }
   .no-content {
     :deep(.arco-tabs-content) {
       display: none;
@@ -84,7 +122,7 @@
     @apply flex;
 
     border-radius: var(--border-radius-small);
-    .ms-tab--button-item {
+    .ms-tab-button-item {
       @apply cursor-pointer;
 
       padding: 4px 12px;
@@ -105,7 +143,12 @@
         color: rgb(var(--primary-5));
       }
     }
-    .ms-tab--button-item--active {
+    .ms-tab--button-item--small {
+      padding: 1px 12px;
+      font-size: 12px;
+      line-height: 20px;
+    }
+    .ms-tab-button-item--active {
       z-index: 2;
       border: 1px solid rgb(var(--primary-5)) !important;
       color: rgb(var(--primary-5));

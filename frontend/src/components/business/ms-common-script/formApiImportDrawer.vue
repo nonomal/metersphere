@@ -32,7 +32,6 @@
             <div class="folder-count">({{ modulesCount['all'] || 0 }})</div>
           </div>
         </div>
-        <a-divider class="my-[8px]" />
         <a-spin class="w-full" :loading="moduleLoading">
           <MsTree
             v-model:selected-keys="selectedModuleKeys"
@@ -64,7 +63,6 @@
           v-model:keyword="keyword"
           :filter-config-list="filterConfigList"
           :custom-fields-config-list="searchCustomFields"
-          :row-count="filterRowCount"
           :search-placeholder="t('project.commonScript.searchPlaceholder')"
           @keyword-search="searchCase"
           @adv-search="searchCase"
@@ -184,7 +182,6 @@
   const filterConfigList = ref<FilterFormItem[]>([]);
   const searchCustomFields = ref<FilterFormItem[]>([]);
   const combine = ref<Record<string, any>>({});
-  const filterRowCount = ref(0);
   const columns: MsTableColumn = [
     {
       title: 'ID',

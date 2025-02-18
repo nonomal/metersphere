@@ -27,7 +27,7 @@
           <a-option value="PASSED">{{ t('project.commonScript.testsPass') }}</a-option>
         </a-select>
       </a-form-item>
-      <a-form-item field="description" :label="t('system.organization.description')">
+      <a-form-item field="description" :label="t('common.desc')">
         <a-textarea
           v-model="form.description"
           :placeholder="t('system.organization.descriptionPlaceholder')"
@@ -43,6 +43,12 @@
       <paramTable
         v-model:params="innerParams"
         :columns="columns"
+        :default-param-item="{
+          key: '',
+          value: '',
+          description: '',
+          required: false,
+        }"
         :scroll="{ x: 'auto' }"
         :height-used="heightUsed"
         :selectable="false"
@@ -152,7 +158,7 @@
       width: 300,
     },
     {
-      title: 'project.commonScript.description',
+      title: 'common.desc',
       slotName: 'description',
       dataIndex: 'description',
     },

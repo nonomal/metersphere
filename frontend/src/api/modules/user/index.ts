@@ -1,3 +1,5 @@
+import type { ViewDetail, ViewList, ViewParams } from '@/components/pure/ms-advance-filter/type';
+
 import MSR from '@/api/http/index';
 import {
   AddAPIKEYUrl,
@@ -7,15 +9,25 @@ import {
   DisableLocalConfigUrl,
   EnableAPIKEYUrl,
   EnableLocalConfigUrl,
+  GeDingInfoUrl,
+  GeLarkInfoUrl,
+  GeLarkSuiteInfoUrl,
   GetAPIKEYListUrl,
   getAuthenticationUrl,
+  GetDefaultLocaleUrl,
+  GetDingCallbackUrl,
   GetInfoUrl,
+  GetLarkCallbackUrl,
+  GetLarkSuiteCallbackUrl,
   GetLocalConfigUrl,
   GetMenuListUrl,
   GetPlatformAccountUrl,
   GetPlatformOrgOptionUrl,
+  GetPlatformParamUrl,
   GetPlatformUrl,
   GetPublicKeyUrl,
+  GetWeComCallbackUrl,
+  GetWeComInfoUrl,
   isLoginUrl,
   ldapLoginUrl,
   LoginUrl,
@@ -23,6 +35,7 @@ import {
   SavePlatformUrl,
   UpdateAPIKEYUrl,
   UpdateInfoUrl,
+  UpdateLanguageUrl,
   UpdateLocalConfigUrl,
   UpdatePswUrl,
   ValidAPIKEYUrl,
@@ -40,10 +53,13 @@ import type {
   PersonalInfo,
   UpdateAPIKEYParams,
   UpdateBaseInfo,
+  UpdateLanguage,
   UpdateLocalConfigParams,
   UpdatePswParams,
 } from '@/models/user';
+import { DingInfo, LarkInfo, WecomInfo } from '@/models/user';
 
+import type { LocaleType } from '#/global';
 import type { RouteRecordNormalized } from 'vue-router';
 
 export function login(data: LoginData) {
@@ -62,6 +78,42 @@ export function isLogin() {
 // 获取登录认证方式
 export function getAuthenticationList() {
   return MSR.get<string[]>({ url: getAuthenticationUrl }, { ignoreCancelToken: true, errorMessageMode: 'none' });
+}
+
+export function getPlatformParamUrl() {
+  return MSR.get<OrgOptionItem[]>({ url: GetPlatformParamUrl }, { ignoreCancelToken: true, errorMessageMode: 'none' });
+}
+
+export function getWeComInfo() {
+  return MSR.get<WecomInfo>({ url: GetWeComInfoUrl }, { ignoreCancelToken: true, errorMessageMode: 'none' });
+}
+
+export function getWeComCallback(code: string) {
+  return MSR.get<LoginRes>({ url: GetWeComCallbackUrl, params: { code } });
+}
+
+export function getDingInfo() {
+  return MSR.get<DingInfo>({ url: GeDingInfoUrl }, { ignoreCancelToken: true, errorMessageMode: 'none' });
+}
+
+export function getDingCallback(code: string) {
+  return MSR.get<LoginRes>({ url: GetDingCallbackUrl, params: { code } });
+}
+
+export function getLarkInfo() {
+  return MSR.get<LarkInfo>({ url: GeLarkInfoUrl }, { ignoreCancelToken: true, errorMessageMode: 'none' });
+}
+
+export function getLarkCallback(code: string) {
+  return MSR.get<LoginRes>({ url: GetLarkCallbackUrl, params: { code } });
+}
+
+export function getLarkSuiteInfo() {
+  return MSR.get<LarkInfo>({ url: GeLarkSuiteInfoUrl }, { ignoreCancelToken: true, errorMessageMode: 'none' });
+}
+
+export function getLarkSuiteCallback(code: string) {
+  return MSR.get<LoginRes>({ url: GetLarkSuiteCallbackUrl, params: { code } });
 }
 
 export function logout() {
@@ -93,7 +145,7 @@ export function validLocalConfig(host: string) {
 
 // 个人设置-获取本地执行配置
 export function getLocalConfig() {
-  return MSR.get<LocalConfig[]>({ url: GetLocalConfigUrl });
+  return MSR.get<LocalConfig[]>({ url: GetLocalConfigUrl }, { ignoreCancelToken: true });
 }
 
 // 个人设置-启用本地执行配置
@@ -151,6 +203,11 @@ export function updateBaseInfo(data: UpdateBaseInfo) {
   return MSR.post({ url: UpdateInfoUrl, data });
 }
 
+// 个人信息-修改基本信息
+export function updateLanguage(data: UpdateLanguage) {
+  return MSR.post({ url: UpdateLanguageUrl, data });
+}
+
 // 个人信息-修改密码
 export function updatePsw(data: UpdatePswParams) {
   return MSR.post({ url: UpdatePswUrl, data });
@@ -179,4 +236,30 @@ export function getPlatformAccount() {
 // 个人信息-获取第三方平台-组织下拉选项
 export function getPlatformOrgOption() {
   return MSR.get<OrgOptionItem[]>({ url: GetPlatformOrgOptionUrl });
+}
+
+// 获取默认语言配置
+export function getDefaultLocale() {
+  return MSR.get<LocaleType>({ url: GetDefaultLocaleUrl });
+}
+
+// 视图列表
+export function getViewList(viewType: string, scopeId: string) {
+  return MSR.get<ViewList>({ url: `/user-view/${viewType}/grouped/list`, params: { scopeId } });
+}
+// 视图详情
+export function getViewDetail(viewType: string, id: string) {
+  return MSR.get<ViewDetail>({ url: `/user-view/${viewType}/get/${id}` });
+}
+// 编辑视图
+export function updateView(viewType: string, data: ViewParams) {
+  return MSR.post({ url: `/user-view/${viewType}/update`, data });
+}
+// 新增视图
+export function addView(viewType: string, data: ViewParams) {
+  return MSR.post({ url: `/user-view/${viewType}/add`, data });
+}
+// 删除视图
+export function deleteView(viewType: string, id: string) {
+  return MSR.get({ url: `/user-view/${viewType}/delete/${id}` });
 }

@@ -13,21 +13,22 @@ import java.util.List;
 @Data
 @NoArgsConstructor
 public class TestPlanDTO {
+    private String id;
 
-    @Schema(description ="message.domain.test_plan_num")
-    private String num;
+    @Schema(description = "message.domain.test_plan_num")
+    private Long num;
 
-    @Schema(description ="message.domain.test_plan_name")
+    @Schema(description = "message.domain.test_plan_name")
     private String name;
 
-    @Schema(description ="message.domain.test_plan_status")
+    @Schema(description = "message.domain.test_plan_status")
     private String status;
 
-    @Schema(description ="message.domain.test_plan_type")
+    @Schema(description = "message.domain.test_plan_type")
     private String type;
 
-    @Schema(description ="message.domain.test_plan_tags")
-    private List<String> tags;
+    @Schema(description = "message.domain.test_plan_tags")
+    private java.util.List<String> tags;
 
     @Schema(description = "message.domain.test_plan_createTime")
     private Long createTime;
@@ -54,6 +55,8 @@ public class TestPlanDTO {
     private Long actualEndTime;
 
     @Schema(description = "message.domain.test_plan_description")
-    private Long description;
+    private String description;
+
+    private List<String> followUsers;
 
 }

@@ -13,12 +13,14 @@
     v-on="propsEvent"
   >
     <template #module="{ record }">
-      <div v-if="record.children">
-        <MsIcon class="text-[var(--color-text-4)]" :type="getMenuIcon(record.module)" />
-        <span class="ml-[4px]">{{ t(`menu.${record.module}`) }}</span>
+      <div v-if="record.children" class="flex items-center">
+        <div class="icon-class">
+          <MsIcon class="text-[12px] text-[rgb(var(--primary-4))]" :type="getMenuIcon(record.module)" />
+        </div>
+        <span>{{ t(`menu.${record.module}`) }}</span>
       </div>
       <div v-else>
-        <span class="ml-[4px]">{{ t(`project.menu.${record.type}`) }}</span>
+        <span class="ml-[28px]">{{ t(`project.menu.${record.type}`) }}</span>
       </div>
     </template>
     <template #description="{ record }">
@@ -29,25 +31,28 @@
       <div v-if="record.type === 'TEST_PLAN_CLEAN_REPORT'">
         <!-- 测试计划 报告保留时间范围 -->
         <MsTimeSelectorVue
-          v-model="allValueMap['TEST_PLAN_CLEAN_REPORT']"
+          v-model:model-value="allValueMap.TEST_PLAN_CLEAN_REPORT"
           :disabled="!hasAnyPermission(['PROJECT_APPLICATION_TEST_PLAN:UPDATE'])"
+          :default-value="defaultValueMap.TEST_PLAN_CLEAN_REPORT"
           @change="(v: string) => handleMenuStatusChange('TEST_PLAN_CLEAN_REPORT',v,MenuEnum.testPlan)"
         />
       </div>
       <div v-if="record.type === 'TEST_PLAN_SHARE_REPORT'">
         <!-- 测试计划 报告链接有效期 -->
         <MsTimeSelectorVue
-          v-model="allValueMap['TEST_PLAN_SHARE_REPORT']"
+          v-model:model-value="allValueMap.TEST_PLAN_SHARE_REPORT"
           :disabled="!hasAnyPermission(['PROJECT_APPLICATION_TEST_PLAN:UPDATE'])"
+          :default-value="defaultValueMap.TEST_PLAN_SHARE_REPORT"
           @change="(v: string) => handleMenuStatusChange('TEST_PLAN_SHARE_REPORT',v,MenuEnum.testPlan)"
         />
       </div>
       <template v-if="record.type === 'BUG_SYNC'">
         <!-- 同步缺陷 -->
         <span>{{ t('project.menu.row2') }}</span>
-        <div class="ml-[8px] cursor-pointer text-[rgb(var(--primary-7))]" @click="showDefectDrawer">{{
-          t('project.menu.BUG_SYNC')
-        }}</div>
+        <!-- TODO 接口没有字段，先不上 -->
+        <!-- <a-tooltip :content="t('project.menu.bugThirdIntegrationTip')" :mouse-enter-delay="300"> -->
+        <MsButton class="ml-[8px]" @click="showDefectDrawer"> {{ t('project.menu.BUG_SYNC') }}</MsButton>
+        <!-- </a-tooltip> -->
       </template>
       <div v-if="record.type === 'CASE_PUBLIC'">
         <!-- 用例 公共用例库 -->
@@ -56,13 +61,19 @@
       <div v-if="record.type === 'CASE_RELATED'" class="flex flex-row">
         <!-- 用例 关联需求 -->
         <div>{{ t('project.menu.row4') }}</div>
-        <div class="ml-[8px] cursor-pointer text-[rgb(var(--primary-7))]" @click="showRelatedCaseDrawer">{{
-          t('project.menu.CASE_RELATED')
-        }}</div>
+        <div class="ml-[8px] cursor-pointer text-[rgb(var(--primary-5))]" @click="showRelatedCaseDrawer">
+          {{ t('project.menu.CASE_RELATED') }}
+        </div>
       </div>
       <div v-if="record.type === 'CASE_RE_REVIEW'">
         <!-- 用例 重新提审 -->
-        {{ t('project.menu.row5') }}
+        <span>{{ t('project.menu.row5') }}</span>
+        <a-tooltip :content="t('project.menu.reArraignment')" position="top" :mouse-enter-delay="300">
+          <MsIcon
+            class="ml-[4px] text-[var(--color-text-4)] hover:text-[rgb(var(--primary-5))]"
+            type="icon-icon-maybe_outlined"
+          />
+        </a-tooltip>
       </div>
       <div v-if="record.type === 'API_URL_REPEATABLE'">
         <!-- 接口测试 接口定义URL可重复  -->
@@ -72,6 +83,7 @@
         <MsTimeSelectorVue
           v-model="allValueMap['API_CLEAN_REPORT']"
           :disabled="!hasAnyPermission(['PROJECT_APPLICATION_API:UPDATE'])"
+          :default-value="defaultValueMap.API_CLEAN_REPORT"
           @change="(v: string) => handleMenuStatusChange('API_CLEAN_REPORT',v,MenuEnum.apiTest)"
         />
       </div>
@@ -80,27 +92,24 @@
         <MsTimeSelectorVue
           v-model="allValueMap['API_SHARE_REPORT']"
           :disabled="!hasAnyPermission(['PROJECT_APPLICATION_API:UPDATE'])"
+          :default-value="defaultValueMap.API_SHARE_REPORT"
           @change="(v: string) => handleMenuStatusChange('API_SHARE_REPORT',v,MenuEnum.apiTest)"
         />
       </div>
       <div v-if="record.type === 'API_RESOURCE_POOL'" class="flex flex-row items-center">
         <!--接口测试 执行资源池 -->
-        <a-select
-          v-model="allValueMap['API_RESOURCE_POOL_ID']"
-          :field-names="{ label: 'name', value: 'id' }"
-          :options="apiPoolOption"
-          class="w-[120px]"
-          :disabled="!hasAnyPermission(['PROJECT_APPLICATION_API:UPDATE'])"
-          @change="(v: SelectValue) => handleMenuStatusChange('API_RESOURCE_POOL_ID',v as string,MenuEnum.apiTest)"
-        />
-        <a-tooltip
-          :content="
-            t('project.menu.API_RESOURCE_POOL_TIP', {
-              name: getPoolTipName(allValueMap['API_RESOURCE_POOL_ID'], MenuEnum.apiTest),
-            })
-          "
-          position="right"
-        >
+        <div class="w-[200px]">
+          <MsSelect
+            v-model="allValueMap['API_RESOURCE_POOL_ID']"
+            label-key="name"
+            value-key="id"
+            :options="apiPoolOption"
+            :disabled="!hasAnyPermission(['PROJECT_APPLICATION_API:UPDATE'])"
+            :option-not-exits-text="t('system.resourcePool.notExit')"
+            @change="(v: SelectValue) => handleMenuStatusChange('API_RESOURCE_POOL_ID',v as string,MenuEnum.apiTest)"
+          />
+        </div>
+        <a-tooltip :content="t('project.menu.API_RESOURCE_POOL_TIP')" position="right">
           <div>
             <MsIcon
               class="ml-[4px] text-[var(--color-text-4)] hover:text-[rgb(var(--primary-5))]"
@@ -131,20 +140,15 @@
       <div v-if="record.type === 'API_ERROR_REPORT_RULE'" class="flex w-[100%] flex-row items-center">
         <!--接口测试 误报规则 -->
         <div class="error-report">
-          <a-input-number
-            v-model="allValueMap['FAKE_ERROR_NUM']"
-            class="w-[120px]"
-            disabled
-            :placeholder="t('project.menu.pleaseConfig')"
-          >
-            <template #append>
-              <div>{{ t('project.menu.count') }}</div>
-            </template>
-          </a-input-number>
+          {{ t('project.menu.rule.hasBeenEnabled') }}
+          <span class="text-[rgb(var(--primary-5))]" @click="pushFar(true)">
+            {{ allValueMap['ENABLE_FAKE_ERROR_NUM'] || 0 }}
+          </span>
+          {{ t('project.menu.rule.bar') }}
         </div>
-        <div class="ml-[8px] cursor-pointer text-[rgb(var(--primary-7))]" @click="pushFar">{{
-          t('project.menu.API_ERROR_REPORT_RULE')
-        }}</div>
+        <div class="ml-[8px] cursor-pointer font-medium text-[rgb(var(--primary-5))]" @click="pushFar(false)">
+          {{ t('project.menu.rule.ruleAlertList') }}
+        </div>
         <a-tooltip :content="t('project.menu.API_ERROR_REPORT_RULE_TIP')" position="right">
           <div>
             <MsIcon
@@ -155,11 +159,30 @@
         </a-tooltip>
       </div>
       <div v-if="record.type === 'API_SYNC_CASE'">{{ t('project.menu.row7') }} </div>
+      <div v-if="record.type === 'TASK_CLEAN_REPORT'">
+        <MsTimeSelectorVue
+          v-model="allValueMap['TASK_CLEAN_REPORT']"
+          :disabled="!hasAnyPermission(['PROJECT_APPLICATION_TASK:UPDATE'])"
+          :default-value="defaultValueMap.TASK_CLEAN_REPORT"
+          @change="(v: string) =>
+        handleMenuStatusChange('TASK_CLEAN_REPORT', v, MenuEnum.taskCenter)"
+        />
+      </div>
+      <div v-if="record.type === 'TASK_RECORD'">
+        <MsTimeSelectorVue
+          v-model="allValueMap['TASK_RECORD']"
+          :disabled="!hasAnyPermission(['PROJECT_APPLICATION_TASK:UPDATE'])"
+          :default-value="defaultValueMap.TASK_RECORD"
+          @change="(v: string) =>
+        handleMenuStatusChange('TASK_RECORD', v, MenuEnum.taskCenter)"
+        />
+      </div>
       <div v-if="record.type === 'UI_CLEAN_REPORT'">
         <!--UI 报告保留时间范围 -->
         <MsTimeSelectorVue
           v-model="allValueMap['UI_CLEAN_REPORT']"
           :disabled="!hasAnyPermission(['PROJECT_APPLICATION_UI:UPDATE'])"
+          :default-value="defaultValueMap.UI_CLEAN_REPORT"
           @change="(v: string) => handleMenuStatusChange('UI_CLEAN_REPORT',v,MenuEnum.uiTest)"
           @blur="(v: string) => handleMenuStatusChange('UI_CLEAN_REPORT',v,MenuEnum.uiTest)"
         />
@@ -169,6 +192,7 @@
         <MsTimeSelectorVue
           v-model="allValueMap['UI_SHARE_REPORT']"
           :disabled="!hasAnyPermission(['PROJECT_APPLICATION_UI:UPDATE'])"
+          :default-value="defaultValueMap.UI_SHARE_REPORT"
           @change="(v: string) => handleMenuStatusChange('UI_SHARE_REPORT',v,MenuEnum.uiTest)"
         />
       </div>
@@ -203,6 +227,7 @@
         <MsTimeSelectorVue
           v-model="allValueMap['PERFORMANCE_TEST_CLEAN_REPORT']"
           :disabled="!hasAnyPermission(['PROJECT_APPLICATION_PERFORMANCE_TEST:UPDATE'])"
+          :default-value="defaultValueMap.PERFORMANCE_TEST_CLEAN_REPORT"
           @change="(v: string) => handleMenuStatusChange('PERFORMANCE_TEST_CLEAN_REPORT',v,MenuEnum.loadTest)"
         />
       </div>
@@ -211,6 +236,7 @@
         <MsTimeSelectorVue
           v-model="allValueMap['PERFORMANCE_TEST_SHARE_REPORT']"
           :disabled="!hasAnyPermission(['PROJECT_APPLICATION_PERFORMANCE_TEST:UPDATE'])"
+          :default-value="defaultValueMap.PERFORMANCE_TEST_SHARE_REPORT"
           @change="(v: string) => handleMenuStatusChange('PERFORMANCE_TEST_SHARE_REPORT',v,MenuEnum.loadTest)"
         />
       </div>
@@ -237,17 +263,21 @@
     <template #operation="{ record }">
       <!-- 缺陷 同步缺陷状态 -->
       <div v-permission="['PROJECT_APPLICATION_BUG:UPDATE']">
-        <a-tooltip v-if="record.type === 'BUG_SYNC' && !allValueMap['BUG_SYNC_SYNC_ENABLE']" position="tr">
+        <a-tooltip
+          v-if="record.type === 'BUG_SYNC' && !allValueMap['BUG_SYNC_SYNC_ENABLE']"
+          class="ms-tooltip-white"
+          position="br"
+          :mouse-enter-delay="300"
+        >
           <template #content>
-            <span>
+            <span class="text-[var(--color-text-1)]">
               {{ t('project.menu.notConfig') }}
-              <span class="cursor-pointer text-[rgb(var(--primary-4))]" @click="showDefectDrawer">{{
-                t(`project.menu.${record.type}`)
-              }}</span>
+              <span class="cursor-pointer text-[rgb(var(--primary-4))]" @click="showDefectDrawer">
+                {{ t(`project.menu.${record.type}`) }}
+              </span>
               {{ t('project.menu.configure') }}
             </span>
           </template>
-
           <a-switch
             v-model="allValueMap['BUG_SYNC_SYNC_ENABLE']"
             checked-value="true"
@@ -271,15 +301,20 @@
         type="line"
         @change="(v: boolean | string| number) => handleMenuStatusChange('BUG_SYNC_SYNC_ENABLE',v as boolean, MenuEnum.bugManagement)"
       />
-      <!-- 功能测试 同步缺陷 -->
-      <div v-permission="['PROJECT_APPLICATION_BUG:UPDATE']">
-        <a-tooltip v-if="record.type === 'CASE_RELATED' && !allValueMap['CASE_RELATED_CASE_ENABLE']" position="tr">
+      <!-- 测试用例 关联需求 -->
+      <div v-permission="['PROJECT_APPLICATION_CASE:UPDATE']">
+        <a-tooltip
+          v-if="record.type === 'CASE_RELATED' && !allValueMap['CASE_RELATED_CASE_ENABLE']"
+          class="ms-tooltip-white"
+          position="left"
+          :mouse-enter-delay="300"
+        >
           <template #content>
-            <span>
+            <span class="text-[var(--color-text-1)]">
               {{ t('project.menu.notConfig') }}
-              <span class="cursor-pointer text-[rgb(var(--primary-4))]" @click="showDefectDrawer">{{
-                t(`project.menu.${record.type}`)
-              }}</span>
+              <span class="cursor-pointer text-[rgb(var(--primary-4))]" @click="showRelatedCaseDrawer">
+                {{ t(`project.menu.${record.type}`) }}
+              </span>
               {{ t('project.menu.configure') }}
             </span>
           </template>
@@ -375,11 +410,15 @@
       />
     </template>
   </MsBaseTable>
-  <DefectSync v-model:visible="defectDrawerVisible" @cancel="defectDrawerVisible = false" @ok="initMenuData()" />
+  <DefectSync
+    v-model:visible="defectDrawerVisible"
+    @cancel="defectDrawerVisible = false"
+    @ok="getMenuConfig(MenuEnum.bugManagement)"
+  />
   <RelatedCase
     v-model:visible="relatedCaseDrawerVisible"
     @cancel="relatedCaseDrawerVisible = false"
-    @ok="initMenuData()"
+    @ok="getMenuConfig(MenuEnum.caseManagement)"
   />
 </template>
 
@@ -387,13 +426,16 @@
   /**
    * @description 项目管理-项目与权限-菜单管理
    */
-  import { useRouter } from 'vue-router';
+  import { useRoute, useRouter } from 'vue-router';
   import { Message, TableData } from '@arco-design/web-vue';
+  import { cloneDeep } from 'lodash-es';
 
+  import MsButton from '@/components/pure/ms-button/index.vue';
   import MsIcon from '@/components/pure/ms-icon-font/index.vue';
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import useTable from '@/components/pure/ms-table/useTable';
   import MsTimeSelectorVue from '@/components/pure/ms-time-selector/MsTimeSelector.vue';
+  import MsSelect from '@/components/business/ms-select';
   import DefectSync from './components/defectSync.vue';
   import RelatedCase from './components/relatedCase.vue';
 
@@ -413,6 +455,7 @@
   import { ProjectManagementRouteEnum } from '@/enums/routeEnum';
 
   const appStore = useAppStore();
+  const route = useRoute();
   const router = useRouter();
   const currentProjectId = computed(() => appStore.currentProjectId);
   const { t } = useI18n();
@@ -432,6 +475,8 @@
     TEST_PLAN_SHARE_REPORT: '1D',
     API_CLEAN_REPORT: '3M',
     API_SHARE_REPORT: '1D',
+    TASK_CLEAN_REPORT: '3M',
+    TASK_RECORD: '3M',
     UI_CLEAN_REPORT: '3M',
     UI_SHARE_REPORT: '1D',
     PERFORMANCE_TEST_CLEAN_REPORT: '3M',
@@ -445,7 +490,7 @@
     CASE_RELATED_CASE_ENABLE: false,
   };
 
-  const allValueMap = ref<MenuTableConfigItem>(defaultValueMap);
+  const allValueMap = ref<MenuTableConfigItem>(cloneDeep(defaultValueMap));
 
   const hasTitleColumns = [
     {
@@ -453,10 +498,10 @@
       dataIndex: 'module',
       slotName: 'module',
       width: 221,
-      headerCellClass: 'pl-[16px]',
+      headerCellClass: 'pl-[40px]',
     },
     {
-      title: 'project.menu.description',
+      title: 'common.desc',
       slotName: 'description',
       dataIndex: 'description',
       showDrag: true,
@@ -476,7 +521,7 @@
       dataIndex: 'module',
       slotName: 'module',
       width: 221,
-      headerCellClass: 'pl-[16px]',
+      headerCellClass: 'pl-[40px]',
     },
     {
       title: '',
@@ -562,6 +607,17 @@
           /* {
             type: 'API_SYNC_CASE', // 用例同步
           }, */
+        ];
+        break;
+      }
+      case MenuEnum.taskCenter: {
+        children = [
+          {
+            type: 'TASK_RECORD', // 即时任务保留时间
+          },
+          {
+            type: 'TASK_CLEAN_REPORT', // 任务执行结果保留时间范围
+          },
         ];
         break;
       }
@@ -653,6 +709,11 @@
             hasAuth = true;
           }
           break;
+        case MenuEnum.taskCenter:
+          if (hasAnyPermission(['PROJECT_APPLICATION_TASK:READ'])) {
+            hasAuth = true;
+          }
+          break;
         default:
           break;
       }
@@ -725,6 +786,11 @@
             await expanded(record);
           }
           break;
+        case MenuEnum.taskCenter:
+          if (hasAnyPermission(['PROJECT_APPLICATION_TASK:READ'])) {
+            await expanded(record);
+          }
+          break;
         default:
           if (hasAnyPermission(['PROJECT_APPLICATION_PERFORMANCE_TEST:READ'])) {
             await expanded(record);
@@ -741,17 +807,17 @@
       case MenuEnum.workstation:
         return 'icon-icon_pc_filled';
       case MenuEnum.testPlan:
-        return 'icon-icon_test-tracking_filled';
+        return 'icon-a-icon_test-tracking_filled1';
       case MenuEnum.bugManagement:
         return 'icon-icon_defect';
       case MenuEnum.caseManagement:
-        return 'icon-icon_functional_testing';
+        return 'icon-icon_functional_testing1';
       case MenuEnum.apiTest:
-        return 'icon-icon_api-test-filled';
-      case MenuEnum.uiTest:
-        return 'icon-icon_ui-test-filled';
+        return 'icon-icon_api-test-filled2';
+      case MenuEnum.taskCenter:
+        return 'icon-icon_task_center';
       default:
-        return 'icon-icon_performance-test-filled';
+        return '';
     }
   };
 
@@ -794,6 +860,11 @@
             hasAuth = true;
           }
           break;
+        case MenuEnum.taskCenter:
+          if (hasAnyPermission(['PROJECT_APPLICATION_TASK:READ'])) {
+            hasAuth = true;
+          }
+          break;
         default:
           // eslint-disable-next-line no-console
           console.log('no ');
@@ -812,7 +883,7 @@
         suffix
       );
 
-      if (type.includes('REPORT')) {
+      if (type.includes('REPORT') && !type.includes('CLEAN')) {
         Message.success(t('project.application.report.tips'));
       } else {
         Message.success(t('common.operationSuccess'));
@@ -838,8 +909,13 @@
     relatedCaseDrawerVisible.value = true;
   };
   // 跳转到误报规则列表页
-  const pushFar = () => {
-    router.push({ name: ProjectManagementRouteEnum.PROJECT_MANAGEMENT_MENU_MANAGEMENT_ERROR_REPORT_RULE });
+  const pushFar = (isEnable: boolean) => {
+    router.push({
+      name: ProjectManagementRouteEnum.PROJECT_MANAGEMENT_MENU_MANAGEMENT_ERROR_REPORT_RULE,
+      query: {
+        status: isEnable ? 'enable' : 'all',
+      },
+    });
   };
 
   // 获取执行资源池的名称
@@ -850,7 +926,19 @@
   };
 
   const initExpendKeys = async () => {
-    if (router.currentRoute.value.redirectedFrom) {
+    if (route.query.module) {
+      await expandChange({ module: route.query.module as MenuEnum });
+      switch (route.query.module as MenuEnum) {
+        case MenuEnum.bugManagement:
+          showDefectDrawer();
+          break;
+        case MenuEnum.caseManagement:
+          showRelatedCaseDrawer();
+          break;
+        default:
+          break;
+      }
+    } else if (router.currentRoute.value.redirectedFrom) {
       // 从误报规则跳转回来的
       await expandChange({ module: MenuEnum.apiTest });
     } else {
@@ -890,4 +978,12 @@
   );
 </script>
 
-<style scoped></style>
+<style scoped lang="less">
+  .icon-class {
+    margin: 0 8px 0 16px;
+    width: 20px;
+    height: 20px;
+    background-color: rgba(var(--primary-1));
+    @apply flex items-center justify-center rounded-full;
+  }
+</style>

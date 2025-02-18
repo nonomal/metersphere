@@ -1,16 +1,23 @@
 package io.metersphere.api.controller;
 
+import io.metersphere.api.constants.ApiConstants;
+import io.metersphere.api.constants.ApiDefinitionStatus;
 import io.metersphere.api.domain.*;
+import io.metersphere.api.mapper.ApiDefinitionMapper;
 import io.metersphere.api.mapper.ApiScenarioMapper;
 import io.metersphere.api.mapper.ApiTestCaseMapper;
 import io.metersphere.api.service.ApiReportSendNoticeService;
 import io.metersphere.api.service.definition.ApiReportService;
 import io.metersphere.api.service.scenario.ApiScenarioReportService;
-import io.metersphere.sdk.constants.ApiReportStatus;
+import io.metersphere.sdk.constants.ApiExecuteResourceType;
+import io.metersphere.sdk.constants.ApplicationNumScope;
+import io.metersphere.sdk.constants.ResultStatus;
 import io.metersphere.sdk.domain.Environment;
 import io.metersphere.sdk.dto.api.notice.ApiNoticeDTO;
 import io.metersphere.sdk.mapper.EnvironmentMapper;
 import io.metersphere.system.base.BaseTest;
+import io.metersphere.system.uid.IDGenerator;
+import io.metersphere.system.uid.NumGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.MethodOrderer;
@@ -44,6 +51,8 @@ public class ApiReportSendNoticeTests extends BaseTest {
     private ApiReportSendNoticeService apiReportSendNoticeService;
     @Resource
     private ApiScenarioMapper apiScenarioMapper;
+    @Resource
+    private ApiDefinitionMapper apiDefinitionMapper;
 
     @Test
     @Order(0)
@@ -60,9 +69,29 @@ public class ApiReportSendNoticeTests extends BaseTest {
         environment.setPos(1L);
         environmentMapper.insertSelective(environment);
 
+        ApiDefinition apiDefinition = new ApiDefinition();
+        apiDefinition.setId(IDGenerator.nextStr());
+        apiDefinition.setProjectId(DEFAULT_PROJECT_ID);
+        apiDefinition.setName(StringUtils.join("接口定义", apiDefinition.getId()));
+        apiDefinition.setModuleId("case-moduleId");
+        apiDefinition.setProtocol(ApiConstants.HTTP_PROTOCOL);
+        apiDefinition.setMethod("GET");
+        apiDefinition.setStatus(ApiDefinitionStatus.DEBUGGING.name());
+        apiDefinition.setNum(NumGenerator.nextNum(DEFAULT_PROJECT_ID, ApplicationNumScope.API_DEFINITION));
+        apiDefinition.setPos(0L);
+        apiDefinition.setPath(StringUtils.join("api/definition/", apiDefinition.getId()));
+        apiDefinition.setLatest(true);
+        apiDefinition.setVersionId("1.0");
+        apiDefinition.setRefId(apiDefinition.getId());
+        apiDefinition.setCreateTime(System.currentTimeMillis());
+        apiDefinition.setUpdateTime(System.currentTimeMillis());
+        apiDefinition.setCreateUser("admin");
+        apiDefinition.setUpdateUser("admin");
+        apiDefinitionMapper.insertSelective(apiDefinition);
+
         ApiTestCase apiTestCase = new ApiTestCase();
         apiTestCase.setId("send-api-case-id");
-        apiTestCase.setApiDefinitionId("api-definition-id");
+        apiTestCase.setApiDefinitionId(apiDefinition.getId());
         apiTestCase.setProjectId(DEFAULT_PROJECT_ID);
         apiTestCase.setName(StringUtils.join("接口用例", apiTestCase.getId()));
         apiTestCase.setPriority("P0");
@@ -92,11 +121,11 @@ public class ApiReportSendNoticeTests extends BaseTest {
             apiReport.setEnvironmentId("api-environment-id");
             apiReport.setRunMode("api-run-mode");
             if (i == 0) {
-                apiReport.setStatus(ApiReportStatus.SUCCESS.name());
+                apiReport.setStatus(ResultStatus.SUCCESS.name());
             } else if (i == 1) {
-                apiReport.setStatus(ApiReportStatus.ERROR.name());
+                apiReport.setStatus(ResultStatus.ERROR.name());
             } else {
-                apiReport.setStatus(ApiReportStatus.FAKE_ERROR.name());
+                apiReport.setStatus(ResultStatus.FAKE_ERROR.name());
             }
             apiReport.setTriggerMode("api-trigger-mode" + i);
             reports.add(apiReport);
@@ -108,19 +137,25 @@ public class ApiReportSendNoticeTests extends BaseTest {
         apiReportService.insertApiReport(reports, records);
         ApiNoticeDTO noticeDTO = new ApiNoticeDTO();
         noticeDTO.setReportId("send-api-case-report-id0");
-        noticeDTO.setReportStatus(ApiReportStatus.SUCCESS.name());
+        noticeDTO.setReportStatus(ResultStatus.SUCCESS.name());
         noticeDTO.setResourceId("send-api-case-id");
         noticeDTO.setResourceType("API_CASE");
         noticeDTO.setUserId("admin");
         noticeDTO.setProjectId(DEFAULT_PROJECT_ID);
-        noticeDTO.setEnvironmentId("api-environment-id");
+        noticeDTO.getRunModeConfig().setEnvironmentId("api-environment-id");
 
         apiReportSendNoticeService.sendNotice(noticeDTO);
-        noticeDTO.setReportStatus(ApiReportStatus.ERROR.name());
+        noticeDTO.setReportStatus(ResultStatus.ERROR.name());
         noticeDTO.setReportId("send-api-case-report-id1");
         apiReportSendNoticeService.sendNotice(noticeDTO);
-        noticeDTO.setReportStatus(ApiReportStatus.FAKE_ERROR.name());
+        noticeDTO.setReportStatus(ResultStatus.FAKE_ERROR.name());
         noticeDTO.setReportId("send-api-case-report-id2");
+        apiReportSendNoticeService.sendNotice(noticeDTO);
+
+        noticeDTO.setResourceType(ApiExecuteResourceType.PLAN_RUN_API_CASE.name());
+        apiReportSendNoticeService.sendNotice(noticeDTO);
+
+        noticeDTO.setResourceType(ApiExecuteResourceType.TEST_PLAN_API_CASE.name());
         apiReportSendNoticeService.sendNotice(noticeDTO);
 
 
@@ -154,11 +189,11 @@ public class ApiReportSendNoticeTests extends BaseTest {
             scenarioReport.setCreateUser("admin");
             scenarioReport.setUpdateUser("admin");
             if (i == 0) {
-                scenarioReport.setStatus(ApiReportStatus.SUCCESS.name());
+                scenarioReport.setStatus(ResultStatus.SUCCESS.name());
             } else if (i == 1) {
-                scenarioReport.setStatus(ApiReportStatus.ERROR.name());
+                scenarioReport.setStatus(ResultStatus.ERROR.name());
             } else {
-                scenarioReport.setStatus(ApiReportStatus.FAKE_ERROR.name());
+                scenarioReport.setStatus(ResultStatus.FAKE_ERROR.name());
             }
             scenarioReport.setUpdateTime(System.currentTimeMillis());
             scenarioReport.setPoolId("api-pool-id" + i);
@@ -176,19 +211,25 @@ public class ApiReportSendNoticeTests extends BaseTest {
 
         noticeDTO = new ApiNoticeDTO();
         noticeDTO.setReportId("send-scenario-report-id0");
-        noticeDTO.setReportStatus(ApiReportStatus.SUCCESS.name());
+        noticeDTO.setReportStatus(ResultStatus.SUCCESS.name());
         noticeDTO.setResourceId("send-api-case-id");
         noticeDTO.setResourceType("API_SCENARIO");
         noticeDTO.setUserId("admin");
         noticeDTO.setProjectId(DEFAULT_PROJECT_ID);
-        noticeDTO.setEnvironmentId("api-environment-id");
+        noticeDTO.getRunModeConfig().setEnvironmentId("api-environment-id");
 
         apiReportSendNoticeService.sendNotice(noticeDTO);
-        noticeDTO.setReportStatus(ApiReportStatus.ERROR.name());
+        noticeDTO.setReportStatus(ResultStatus.ERROR.name());
         noticeDTO.setReportId("send-scenario-report-id1");
         apiReportSendNoticeService.sendNotice(noticeDTO);
-        noticeDTO.setReportStatus(ApiReportStatus.FAKE_ERROR.name());
+        noticeDTO.setReportStatus(ResultStatus.FAKE_ERROR.name());
         noticeDTO.setReportId("send-scenario-report-id2");
+        apiReportSendNoticeService.sendNotice(noticeDTO);
+
+        noticeDTO.setResourceType(ApiExecuteResourceType.PLAN_RUN_API_SCENARIO.name());
+        apiReportSendNoticeService.sendNotice(noticeDTO);
+
+        noticeDTO.setResourceType(ApiExecuteResourceType.TEST_PLAN_API_SCENARIO.name());
         apiReportSendNoticeService.sendNotice(noticeDTO);
     }
 }

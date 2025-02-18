@@ -1,13 +1,24 @@
 <template>
   <MsDrawer
-    :width="680"
+    :width="800"
     :visible="currentVisible"
     unmount-on-close
     :footer="false"
-    :title="t('system.organization.addMember')"
+    :title="t('system.memberList')"
     :mask="false"
     @cancel="handleCancel"
   >
+    <template #headerLeft>
+      <div class="ml-[8px] flex flex-1 overflow-hidden text-[var(--color-text-4)]">
+        (
+        <a-tooltip :content="props.currentName">
+          <div class="one-line-text">
+            {{ props.currentName }}
+          </div>
+        </a-tooltip>
+        )
+      </div>
+    </template>
     <div>
       <div class="flex flex-row justify-between">
         <a-button
@@ -23,9 +34,9 @@
           allow-clear
           :placeholder="t('system.organization.searchUserPlaceholder')"
           class="w-[230px]"
-          @search="searchUser"
-          @press-enter="searchUser"
-          @clear="searchUser"
+          @search="fetchData"
+          @press-enter="fetchData"
+          @clear="fetchData"
         ></a-input-search>
       </div>
       <ms-base-table class="mt-[16px]" v-bind="propsRes" v-on="propsEvent">
@@ -34,6 +45,41 @@
           <span v-if="record.adminFlag" class="ml-[4px] text-[var(--color-text-4)]">{{
             `(${t('common.admin')})`
           }}</span>
+        </template>
+        <template #userGroup="{ record }">
+          <MsTagGroup
+            v-if="!record.selectUserGroupVisible"
+            :tag-list="record.userRoleList"
+            type="primary"
+            theme="outline"
+            allow-edit
+            show-table
+            @click="handleTagClick(record)"
+          />
+          <MsSelect
+            v-else
+            v-model:model-value="record.userRoleList"
+            :placeholder="t('system.user.createUserUserGroupPlaceholder')"
+            :search-keys="['name']"
+            :loading="record.selectUserGroupLoading"
+            :disabled="record.selectUserGroupLoading"
+            :fallback-option="(val) => ({
+              label: (val as Record<string, any>).name,
+              value: val,
+            })"
+            value-key="id"
+            label-key="name"
+            class="w-full max-w-[300px]"
+            allow-clear
+            v-bind="{
+              options: userGroupOptions,
+              multiple: true,
+            }"
+            :at-least-one="true"
+            :object-value="true"
+            @popup-visible-change="(value) => handleUserGroupChange(value, record)"
+          >
+          </MsSelect>
         </template>
         <template #operation="{ record }">
           <MsRemoveButton
@@ -47,10 +93,12 @@
     </div>
   </MsDrawer>
   <AddUserModal
+    v-model:visible="userVisible"
+    is-organization
+    :user-group-options="userGroupOptions"
     :project-id="props.projectId"
     :organization-id="props.organizationId"
-    :visible="userVisible"
-    @cancel="handleHideUserModal"
+    @submit="handleAddMemberSubmit"
   />
 </template>
 
@@ -62,18 +110,25 @@
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import { MsTableColumn } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
+  import MsTagGroup from '@/components/pure/ms-tag/ms-tag-group.vue';
   import MsRemoveButton from '@/components/business/ms-remove-button/MsRemoveButton.vue';
-  import AddUserModal from './addUserModal.vue';
+  import MsSelect from '@/components/business/ms-select';
+  import AddUserModal from '@/views/setting/system/organizationAndProject/components/addUserModal.vue';
 
+  import { getProjectUserGroup, updateProjectMember } from '@/api/modules/project-management/projectMember';
   import { deleteProjectMemberByOrg, postProjectMemberByProjectId } from '@/api/modules/setting/organizationAndProject';
   import { useI18n } from '@/hooks/useI18n';
   import { formatPhoneNumber } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
+  import type { LinkList } from '@/models/setting/member';
+  import type { UserListItem } from '@/models/setting/user';
+
   export interface projectDrawerProps {
     visible: boolean;
     organizationId?: string;
     projectId?: string;
+    currentName?: string;
   }
   const { t } = useI18n();
   const props = defineProps<projectDrawerProps>();
@@ -97,25 +152,36 @@
       dataIndex: 'name',
       showTooltip: true,
       width: 200,
+      fixed: 'left',
+    },
+    {
+      title: 'system.user.tableColumnUserGroup',
+      dataIndex: 'userRoleList',
+      slotName: 'userGroup',
+      allowEditTag: true,
+      isTag: true,
+      width: 300,
     },
     {
       title: 'system.organization.email',
       dataIndex: 'email',
+      width: 180,
       showTooltip: true,
-      width: 200,
     },
     {
       title: 'system.organization.phone',
       dataIndex: 'phone',
+      width: 130,
     },
     {
       title: hasOperationPermission.value ? 'system.organization.operation' : '',
       slotName: 'operation',
       width: hasOperationPermission.value ? 60 : 20,
+      fixed: 'right',
     },
   ];
 
-  const { propsRes, propsEvent, loadList, setLoadListParams, setKeyword } = useTable(
+  const { propsRes, propsEvent, loadList, setLoadListParams } = useTable(
     postProjectMemberByProjectId,
     {
       heightUsed: 240,
@@ -129,14 +195,11 @@
       return {
         ...record,
         phone: formatPhoneNumber(record.phone || ''),
+        selectUserGroupVisible: false,
+        selectUserGroupLoading: false,
       };
     }
   );
-
-  async function searchUser() {
-    setKeyword(keyword.value);
-    await loadList();
-  }
 
   const handleCancel = () => {
     keyword.value = '';
@@ -144,19 +207,55 @@
   };
 
   const fetchData = async () => {
+    setLoadListParams({ projectId: props.projectId, keyword: keyword.value });
     await loadList();
   };
+
+  const userGroupOptions = ref<LinkList>([]);
+  const getUserGroupOptions = async () => {
+    try {
+      if (props.projectId) {
+        userGroupOptions.value = await getProjectUserGroup(props.projectId);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  };
+  function handleTagClick(record: UserListItem & Record<string, any>) {
+    if (hasAnyPermission(['ORGANIZATION_PROJECT:READ+UPDATE_MEMBER'])) {
+      record.selectUserGroupVisible = true;
+    }
+  }
+  async function handleUserGroupChange(val: boolean, record: UserListItem & Record<string, any>) {
+    try {
+      if (!val) {
+        record.selectUserGroupLoading = true;
+        if (props.projectId) {
+          await updateProjectMember({
+            projectId: props.projectId,
+            userId: record.id,
+            roleIds: record.userRoleList.map((e) => e.id),
+          });
+        }
+        Message.success(t('system.user.updateUserSuccess'));
+        fetchData();
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    } finally {
+      record.selectUserGroupLoading = false;
+    }
+  }
 
   const handleAddMember = () => {
     userVisible.value = true;
   };
 
-  const handleHideUserModal = (shouldSearch: boolean) => {
-    userVisible.value = false;
-    if (shouldSearch) {
-      fetchData();
-      emit('requestFetchData');
-    }
+  const handleAddMemberSubmit = () => {
+    fetchData();
+    emit('requestFetchData');
   };
 
   const handleRemove = async (record: TableData) => {
@@ -172,20 +271,16 @@
       console.error(error);
     }
   };
-  watch(
-    () => props.projectId,
-    () => {
-      setLoadListParams({ projectId: props.projectId });
+  watch([() => props.projectId, () => props.visible], () => {
+    if (props.visible) {
       fetchData();
+      getUserGroupOptions();
     }
-  );
+  });
   watch(
     () => props.visible,
     (visible) => {
       currentVisible.value = visible;
-      if (visible) {
-        fetchData();
-      }
     }
   );
 </script>

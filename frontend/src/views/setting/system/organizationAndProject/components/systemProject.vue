@@ -1,7 +1,7 @@
 <template>
-  <MsBaseTable v-bind="propsRes" v-on="propsEvent">
+  <MsBaseTable v-bind="propsRes" :row-class="getRowClass" v-on="propsEvent" @enable-change="enableChange">
     <template #revokeDelete="{ record }">
-      <a-tooltip background-color="#FFFFFF">
+      <a-tooltip class="ms-tooltip-white">
         <template #content>
           <div class="flex flex-row">
             <span class="text-[var(--color-text-1)]">{{
@@ -15,7 +15,7 @@
             >
           </div>
         </template>
-        <MsIcon v-if="record.deleted" type="icon-icon_alarm_clock" class="ml-[4px] text-[rgb(var(--danger-6))]" />
+        <MsIcon v-if="record.deleted" type="icon-icon_delete_countdown" class="ml-[4px] text-[rgb(var(--danger-6))]" />
       </a-tooltip>
     </template>
     <template #creator="{ record }">
@@ -37,11 +37,6 @@
         }}</MsButton>
       </template>
       <template v-else-if="!record.enable">
-        <MsButton
-          v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE']"
-          @click="handleEnableOrDisableProject(record)"
-          >{{ t('common.enable') }}</MsButton
-        >
         <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+DELETE']" @click="handleDelete(record)">{{
           t('common.delete')
         }}</MsButton>
@@ -53,11 +48,9 @@
         <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+ADD_MEMBER']" @click="showAddUserModal(record)">{{
           t('system.organization.addMember')
         }}</MsButton>
-        <MsButton
-          v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE']"
-          @click="handleEnableOrDisableProject(record, false)"
-          >{{ t('common.end') }}</MsButton
-        >
+        <MsButton v-permission="['PROJECT_BASE_INFO:READ']" @click="enterProject(record.id, record.organizationId)">{{
+          t('system.project.enterProject')
+        }}</MsButton>
         <MsTableMoreAction
           v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+DELETE']"
           :list="tableActions"
@@ -71,12 +64,7 @@
     :visible="addProjectVisible"
     @cancel="handleAddProjectModalCancel"
   />
-  <AddUserModal
-    :project-id="currentProjectId"
-    :visible="userVisible"
-    @submit="fetchData"
-    @cancel="handleAddUserModalCancel"
-  />
+  <AddUserModal v-model:visible="userVisible" :project-id="currentProjectId" @submit="fetchData" />
   <UserDrawer v-bind="currentUserDrawer" @request-fetch-data="fetchData" @cancel="handleUserDrawerCancel" />
 </template>
 
@@ -113,6 +101,8 @@
   import { CreateOrUpdateSystemProjectParams, OrgProjectTableItem } from '@/models/setting/system/orgAndProject';
   import { ColumnEditTypeEnum, TableKeyEnum } from '@/enums/tableEnum';
 
+  import { enterProject } from '@/views/setting/utils';
+
   export interface SystemOrganizationProps {
     keyword: string;
   }
@@ -133,7 +123,15 @@
       'SYSTEM_ORGANIZATION_PROJECT:READ+DELETE',
     ])
   );
-
+  const operationWidth = computed(() => {
+    if (hasOperationPermission.value) {
+      return 250;
+    }
+    if (hasAnyPermission(['PROJECT_BASE_INFO:READ'])) {
+      return 100;
+    }
+    return 50;
+  });
   const organizationColumns: MsTableColumn = [
     {
       title: 'system.organization.ID',
@@ -156,15 +154,17 @@
       title: 'system.organization.status',
       dataIndex: 'enable',
       disableTitle: 'common.end',
+      permission: ['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE'],
     },
     {
-      title: 'system.organization.description',
+      title: 'common.desc',
       dataIndex: 'description',
       showTooltip: true,
     },
     {
       title: 'system.organization.subordinateOrg',
       dataIndex: 'organizationName',
+      showTooltip: true,
       width: 200,
     },
     {
@@ -188,7 +188,7 @@
       slotName: 'operation',
       dataIndex: 'operation',
       fixed: 'right',
-      width: hasOperationPermission.value ? 230 : 50,
+      width: operationWidth.value,
     },
   ];
 
@@ -236,10 +236,10 @@
     },
   ];
 
-  const handleEnableOrDisableProject = async (record: any, isEnable = true) => {
+  const handleEnableOrDisableProject = async (record: OrgProjectTableItem, isEnable = true) => {
     const title = isEnable ? t('system.project.enableTitle') : t('system.project.endTitle');
     const content = isEnable ? t('system.project.enableContent') : t('system.project.endContent');
-    const okText = isEnable ? t('common.confirmStart') : t('common.confirmEnd');
+    const okText = isEnable ? t('common.confirmStart') : t('common.confirmClose');
     openModal({
       type: 'info',
       cancelText: t('common.cancel'),
@@ -260,8 +260,13 @@
     });
   };
 
-  const showAddProjectModal = (record: any) => {
-    const { id, name, description, enable, adminList, organizationId, moduleIds, resourcePoolList } = record;
+  function enableChange(record: OrgProjectTableItem, newValue: string | number | boolean) {
+    handleEnableOrDisableProject(record, newValue as boolean);
+  }
+
+  const showAddProjectModal = (record: OrgProjectTableItem) => {
+    const { id, name, description, enable, adminList, organizationId, moduleIds, resourcePoolList, allResourcePool } =
+      record;
     addProjectVisible.value = true;
     currentUpdateProject.value = {
       id,
@@ -272,10 +277,11 @@
       organizationId,
       moduleIds,
       resourcePoolIds: resourcePoolList.map((item: { id: string }) => item.id),
+      allResourcePool,
     };
   };
 
-  const showAddUserModal = (record: any) => {
+  const showAddUserModal = (record: OrgProjectTableItem) => {
     currentProjectId.value = record.id;
     userVisible.value = true;
   };
@@ -286,15 +292,16 @@
     currentUserDrawer.currentName = record.name;
   };
 
+  function getRowClass(record: TableData) {
+    return record.id === currentUserDrawer.projectId ? 'selected-row-class' : '';
+  }
+
   const handleUserDrawerCancel = () => {
     currentUserDrawer.visible = false;
     currentUserDrawer.projectId = '';
     currentUserDrawer.currentName = '';
   };
 
-  const handleAddUserModalCancel = () => {
-    userVisible.value = false;
-  };
   const handleAddProjectModalCancel = (shouldSearch: boolean) => {
     if (shouldSearch) {
       fetchData();
@@ -360,8 +367,13 @@
     });
   };
   const handleMoreAction = (tag: ActionsItem, record: TableData) => {
-    if (tag.eventTag === 'delete') {
-      handleDelete(record);
+    const { eventTag } = tag;
+    switch (eventTag) {
+      case 'delete':
+        handleDelete(record);
+        break;
+      default:
+        break;
     }
   };
 

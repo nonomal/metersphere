@@ -18,19 +18,9 @@
               allow-clear
             />
             <span class="absolute right-0 top-1 flex items-center">
-              <span class="float-left cursor-pointer text-[rgb(var(--primary-5))]" @click="openGithub">{{
+              <MsButton class="!mx-0 text-[rgb(var(--primary-5))]" @click="openGithub">{{
                 t('system.plugin.getPlugin')
-              }}</span>
-              <a-tooltip position="bottom">
-                <span class="float-right ml-1 mt-[2px]">
-                  <IconQuestionCircle
-                    class="h-[16px] w-[16px] text-[--color-text-4] hover:text-[rgb(var(--primary-5))]"
-                  />
-                </span>
-                <template #content>
-                  <span @click="openGithub">{{ t('system.plugin.infoTip') }}</span>
-                </template>
-              </a-tooltip>
+              }}</MsButton>
             </span>
           </a-form-item>
           <a-form-item
@@ -67,7 +57,7 @@
               <a-option v-for="item of organizeList" :key="item.id" :value="item.id">{{ item.name }}</a-option>
             </a-select>
           </a-form-item>
-          <a-form-item field="describe" :label="t('system.plugin.description')" asterisk-position="end">
+          <a-form-item field="describe" :label="t('common.desc')" asterisk-position="end">
             <a-textarea
               v-model="form.description"
               :max-length="1000"
@@ -79,10 +69,9 @@
       <MsUpload
         v-model:file-list="fileList"
         accept="jar"
-        :max-size="50"
         size-unit="MB"
         main-text="system.user.importModalDragText"
-        :sub-text="t('system.plugin.supportFormat')"
+        :sub-text="t('system.plugin.supportFormat', { size: appStore.getFileMaxSize })"
         :show-file-list="false"
         :auto-upload="false"
         :disabled="confirmLoading"
@@ -130,26 +119,31 @@
   import { computed, ref, watch, watchEffect } from 'vue';
   import { Message } from '@arco-design/web-vue';
 
+  import MsButton from '@/components/pure/ms-button/index.vue';
   import MsUpload from '@/components/pure/ms-upload/index.vue';
 
   import { addPlugin } from '@/api/modules/setting/pluginManger';
   import { useI18n } from '@/hooks/useI18n';
   import useVisit from '@/hooks/useVisit';
+  import useAppStore from '@/store/modules/app';
 
   import type { FileItem, FormInstance, SelectOptionData, ValidatedError } from '@arco-design/web-vue';
 
-  const { t } = useI18n();
-  const visitedKey = 'doNotShowAgain';
-  const { getIsVisited } = useVisit(visitedKey);
+  const props = defineProps<{
+    visible: boolean;
+    organizeList: SelectOptionData;
+  }>();
   const emits = defineEmits<{
     (event: 'update:visible', visible: boolean): void;
     (e: 'success'): void;
     (e: 'brash'): void;
   }>();
-  const props = defineProps<{
-    visible: boolean;
-    organizeList: SelectOptionData;
-  }>();
+
+  const { t } = useI18n();
+  const appStore = useAppStore();
+  const visitedKey = 'doNotShowAgain';
+  const { getIsVisited } = useVisit(visitedKey);
+
   const pluginVisible = ref(false);
   const fileName = ref<string>('');
   const fileList = ref<FileItem[]>([]);
@@ -248,7 +242,7 @@
   });
 
   function openGithub() {
-    window.open('https://github.com/metersphere');
+    window.open('https://metersphere.io/docs/v3.x/plugin/');
   }
 </script>
 

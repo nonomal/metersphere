@@ -1,6 +1,6 @@
 export default {
   'settings.title': '页面配置',
-  'settings.themeColor': '主题色',
+  'settings.themeColor': '切换亮色/暗色模式',
   'settings.content': '内容区域',
   'settings.search': '搜索',
   'settings.language': '语言',
@@ -14,6 +14,9 @@ export default {
   'settings.navbar.help': '帮助中心',
   'settings.help.guide': '新手指引',
   'settings.help.doc': '帮助文档',
+  'settings.help.forumHelp': '论坛帮助',
+  'settings.help.gitHubProject': 'GitHub 项目',
+  'settings.help.enterpriseVersionTrial': '企业版试用',
   'settings.help.APIDoc': 'API文档',
   'settings.help.versionInfo': '版本信息',
   'settings.help.version': '版本',
@@ -28,4 +31,5 @@ export default {
   'settings.copySettings.message': '复制成功，请粘贴到 src/settings.json 文件中',
   'settings.close': '关闭',
   'settings.color.tooltip': '根据主题颜色生成的 10 个梯度色（将配置复制到项目中，主题色才能对亮色 / 暗黑模式同时生效）',
+  'settings.navbar.createProject': '新建项目',
 };

@@ -6,6 +6,7 @@ import PageOptions from './page-options.vue';
 
 import { useI18n } from '@/hooks/useI18n';
 
+import './style.less';
 import type { PageItemType } from './interface';
 import { Size } from './types';
 import useSize from './useSize';
@@ -75,6 +76,14 @@ export default defineComponent({
      * @en Whether it is simple mode
      */
     simple: {
+      type: Boolean,
+      default: false,
+    },
+    /**
+     * @zh 是否为简单模式且无页码按钮只有页码跳转
+     * @en Whether it is simple mode
+     */
+    simpleOnlyJumper: {
       type: Boolean,
       default: false,
     },
@@ -229,7 +238,7 @@ export default defineComponent({
     const computedCurrent = computed(() => props.current ?? _current.value);
     const computedPageSize = computed(() => props.pageSize ?? _pageSize.value);
 
-    const pages = computed(() => Math.ceil(props.total / computedPageSize.value));
+    const pages = computed(() => Math.ceil(props.total / computedPageSize.value) || 1); // 页码最小是 1
 
     const handleClick = (page: number) => {
       // when pageJumper blur and input.value is undefined, page is illegal
@@ -329,13 +338,28 @@ export default defineComponent({
       return (
         <ul class={`${prefixCls}-list`}>
           {getPageItemElement('previous', { simple: true })}
-          {pageList.value}
-          {props.showMore &&
+          {!props.simpleOnlyJumper && pageList.value}
+          {props.simpleOnlyJumper ? (
+            <PageJumper
+              v-slots={{
+                'jumper-prepend': slots['jumper-prepend'],
+                'jumper-append': slots['jumper-append'],
+              }}
+              simple
+              disabled={props.disabled}
+              current={computedCurrent.value}
+              pages={pages.value}
+              size={mergedSize.value}
+              onChange={handleClick}
+            />
+          ) : (
+            props.showMore &&
             !props.simple &&
             getPageItemElement('more', {
               key: 'more',
               step: props.bufferSize * 2 + 1,
-            })}
+            })
+          )}
           {getPageItemElement('next', { simple: true })}
         </ul>
       );
@@ -351,14 +375,6 @@ export default defineComponent({
           emit('update:current', newPage);
           emit('change', newPage);
         }
-      }
-    });
-
-    watch(pages, (curPages, prePages) => {
-      if (props.autoAdjust && curPages !== prePages && computedCurrent.value > 1 && computedCurrent.value > curPages) {
-        _current.value = curPages;
-        emit('update:current', curPages);
-        emit('change', curPages);
       }
     });
 
@@ -380,12 +396,12 @@ export default defineComponent({
 
       return (
         <div class={cls.value}>
-          {props.showTotal && !props.simple && (
+          {props.showTotal && !props.simple && !props.simpleOnlyJumper && (
             <span class={`${prefixCls}-total`}>
               {slots.total?.({ total: props.total }) ?? t('msPagination.total', { total: props.total })}
             </span>
           )}
-          {props.showPageSize && !props.simple && (
+          {props.showPageSize && !props.simple && !props.simpleOnlyJumper && (
             <PageOptions
               disabled={props.disabled}
               sizeOptions={props.pageSizeOptions}
@@ -396,7 +412,7 @@ export default defineComponent({
             />
           )}
           {renderPager()}
-          {!props.simple && !props.simple && props.showJumper && (
+          {!props.simple && props.showJumper && !props.simpleOnlyJumper && (
             <PageJumper
               v-slots={{
                 'jumper-prepend': slots['jumper-prepend'],

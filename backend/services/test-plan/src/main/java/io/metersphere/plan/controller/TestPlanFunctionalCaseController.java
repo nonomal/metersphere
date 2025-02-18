@@ -2,21 +2,23 @@ package io.metersphere.plan.controller;
 
 import com.github.pagehelper.Page;
 import com.github.pagehelper.PageHelper;
+import io.metersphere.bug.domain.Bug;
+import io.metersphere.bug.dto.request.BugEditRequest;
+import io.metersphere.bug.service.BugLogService;
+import io.metersphere.bug.service.BugService;
 import io.metersphere.dto.BugProviderDTO;
-import io.metersphere.functional.dto.FunctionalCaseDetailDTO;
 import io.metersphere.plan.constants.TestPlanResourceConfig;
 import io.metersphere.plan.dto.request.*;
-import io.metersphere.plan.dto.response.TestPlanAssociationResponse;
-import io.metersphere.plan.dto.response.TestPlanCaseExecHistoryResponse;
-import io.metersphere.plan.dto.response.TestPlanCasePageResponse;
-import io.metersphere.plan.dto.response.TestPlanResourceSortResponse;
+import io.metersphere.plan.dto.response.*;
 import io.metersphere.plan.service.TestPlanCaseLogService;
 import io.metersphere.plan.service.TestPlanFunctionalCaseService;
 import io.metersphere.plan.service.TestPlanManagementService;
+import io.metersphere.plan.service.TestPlanService;
 import io.metersphere.request.AssociateBugPageRequest;
 import io.metersphere.request.BugPageProviderRequest;
 import io.metersphere.sdk.constants.HttpMethodConstants;
 import io.metersphere.sdk.constants.PermissionConstants;
+import io.metersphere.sdk.util.BeanUtils;
 import io.metersphere.system.dto.LogInsertModule;
 import io.metersphere.system.dto.sdk.BaseTreeNode;
 import io.metersphere.system.dto.user.UserDTO;
@@ -30,10 +32,12 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.shiro.authz.annotation.Logical;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Collections;
 import java.util.List;
@@ -45,16 +49,23 @@ import java.util.Map;
 public class TestPlanFunctionalCaseController {
 
     @Resource
+    private TestPlanService testPlanService;
+    @Resource
     private TestPlanManagementService testPlanManagementService;
     @Resource
     private TestPlanFunctionalCaseService testPlanFunctionalCaseService;
+    @Resource
+    private TestPlanCaseLogService testPlanCaseLogService;
+    @Resource
+    private BugService bugService;
+    @Resource
+    private BugLogService bugLogService;
 
     @PostMapping(value = "/sort")
     @Operation(summary = "测试计划功能用例-功能用例拖拽排序")
     @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_UPDATE)
     @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
-    public TestPlanResourceSortResponse sortNode(@Validated @RequestBody ResourceSortRequest request) {
-        testPlanManagementService.checkModuleIsOpen(request.getTestPlanId(), TestPlanResourceConfig.CHECK_TYPE_TEST_PLAN, Collections.singletonList(TestPlanResourceConfig.CONFIG_TEST_PLAN_FUNCTIONAL_CASE));
+    public TestPlanOperationResponse sortNode(@Validated @RequestBody ResourceSortRequest request) {
         return testPlanFunctionalCaseService.sortNode(request, new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/sort", HttpMethodConstants.POST.name()));
     }
 
@@ -63,23 +74,24 @@ public class TestPlanFunctionalCaseController {
     @RequiresPermissions(PermissionConstants.TEST_PLAN_READ)
     @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
     public Pager<List<TestPlanCasePageResponse>> page(@Validated @RequestBody TestPlanCaseRequest request) {
-        Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize());
-        return PageUtils.setPageInfo(page, testPlanFunctionalCaseService.getFunctionalCasePage(request, false));
+        Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize(),
+                StringUtils.isNotBlank(request.getSortString("id", "functional_case")) ? request.getSortString("id", "functional_case") : "test_plan_functional_case.pos desc");
+        return PageUtils.setPageInfo(page, testPlanFunctionalCaseService.getFunctionalCasePage(request, false, SessionUtils.getCurrentProjectId()));
     }
 
-    @GetMapping("/tree/{testPlanId}")
+    @PostMapping("/tree")
     @Operation(summary = "测试计划-已关联功能用例列表模块树")
     @RequiresPermissions(PermissionConstants.TEST_PLAN_READ)
     @CheckOwner(resourceId = "#testPlanId", resourceType = "test_plan")
-    public List<BaseTreeNode> getTree(@PathVariable String testPlanId) {
-        return testPlanFunctionalCaseService.getTree(testPlanId);
+    public List<BaseTreeNode> getTree(@Validated @RequestBody TestPlanTreeRequest request) {
+        return testPlanFunctionalCaseService.getTree(request);
     }
 
     @PostMapping("/module/count")
     @Operation(summary = "测试计划-已关联功能用例模块数量")
     @RequiresPermissions(PermissionConstants.TEST_PLAN_READ)
     @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
-    public Map<String, Long> moduleCount(@Validated @RequestBody TestPlanCaseRequest request) {
+    public Map<String, Long> moduleCount(@Validated @RequestBody TestPlanCaseModuleRequest request) {
         return testPlanFunctionalCaseService.moduleCount(request);
     }
 
@@ -92,7 +104,8 @@ public class TestPlanFunctionalCaseController {
         BasePlanCaseBatchRequest batchRequest = new BasePlanCaseBatchRequest();
         batchRequest.setTestPlanId(request.getTestPlanId());
         batchRequest.setSelectIds(List.of(request.getId()));
-        return testPlanFunctionalCaseService.disassociate(batchRequest, new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/association", HttpMethodConstants.POST.name()));
+        TestPlanAssociationResponse response = testPlanFunctionalCaseService.disassociate(batchRequest, new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/disassociate", HttpMethodConstants.POST.name()));
+        return response;
     }
 
     @PostMapping("/batch/disassociate")
@@ -101,12 +114,14 @@ public class TestPlanFunctionalCaseController {
     @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
     public TestPlanAssociationResponse batchDisassociate(@Validated @RequestBody BasePlanCaseBatchRequest request) {
         testPlanManagementService.checkModuleIsOpen(request.getTestPlanId(), TestPlanResourceConfig.CHECK_TYPE_TEST_PLAN, Collections.singletonList(TestPlanResourceConfig.CONFIG_TEST_PLAN_FUNCTIONAL_CASE));
-        return testPlanFunctionalCaseService.disassociate(request, new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/association", HttpMethodConstants.POST.name()));
+        TestPlanAssociationResponse response = testPlanFunctionalCaseService.disassociate(request, new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/batch/disassociate", HttpMethodConstants.POST.name()));
+        return response;
     }
 
     @PostMapping("/associate/bug/page")
-    @Operation(summary = "测试计划-计划详情-功能用例-获取缺陷列表")
-    @CheckOwner(resourceId = "#request.getProjectId", resourceType = "project")
+    @Operation(summary = "测试计划-计划详情-功能用例-获取待关联缺陷列表")
+    @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
+    @RequiresPermissions(PermissionConstants.TEST_PLAN_READ)
     public Pager<List<BugProviderDTO>> associateBugList(@Validated @RequestBody BugPageProviderRequest request) {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize());
         return PageUtils.setPageInfo(page, testPlanFunctionalCaseService.bugPage(request));
@@ -114,15 +129,16 @@ public class TestPlanFunctionalCaseController {
 
     @PostMapping("/associate/bug")
     @Operation(summary = "测试计划-计划详情-功能用例-关联其他用例-关联缺陷")
-    @CheckOwner(resourceId = "#request.getTestPlanCaseId()", resourceType = "test_plan_functional_case")
+    @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_EXECUTE)
+    @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public void associateBug(@Validated @RequestBody TestPlanCaseAssociateBugRequest request) {
         testPlanFunctionalCaseService.associateBug(request, SessionUtils.getUserId());
     }
 
     @GetMapping("/disassociate/bug/{id}")
     @Operation(summary = "用例管理-功能用例-关联其他用例-取消关联缺陷")
+    @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_EXECUTE)
     @Log(type = OperationLogType.DISASSOCIATE, expression = "#msClass.disassociateBugLog(#id)", msClass = TestPlanFunctionalCaseService.class)
-    @CheckOwner(resourceId = "#id", resourceType = "bug_relation_case")
     public void disassociateBug(@PathVariable String id) {
         testPlanFunctionalCaseService.disassociateBug(id);
     }
@@ -132,44 +148,44 @@ public class TestPlanFunctionalCaseController {
     @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_EXECUTE)
     @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
     public void run(@Validated @RequestBody TestPlanCaseRunRequest request) {
-        testPlanFunctionalCaseService.run(request, SessionUtils.getCurrentOrganizationId(), new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/run", HttpMethodConstants.POST.name()));
+        testPlanFunctionalCaseService.run(request, new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/run", HttpMethodConstants.POST.name()));
+        testPlanService.setActualStartTime(request.getTestPlanId());
     }
-
 
     @PostMapping("/batch/run")
     @Operation(summary = "测试计划-计划详情-功能用例-批量执行")
     @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_EXECUTE)
     @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
     public void batchRun(@Validated @RequestBody TestPlanCaseBatchRunRequest request) {
-        testPlanFunctionalCaseService.batchRun(request, SessionUtils.getCurrentOrganizationId(), new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/batch/run", HttpMethodConstants.POST.name()));
+        testPlanFunctionalCaseService.batchRun(request, new LogInsertModule(SessionUtils.getUserId(), "/test-plan/functional/case/batch/run", HttpMethodConstants.POST.name()));
+        testPlanService.setActualStartTime(request.getTestPlanId());
     }
 
     @PostMapping("/has/associate/bug/page")
     @Operation(summary = "测试计划-计划详情-功能用例-获取已关联的缺陷列表")
-    @CheckOwner(resourceId = "#request.getTestPlanCaseId()", resourceType = "test_plan_functional_case")
+    @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_EXECUTE)
+    @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public Pager<List<BugProviderDTO>> getAssociateBugList(@Validated @RequestBody AssociateBugPageRequest request) {
         Page<Object> page = PageHelper.startPage(request.getCurrent(), request.getPageSize());
         return PageUtils.setPageInfo(page, testPlanFunctionalCaseService.hasAssociateBugPage(request));
     }
 
-
     @PostMapping("/batch/update/executor")
     @Operation(summary = "测试计划-计划详情-功能用例-批量更新执行人")
     @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_UPDATE)
     @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
-    @Log(type = OperationLogType.DISASSOCIATE, expression = "#msClass.batchUpdateExecutor(#request)", msClass = TestPlanCaseLogService.class)
     public void batchUpdateExecutor(@Validated @RequestBody TestPlanCaseUpdateRequest request) {
         testPlanFunctionalCaseService.batchUpdateExecutor(request);
+        testPlanCaseLogService.batchUpdateExecutor(request);
     }
 
     @GetMapping("/detail/{id}")
     @Operation(summary = "测试计划-计划详情-功能用例-获取用例详情")
     @RequiresPermissions(PermissionConstants.FUNCTIONAL_CASE_READ)
-    public FunctionalCaseDetailDTO getFunctionalCaseDetail(@PathVariable String id) {
+    public TestPlanCaseDetailResponse getFunctionalCaseDetail(@PathVariable String id) {
         String userId = SessionUtils.getUserId();
         return testPlanFunctionalCaseService.getFunctionalCaseDetail(id, userId);
     }
-
 
     @PostMapping("/exec/history")
     @Operation(summary = "测试计划-计划详情-功能用例-执行历史")
@@ -179,16 +195,6 @@ public class TestPlanFunctionalCaseController {
         return testPlanFunctionalCaseService.getCaseExecHistory(request);
     }
 
-
-    @PostMapping("/edit")
-    @Operation(summary = "测试计划-计划详情-功能用例-编辑执行结果")
-    @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_EXECUTE)
-    @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
-    public void editFunctionalCase(@Validated @RequestBody TestPlanCaseEditRequest request) {
-        testPlanFunctionalCaseService.editFunctionalCase(request, SessionUtils.getUserId());
-    }
-
-
     @GetMapping("/user-option/{projectId}")
     @Operation(summary = "测试计划-计划详情-功能用例-获取用户列表")
     @RequiresPermissions(value = {PermissionConstants.TEST_PLAN_READ, PermissionConstants.TEST_PLAN_READ_UPDATE, PermissionConstants.TEST_PLAN_READ_ADD}, logical = Logical.OR)
@@ -197,4 +203,37 @@ public class TestPlanFunctionalCaseController {
     @RequestParam(value = "keyword", required = false) String keyword) {
         return testPlanFunctionalCaseService.getExecUserList(projectId, keyword);
     }
+
+    @PostMapping("/batch/move")
+    @Operation(summary = "测试计划-计划详情-功能用例-批量移动")
+    @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_UPDATE)
+    @CheckOwner(resourceId = "#request.getTestPlanId()", resourceType = "test_plan")
+    public void batchMove(@Validated @RequestBody BaseBatchMoveRequest request) {
+        testPlanFunctionalCaseService.batchMove(request);
+        testPlanCaseLogService.batchMove(request, SessionUtils.getUserId());
+    }
+
+
+    @PostMapping("/batch/add-bug")
+    @Operation(summary = "测试计划-计划详情-功能用例-批量添加缺陷")
+    @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_EXECUTE)
+    @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
+    public void batchAddBug(@Validated @RequestPart("request") TestPlanCaseBatchAddBugRequest request,
+                            @RequestPart(value = "files", required = false) List<MultipartFile> files) {
+        BugEditRequest bugEditRequest = new BugEditRequest();
+        BeanUtils.copyBean(bugEditRequest, request);
+        Bug bug = bugService.addOrUpdate(bugEditRequest, files, SessionUtils.getUserId(), SessionUtils.getCurrentOrganizationId(), false);
+        bugLogService.minderAddLog(bugEditRequest, files, SessionUtils.getCurrentOrganizationId(), bug.getId(), SessionUtils.getUserId());
+        testPlanFunctionalCaseService.batchAssociateBug(request, bug.getId(), SessionUtils.getUserId());
+    }
+
+
+    @PostMapping("/batch/associate-bug")
+    @Operation(summary = "测试计划-计划详情-功能用例-批量关联缺陷")
+    @RequiresPermissions(PermissionConstants.TEST_PLAN_READ_EXECUTE)
+    @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
+    public void batchAssociateBug(@Validated @RequestBody TestPlanCaseBatchAssociateBugRequest request) {
+        testPlanFunctionalCaseService.batchAssociateBugByIds(request, SessionUtils.getUserId());
+    }
+
 }

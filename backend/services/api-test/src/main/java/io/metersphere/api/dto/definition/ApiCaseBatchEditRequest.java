@@ -18,15 +18,14 @@ public class ApiCaseBatchEditRequest extends ApiTestCaseBatchRequest implements 
     private static final long serialVersionUID = 1L;
 
     @Schema(description = "标签")
-    private LinkedHashSet<
-            @NotBlank
-            @Size(min = 1, max = 64, message = "{api_test_case.tag.length_range}")
-                    String> tags;
+    private LinkedHashSet<String> tags;
     @Schema(description = "批量编辑的类型  用例等级: Priority,状态 :Status,标签: Tags,用例环境: Environment")
     @NotBlank
     private String type;
     @Schema(description = "是否追加标签")
     private boolean append = false;
+    @Schema(description = "默认不清空所有标签")
+    private boolean clear = false;
     @Schema(description = "环境id")
     @Size(max = 50, message = "{api_test_case.env_id.length_range}")
     private String environmentId;

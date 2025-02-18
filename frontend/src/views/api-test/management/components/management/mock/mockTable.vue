@@ -9,22 +9,16 @@
       >
         {{ t('mockManagement.createMock') }}
       </a-button>
-      <div class="flex gap-[8px]">
-        <a-input-search
-          v-model:model-value="keyword"
-          :placeholder="t('apiTestManagement.searchPlaceholder')"
-          allow-clear
-          class="mr-[8px] w-[240px]"
-          @search="loadMockList"
-          @press-enter="loadMockList"
-          @clear="loadMockList"
-        />
-        <a-button type="outline" class="arco-btn-outline--secondary !p-[8px]" @click="loadMockList">
-          <template #icon>
-            <icon-refresh class="text-[var(--color-text-4)]" />
-          </template>
-        </a-button>
-      </div>
+      <MsAdvanceFilter
+        ref="msAdvanceFilterRef"
+        v-model:keyword="keyword"
+        :view-type="ViewTypeEnum.API_MOCK"
+        :filter-config-list="filterConfigList"
+        :search-placeholder="t('apiTestManagement.searchPlaceholder')"
+        @keyword-search="loadMockList"
+        @adv-search="handleAdvSearch"
+        @refresh="loadMockList"
+      />
     </div>
     <ms-base-table
       v-bind="propsRes"
@@ -32,6 +26,7 @@
       :first-column-width="44"
       no-disable
       filter-icon-align-left
+      :not-show-table-filter="isAdvancedSearchMode"
       v-on="propsEvent"
       @selected-change="handleTableSelect"
       @batch-action="handleTableBatch"
@@ -41,23 +36,45 @@
           {{ record.expectNum }}
         </MsButton>
       </template>
+      <template #protocol="{ record }">
+        <apiMethodName :method="record.protocol" />
+      </template>
       <template #enable="{ record }">
         <a-switch
           v-model="record.enable"
           type="line"
           :before-change="() => handleBeforeEnableChange(record)"
+          :disabled="!hasAnyPermission(['PROJECT_API_DEFINITION_MOCK:READ+UPDATE'])"
         ></a-switch>
       </template>
+      <template #apiMethod="{ record }">
+        <apiMethodName :method="record.apiMethod" is-tag />
+      </template>
       <template #action="{ record }">
-        <MsButton type="text" class="!mr-0" @click="editMock(record)">
+        <MsButton
+          v-permission="['PROJECT_API_DEFINITION_MOCK:READ+UPDATE']"
+          type="text"
+          class="!mr-0"
+          @click="editMock(record)"
+        >
           {{ t('common.edit') }}
         </MsButton>
         <a-divider direction="vertical" :margin="8"></a-divider>
-        <MsButton type="text" class="!mr-0" @click="debugMock(record)">
+        <MsButton
+          v-permission="['PROJECT_API_DEFINITION:READ+EXECUTE']"
+          type="text"
+          class="!mr-0"
+          @click="debugMock(record)"
+        >
           {{ t('apiTestManagement.debug') }}
         </MsButton>
         <a-divider direction="vertical" :margin="8"></a-divider>
-        <MsButton type="text" class="!mr-0" @click="handleCopyMock(record)">
+        <MsButton
+          v-permission="['PROJECT_API_DEFINITION_MOCK:READ+ADD']"
+          type="text"
+          class="!mr-0"
+          @click="handleCopyMock(record)"
+        >
           {{ t('common.copy') }}
         </MsButton>
         <a-divider direction="vertical" :margin="8"></a-divider>
@@ -92,17 +109,29 @@
         asterisk-position="end"
       >
         <a-select v-model="batchForm.attr" :placeholder="t('common.pleaseSelect')">
-          <a-option v-for="item of attrOptions" :key="item.value" :value="item.value">
+          <a-option v-for="item of fullAttrs" :key="item.value" :value="item.value">
             {{ t(item.name) }}
           </a-option>
         </a-select>
       </a-form-item>
       <a-form-item
         v-if="batchForm.attr === 'Tags'"
+        :class="`${selectedTagType === TagUpdateTypeEnum.CLEAR ? 'mb-0' : 'mb-[16px]'}`"
+        field="type"
+        :label="t('common.type')"
+      >
+        <a-radio-group v-model:model-value="selectedTagType" size="small">
+          <a-radio :value="TagUpdateTypeEnum.UPDATE"> {{ t('common.update') }}</a-radio>
+          <a-radio :value="TagUpdateTypeEnum.APPEND"> {{ t('caseManagement.featureCase.appendTag') }}</a-radio>
+          <a-radio :value="TagUpdateTypeEnum.CLEAR">{{ t('common.clear') }}</a-radio>
+        </a-radio-group>
+      </a-form-item>
+      <a-form-item
+        v-if="batchForm.attr === 'Tags' && selectedTagType !== TagUpdateTypeEnum.CLEAR"
         field="values"
-        :label="t('apiTestManagement.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :validate-trigger="['blur', 'input']"
-        :rules="[{ required: true, message: t('apiTestManagement.valueRequired') }]"
+        :rules="[{ required: true, message: t('common.inputPleaseEnterTags') }]"
         asterisk-position="end"
         class="mb-0"
         required
@@ -112,13 +141,15 @@
           placeholder="common.tagsInputPlaceholder"
           allow-clear
           unique-value
+          empty-priority-highest
           retain-input-value
         />
+        <div class="text-[12px] leading-[20px] text-[var(--color-text-4)]">{{ t('ms.tagsInput.tagLimitTip') }}</div>
       </a-form-item>
       <a-form-item
-        v-else
+        v-if="batchForm.attr !== 'Tags'"
         field="value"
-        :label="t('apiTestManagement.batchUpdate')"
+        :label="t('common.batchUpdate')"
         :rules="[{ required: true, message: t('apiTestManagement.valueRequired') }]"
         asterisk-position="end"
         class="mb-0"
@@ -134,26 +165,7 @@
       </a-form-item>
     </a-form>
     <template #footer>
-      <div class="flex" :class="[batchForm.attr === 'Tags' ? 'justify-between' : 'justify-end']">
-        <div
-          v-if="batchForm.attr === 'Tags'"
-          class="flex flex-row items-center justify-center"
-          style="padding-top: 10px"
-        >
-          <a-switch v-model="batchForm.append" class="mr-1" size="small" type="line" />
-          <span class="flex items-center">
-            <span class="mr-1">{{ t('caseManagement.featureCase.appendTag') }}</span>
-            <span class="mt-[2px]">
-              <a-tooltip>
-                <IconQuestionCircle class="h-[16px] w-[16px] text-[rgb(var(--primary-5))]" />
-                <template #content>
-                  <div>{{ t('caseManagement.featureCase.enableTags') }}</div>
-                  <div>{{ t('caseManagement.featureCase.closeTags') }}</div>
-                </template>
-              </a-tooltip>
-            </span>
-          </span>
-        </div>
+      <div class="flex justify-end">
         <div class="flex justify-end">
           <a-button type="secondary" :disabled="batchUpdateLoading" @click="cancelBatch">
             {{ t('common.cancel') }}
@@ -179,8 +191,9 @@
 <script setup lang="ts">
   import { useClipboard } from '@vueuse/core';
   import { FormInstance, Message } from '@arco-design/web-vue';
-  import dayjs from 'dayjs';
 
+  import MsAdvanceFilter from '@/components/pure/ms-advance-filter/index.vue';
+  import { FilterFormItem, FilterResult } from '@/components/pure/ms-advance-filter/type';
   import MsButton from '@/components/pure/ms-button/index.vue';
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import type { BatchActionParams, BatchActionQueryParams, MsTableColumn } from '@/components/pure/ms-table/type';
@@ -189,6 +202,7 @@
   import { ActionsItem } from '@/components/pure/ms-table-more-action/types';
   import MsTagsInput from '@/components/pure/ms-tags-input/index.vue';
   import mockDetailDrawer from './mockDetailDrawer.vue';
+  import apiMethodName from '@/views/api-test/components/apiMethodName.vue';
   import { RequestParam } from '@/views/api-test/components/requestComposition/index.vue';
 
   import {
@@ -205,13 +219,22 @@
   import useModal from '@/hooks/useModal';
   import useTableStore from '@/hooks/useTableStore';
   import useAppStore from '@/store/modules/app';
+  import useCacheStore from '@/store/modules/cache/cache';
+  import { characterLimit, operationWidth } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
+  import { ProtocolItem } from '@/models/apiTest/common';
   import { ApiDefinitionMockDetail } from '@/models/apiTest/management';
   import { MockDetail } from '@/models/apiTest/mock';
-  import { RequestComposition } from '@/enums/apiEnum';
+  import { FilterType, ViewTypeEnum } from '@/enums/advancedFilterEnum';
+  import { RequestComposition, RequestMethods } from '@/enums/apiEnum';
+  import { CacheTabTypeEnum } from '@/enums/cacheTabEnum';
+  import { TagUpdateTypeEnum } from '@/enums/commonEnum';
   import { TableKeyEnum } from '@/enums/tableEnum';
 
+  defineOptions({
+    name: CacheTabTypeEnum.API_TEST_MOCK_TABLE,
+  });
   const props = defineProps<{
     isApi?: boolean; // 接口定义详情的case tab下
     class?: string;
@@ -219,20 +242,23 @@
     offspringIds: string[];
     definitionDetail: RequestParam;
     readOnly?: boolean; // 是否是只读模式
-    protocol: string; // 查看的协议类型
+    selectedProtocols: string[]; // 查看的协议类型
+    heightUsed?: number;
   }>();
   const emit = defineEmits<{
-    (e: 'init', params: any): void;
     (e: 'change'): void;
     (e: 'debug', mock: MockDetail): void;
+    (e: 'handleAdvSearch', isStartAdvance: boolean): void;
   }>();
 
   const appStore = useAppStore();
+  const cacheStore = useCacheStore();
   const tableStore = useTableStore();
   const { t } = useI18n();
   const { openModal } = useModal();
 
   const keyword = ref('');
+  const protocolList = inject<Ref<ProtocolItem[]>>('protocols', ref([]));
 
   let columns: MsTableColumn = [
     {
@@ -244,7 +270,6 @@
         sortDirections: ['ascend', 'descend'],
         sorter: true,
       },
-      fixed: 'left',
       width: 120,
     },
     {
@@ -258,11 +283,18 @@
       width: 200,
     },
     {
-      title: 'common.tag',
-      dataIndex: 'tags',
-      isTag: true,
-      isStringTag: true,
+      title: 'apiTestManagement.apiType',
+      dataIndex: 'apiMethod',
+      slotName: 'apiMethod',
+      width: 200,
+      showDrag: true,
+    },
+    {
+      title: 'apiTestManagement.protocol',
+      dataIndex: 'protocol',
+      slotName: 'protocol',
       width: 150,
+      showDrag: true,
     },
     {
       title: 'mockManagement.apiPath',
@@ -270,17 +302,27 @@
       slotName: 'apiPath',
       showTooltip: true,
       width: 200,
+      showDrag: true,
+    },
+    {
+      title: 'common.tag',
+      dataIndex: 'tags',
+      isTag: true,
+      isStringTag: true,
+      showDrag: true,
     },
     {
       title: 'common.status',
       dataIndex: 'enable',
       slotName: 'enable',
       width: 100,
+      showDrag: true,
     },
     {
       title: 'mockManagement.operationUser',
       slotName: 'createUserName',
       dataIndex: 'createUserName',
+      showTooltip: true,
       width: 200,
       showDrag: true,
     },
@@ -291,6 +333,7 @@
         sortDirections: ['ascend', 'descend'],
         sorter: true,
       },
+      showDrag: true,
       width: 180,
     },
     {
@@ -298,36 +341,33 @@
       slotName: 'action',
       dataIndex: 'operation',
       fixed: 'right',
-      width: 200,
+      width: operationWidth(230, 200),
     },
   ];
-  const { propsRes, propsEvent, loadList, setLoadListParams, resetSelector } = useTable(
-    getDefinitionMockPage,
-    {
+  const { propsRes, propsEvent, viewId, advanceFilter, setAdvanceFilter, loadList, setLoadListParams, resetSelector } =
+    useTable(getDefinitionMockPage, {
       columns: props.readOnly ? columns : [],
       scroll: { x: '100%' },
-      tableKey: props.readOnly ? undefined : TableKeyEnum.API_TEST,
+      tableKey: props.readOnly ? undefined : TableKeyEnum.API_TEST_MANAGEMENT_MOCK,
       showSetting: !props.readOnly,
       selectable: true,
+      heightUsed: (props.heightUsed || 0) + 282,
       showSelectAll: !props.readOnly,
       draggable: props.readOnly ? undefined : { type: 'handle', width: 32 },
-      showSubdirectory: true,
-    },
-    (item) => ({
-      ...item,
-      updateTime: dayjs(item.updateTime).format('YYYY-MM-DD HH:mm:ss'),
-    })
-  );
+      paginationSize: 'mini',
+    });
   const batchActions = {
     baseAction: [
       {
-        label: 'mockManagement.batchEdit',
+        label: 'common.edit',
         eventTag: 'edit',
+        permission: ['PROJECT_API_DEFINITION_MOCK:READ+UPDATE'],
       },
       {
-        label: 'mockManagement.batchDelete',
+        label: 'common.delete',
         eventTag: 'delete',
         danger: true,
+        permission: ['PROJECT_API_DEFINITION_MOCK:READ+DELETE'],
       },
     ],
   };
@@ -336,21 +376,23 @@
       eventTag: 'copyMock',
       label: t('mockManagement.copyMock'),
       danger: false,
+      permission: ['PROJECT_API_DEFINITION_MOCK:READ'],
     },
     {
       eventTag: 'delete',
       label: t('common.delete'),
       danger: true,
+      permission: ['PROJECT_API_DEFINITION_MOCK:READ+DELETE'],
     },
   ];
 
-  const tableQueryParams = ref<any>();
-
+  const msAdvanceFilterRef = ref<InstanceType<typeof MsAdvanceFilter>>();
+  const isAdvancedSearchMode = computed(() => msAdvanceFilterRef.value?.isAdvancedSearchMode);
   async function getModuleIds() {
     let moduleIds: string[] = [];
-    if (props.activeModule !== 'all') {
+    if (props.activeModule !== 'all' && !isAdvancedSearchMode.value) {
       moduleIds = [props.activeModule];
-      const getAllChildren = await tableStore.getSubShow(TableKeyEnum.API_TEST_MANAGEMENT_CASE);
+      const getAllChildren = await tableStore.getSubShow(TableKeyEnum.API_TEST_MANAGEMENT_MOCK);
       if (getAllChildren) {
         moduleIds = [props.activeModule, ...props.offspringIds];
       }
@@ -363,28 +405,132 @@
     const params = {
       keyword: keyword.value,
       projectId: appStore.currentProjectId,
-      protocol: props.protocol,
+      protocols: isAdvancedSearchMode.value ? protocolList.value.map((item) => item.protocol) : props.selectedProtocols,
       apiDefinitionId: props.definitionDetail.id !== 'all' ? props.definitionDetail.id : undefined,
       filter: {},
       moduleIds: selectModules,
+      viewId: viewId.value,
+      combineSearch: advanceFilter,
     };
     setLoadListParams(params);
     loadList();
-    tableQueryParams.value = {
-      ...params,
-      current: propsRes.value.msPagination?.current,
-      pageSize: propsRes.value.msPagination?.pageSize,
-    };
-    emit('init', {
-      ...tableQueryParams.value,
-    });
   }
 
-  watchEffect(() => {
-    if (props.activeModule || props.protocol) {
+  watch([() => props.activeModule, () => props.selectedProtocols], () => {
+    if (isAdvancedSearchMode.value) return;
+    loadMockList();
+  });
+
+  const isActivated = computed(() => cacheStore.cacheViews.includes(CacheTabTypeEnum.API_TEST_MOCK_TABLE));
+
+  onBeforeMount(() => {
+    cacheStore.clearCache();
+    if (!isActivated.value) {
+      loadMockList();
+      cacheStore.setCache(CacheTabTypeEnum.API_TEST_MOCK_TABLE);
+    }
+  });
+
+  onActivated(() => {
+    if (isActivated.value) {
       loadMockList();
     }
   });
+
+  const requestMethodsOptions = computed(() => {
+    const otherMethods = protocolList.value
+      .filter((e) => e.protocol !== 'HTTP')
+      .map((item) => {
+        return {
+          value: item.protocol,
+          key: item.protocol,
+        };
+      });
+    const httpMethods = Object.values(RequestMethods).map((e) => {
+      return {
+        value: e,
+        key: e,
+      };
+    });
+    return [...httpMethods, ...otherMethods];
+  });
+
+  const filterConfigList = computed<FilterFormItem[]>(() => [
+    {
+      title: 'caseManagement.featureCase.tableColumnID',
+      dataIndex: 'expectNum',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'mockManagement.name',
+      dataIndex: 'name',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'apiTestManagement.protocol',
+      dataIndex: 'protocol',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'protocol',
+        valueKey: 'protocol',
+        options: protocolList.value,
+      },
+    },
+    {
+      title: 'mockManagement.apiPath',
+      dataIndex: 'apiPath',
+      type: FilterType.INPUT,
+    },
+    {
+      title: 'apiTestManagement.apiType',
+      dataIndex: 'apiMethod',
+      type: FilterType.SELECT,
+      selectProps: {
+        multiple: true,
+        labelKey: 'key',
+        options: requestMethodsOptions.value,
+      },
+    },
+    {
+      title: 'common.status',
+      dataIndex: 'enable',
+      type: FilterType.SELECT_EQUAL,
+      selectProps: {
+        options: [
+          { label: t('system.config.email.close'), value: false },
+          { label: t('system.config.email.open'), value: true },
+        ],
+      },
+    },
+    {
+      title: 'common.tag',
+      dataIndex: 'tags',
+      type: FilterType.TAGS_INPUT,
+      numberProps: {
+        min: 0,
+        precision: 0,
+      },
+    },
+    {
+      title: 'mockManagement.operationUser',
+      dataIndex: 'createUser',
+      type: FilterType.MEMBER,
+    },
+    {
+      title: 'common.updateTime',
+      dataIndex: 'updateTime',
+      type: FilterType.DATE_PICKER,
+    },
+  ]);
+  // 高级检索
+  const handleAdvSearch = async (filter: FilterResult, id: string, isStartAdvance: boolean) => {
+    resetSelector();
+    emit('handleAdvSearch', isStartAdvance);
+    keyword.value = '';
+    setAdvanceFilter(filter, id);
+    await loadMockList(); // 基础筛选都清空
+  };
 
   async function handleBeforeEnableChange(record: ApiDefinitionMockDetail) {
     try {
@@ -410,7 +556,7 @@
    * 删除接口
    */
   function removeMock(record?: ApiDefinitionMockDetail, isBatch?: boolean, params?: BatchActionQueryParams) {
-    let title = t('apiTestManagement.deleteMockTip', { name: record?.name });
+    let title = t('apiTestManagement.confirmDelete', { name: characterLimit(record?.name) });
     let selectIds = [record?.id || ''];
     if (isBatch) {
       title = t('mockManagement.batchDeleteMockTip', {
@@ -436,9 +582,16 @@
               selectIds,
               selectAll: !!params?.selectAll,
               excludeIds: params?.excludeIds || [],
-              condition: { keyword: keyword.value },
+              condition: {
+                keyword: keyword.value,
+                viewId: viewId.value,
+                combineSearch: advanceFilter,
+              },
               projectId: appStore.currentProjectId,
               moduleIds: selectModules,
+              protocols: isAdvancedSearchMode.value
+                ? protocolList.value.map((item) => item.protocol)
+                : props.selectedProtocols,
             });
           } else {
             await deleteMock({
@@ -504,6 +657,7 @@
 
   const showBatchModal = ref(false);
   const batchUpdateLoading = ref(false);
+
   const batchFormRef = ref<FormInstance>();
   const batchForm = ref({
     attr: 'Status' as 'Status' | 'Tags',
@@ -521,12 +675,8 @@
       value: 'Tags',
     },
   ];
-  const attrOptions = computed(() => {
-    if (props.protocol === 'HTTP') {
-      return fullAttrs;
-    }
-    return fullAttrs.filter((e) => e.value !== 'method');
-  });
+
+  const selectedTagType = ref<TagUpdateTypeEnum>(TagUpdateTypeEnum.UPDATE);
 
   function cancelBatch() {
     showBatchModal.value = false;
@@ -537,6 +687,7 @@
       values: [],
       append: false,
     };
+    selectedTagType.value = TagUpdateTypeEnum.UPDATE;
   }
 
   function batchUpdate() {
@@ -550,13 +701,19 @@
             excludeIds: batchParams.value?.excludeIds || [],
             condition: {
               keyword: keyword.value,
+              viewId: viewId.value,
+              combineSearch: advanceFilter,
             },
             projectId: appStore.currentProjectId,
             moduleIds: await getModuleIds(),
             type: batchForm.value.attr,
-            append: batchForm.value.append,
+            append: selectedTagType.value === TagUpdateTypeEnum.APPEND,
             tags: batchForm.value.attr === 'Tags' ? batchForm.value.values : [],
             enable: batchForm.value.attr === 'Status' ? batchForm.value.value : false,
+            protocols: isAdvancedSearchMode.value
+              ? protocolList.value.map((item) => item.protocol)
+              : props.selectedProtocols,
+            clear: selectedTagType.value === TagUpdateTypeEnum.CLEAR,
           });
           Message.success(t('common.updateSuccess'));
           cancelBatch();
@@ -604,6 +761,14 @@
   }
 
   const mockBelongDefinitionDetail = ref<RequestParam>(props.definitionDetail);
+
+  watch(
+    () => props.definitionDetail.id,
+    () => {
+      mockBelongDefinitionDetail.value = props.definitionDetail;
+    }
+  );
+
   async function openMockDetailDrawer(record: ApiDefinitionMockDetail) {
     try {
       activeMockRecord.value = record;
@@ -616,6 +781,7 @@
           id: res.id,
           type: 'mock',
           isNew: false,
+          isCopy: false,
           protocol: res.protocol,
           activeTab: RequestComposition.BODY,
           executeLoading: false,
@@ -647,6 +813,7 @@
 
   function editMock(record: ApiDefinitionMockDetail) {
     isEdit.value = true;
+    isCopy.value = false;
     openMockDetailDrawer(record);
   }
 
@@ -671,7 +838,7 @@
   });
 
   if (!props.readOnly) {
-    await tableStore.initColumn(TableKeyEnum.API_TEST, columns, 'drawer');
+    await tableStore.initColumn(TableKeyEnum.API_TEST_MANAGEMENT_MOCK, columns, 'drawer');
   } else {
     columns = columns.filter(
       (item) => !['version', 'createTime', 'updateTime', 'operation'].includes(item.dataIndex as string)

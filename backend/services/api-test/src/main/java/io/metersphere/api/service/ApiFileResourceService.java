@@ -1,6 +1,5 @@
 package io.metersphere.api.service;
 
-import io.metersphere.sdk.constants.ApiFileResourceType;
 import io.metersphere.api.domain.ApiFileResource;
 import io.metersphere.api.domain.ApiFileResourceExample;
 import io.metersphere.api.dto.debug.ApiFileResourceUpdateRequest;
@@ -9,7 +8,7 @@ import io.metersphere.api.mapper.ApiFileResourceMapper;
 import io.metersphere.project.dto.filemanagement.FileLogRecord;
 import io.metersphere.project.service.FileAssociationService;
 import io.metersphere.project.service.FileMetadataService;
-import io.metersphere.project.service.FileService;
+import io.metersphere.sdk.constants.ApiFileResourceType;
 import io.metersphere.sdk.constants.DefaultRepositoryDir;
 import io.metersphere.sdk.constants.StorageType;
 import io.metersphere.sdk.exception.MSException;
@@ -19,19 +18,17 @@ import io.metersphere.sdk.file.FileRepository;
 import io.metersphere.sdk.file.FileRequest;
 import io.metersphere.sdk.util.LogUtils;
 import io.metersphere.sdk.util.Translator;
+import io.metersphere.system.service.CommonFileService;
+import io.metersphere.system.service.FileService;
 import io.metersphere.system.uid.IDGenerator;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @Author: jianxing
@@ -48,6 +45,8 @@ public class ApiFileResourceService {
     private FileMetadataService fileMetadataService;
     @Resource
     private FileService fileService;
+    @Resource
+    private CommonFileService commonFileService;
 
     /**
      * 上传接口相关的资源文件
@@ -56,56 +55,18 @@ public class ApiFileResourceService {
      * @param addFileMap key:fileId value:fileName
      */
     public void uploadFileResource(String folder, Map<String, String> addFileMap) {
-        if (MapUtils.isEmpty(addFileMap)) {
-            return;
-        }
-        FileRepository defaultRepository = FileCenter.getDefaultRepository();
-        for (String fileId : addFileMap.keySet()) {
-            String systemTempDir = DefaultRepositoryDir.getSystemTempDir();
-            try {
-                String fileName = addFileMap.get(fileId);
-                if (StringUtils.isEmpty(fileName)) {
-                    continue;
-                }
-                // 按ID建文件夹，避免文件名重复
-                FileCopyRequest fileCopyRequest = new FileCopyRequest();
-                fileCopyRequest.setCopyFolder(systemTempDir + "/" + fileId);
-                fileCopyRequest.setCopyfileName(fileName);
-                fileCopyRequest.setFileName(fileName);
-                fileCopyRequest.setFolder(folder + "/" + fileId);
-                // 将文件从临时目录复制到资源目录
-                defaultRepository.copyFile(fileCopyRequest);
-                // 删除临时文件
-                fileCopyRequest.setFolder(systemTempDir + "/" + fileId);
-                fileCopyRequest.setFileName(fileName);
-                defaultRepository.delete(fileCopyRequest);
-            } catch (Exception e) {
-                LogUtils.error(e);
-                throw new MSException(Translator.get("file_upload_fail"));
-            }
-        }
+        commonFileService.saveFileFromTempFile(folder, addFileMap);
     }
 
     /**
      * 根据文件ID，查询minio中对应目录下的文件名称
      */
     public String getTempFileNameByFileId(String fileId) {
-        FileRepository defaultRepository = FileCenter.getDefaultRepository();
-        String systemTempDir = DefaultRepositoryDir.getSystemTempDir();
-        try {
-            FileRequest fileRequest = new FileRequest();
-            fileRequest.setFolder(systemTempDir + "/" + fileId);
-            List<String> folderFileNames = defaultRepository.getFolderFileNames(fileRequest);
-            if (CollectionUtils.isEmpty(folderFileNames)) {
-                return null;
-            }
-            String[] pathSplit = folderFileNames.get(0).split("/");
-            return pathSplit[pathSplit.length - 1];
+        return commonFileService.getTempFileNameByFileId(fileId);
+    }
 
-        } catch (Exception e) {
-            LogUtils.error(e);
-            return null;
-        }
+    public String getFileNameByFileId(String fileId, String folder) {
+        return commonFileService.getFileNameByFileId(fileId, folder);
     }
 
     /**
@@ -126,7 +87,7 @@ public class ApiFileResourceService {
                 String fileName = getTempFileNameByFileId(fileId);
                 if (StringUtils.isBlank(fileName)) {
                     // 如果 fileName 查不到，说明该文件已经从临时目录移到正式目录，已经关联过了，无需关联
-                    break;
+                    continue;
                 }
                 ApiFileResource apiFileResource = new ApiFileResource();
                 apiFileResource.setFileId(fileId);
@@ -343,11 +304,25 @@ public class ApiFileResourceService {
                     apiFileResources.add(apiFileResource);
                 } catch (Exception e) {
                     LogUtils.error(e);
-                    throw new MSException(Translator.get("file_copy_fail"));
+                    throw new MSException(e);
                 }
             });
 
             apiFileResourceMapper.batchInsert(apiFileResources);
+        }
+    }
+
+    public void copyFile(String sourceFolder, String targetFolder, String fileName) {
+        try {
+            FileCopyRequest fileCopyRequest = new FileCopyRequest();
+            fileCopyRequest.setCopyFolder(sourceFolder);
+            fileCopyRequest.setCopyfileName(fileName);
+            fileCopyRequest.setFileName(fileName);
+            fileCopyRequest.setFolder(targetFolder);
+            FileCenter.getDefaultRepository().copyFile(fileCopyRequest);
+        } catch (Exception e) {
+            LogUtils.error(e);
+            throw new MSException(e);
         }
     }
 
@@ -393,7 +368,7 @@ public class ApiFileResourceService {
                 throw new MSException("file not found!");
             }
         } else {
-            fileName = apiFileResources.get(0).getFileName();
+            fileName = apiFileResources.getFirst().getFileName();
         }
 
         folder += "/" + request.getFileId();
@@ -426,4 +401,9 @@ public class ApiFileResourceService {
         return fileId;
     }
 
+    public List<ApiFileResource> selectByResourceIds(List<String> copyFromStepIds) {
+        ApiFileResourceExample example = new ApiFileResourceExample();
+        example.createCriteria().andResourceIdIn(copyFromStepIds);
+        return apiFileResourceMapper.selectByExample(example);
+    }
 }

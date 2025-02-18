@@ -12,7 +12,7 @@
       }
     "
   >
-    <span class="mx-[2px]"></span>
+    <span class="mx-[2px]"><slot></slot></span>
     <template #content>
       <div class="flex flex-col gap-[16px] text-[14px]">
         <div class="font-semibold text-[var(--color-text-1)]">
@@ -34,10 +34,11 @@
               threshold: 200,
             },
           }"
+          :filter-tree-node="filterTreeNode"
           allow-search
         >
           <template #tree-slot-title="node">
-            <div class="one-line-text w-[300px] text-[var(--color-text-1)]">{{ node.name }}</div>
+            <div class="one-line-text w-[300px]">{{ node.name }}</div>
           </template>
         </a-tree-select>
         <div class="flex items-center justify-end gap-[12px]">
@@ -63,12 +64,12 @@
 
   import { useI18n } from '@/hooks/useI18n';
   import useAppStore from '@/store/modules/app';
+  import { filterTreeNode } from '@/utils';
 
   import { ModuleTreeNode, TransferFileParams } from '@/models/common';
 
   const props = withDefaults(
     defineProps<{
-      visible: boolean;
       savingFile?: MsFileItem;
       fileSaveAsSourceId: string | number;
       sourceIdKey?: string; // 资源id对应key
@@ -89,7 +90,7 @@
   const { t } = useI18n();
 
   const saveFilePopoverVisible = defineModel<boolean>('visible', {
-    required: true,
+    default: false,
   });
   const saveFileForm = ref({
     name: '',
@@ -157,7 +158,11 @@
           fileName: saveFileForm.value.name,
           originalName: props.savingFile.name || props.savingFile.fileName || '',
         });
-        emit('finish', res, `${saveFileForm.value.name}.${props.savingFile.name?.split('.').pop()}`);
+        emit(
+          'finish',
+          res,
+          `${saveFileForm.value.name}.${(props.savingFile.name || props.savingFile.fileName)?.split('.').pop()}`
+        );
         Message.success(t('ms.add.attachment.saveAsSuccess'));
         handleSaveFileCancel();
       }

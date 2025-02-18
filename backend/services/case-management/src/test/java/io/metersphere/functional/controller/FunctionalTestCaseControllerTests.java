@@ -1,6 +1,7 @@
 package io.metersphere.functional.controller;
 
 import io.metersphere.api.domain.ApiDefinitionModule;
+import io.metersphere.api.domain.ApiScenario;
 import io.metersphere.api.domain.ApiScenarioModule;
 import io.metersphere.api.domain.ApiTestCase;
 import io.metersphere.api.mapper.ApiDefinitionModuleMapper;
@@ -11,6 +12,7 @@ import io.metersphere.functional.constants.AssociateCaseType;
 import io.metersphere.functional.constants.FunctionalCaseReviewStatus;
 import io.metersphere.functional.domain.FunctionalCase;
 import io.metersphere.functional.domain.FunctionalCaseTest;
+import io.metersphere.functional.dto.FunctionalCaseStepDTO;
 import io.metersphere.functional.dto.FunctionalCaseTestDTO;
 import io.metersphere.functional.dto.FunctionalCaseTestPlanDTO;
 import io.metersphere.functional.dto.TestPlanCaseExecuteHistoryDTO;
@@ -25,7 +27,7 @@ import io.metersphere.provider.BaseAssociateApiProvider;
 import io.metersphere.provider.BaseAssociateBugProvider;
 import io.metersphere.provider.BaseAssociateScenarioProvider;
 import io.metersphere.request.*;
-import io.metersphere.sdk.constants.FunctionalCaseExecuteResult;
+import io.metersphere.sdk.constants.ExecStatus;
 import io.metersphere.sdk.constants.SessionConstants;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.system.base.BaseTest;
@@ -114,6 +116,7 @@ public class FunctionalTestCaseControllerTests extends BaseTest {
         request.setProjectId("project_gyq_associate_test");
         request.setCurrent(1);
         request.setPageSize(10);
+        request.setProtocols(List.of("HTTP"));
         request.setSort(new HashMap<>() {{
             put("createTime", "desc");
         }});
@@ -162,6 +165,7 @@ public class FunctionalTestCaseControllerTests extends BaseTest {
         request.setProjectId("project_gyq_associate_test");
         request.setCurrent(1);
         request.setPageSize(10);
+        request.setProtocols(List.of("HTTP"));
         List<TestCaseProviderDTO> apiTestCaseList = provider.getApiTestCaseList("functional_case_test", "case_id", "source_id", request);
         MvcResult mvcResult = this.requestPostWithOkAndReturn(URL_CASE_PAGE, request);
         String returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
@@ -195,6 +199,7 @@ public class FunctionalTestCaseControllerTests extends BaseTest {
         request.setProjectId("project_gyq_associate_test");
         request.setCurrent(1);
         request.setPageSize(10);
+        request.setProtocols(List.of("HTTP"));
         MvcResult mvcResult = this.requestPostWithOkAndReturn(URL_CASE_PAGE_MODULE_COUNT, request);
         String returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
         ResultHolder resultHolder = JSON.parseObject(returnData, ResultHolder.class);
@@ -246,6 +251,21 @@ public class FunctionalTestCaseControllerTests extends BaseTest {
         request.setSelectAll(true);
         request.setProjectId("project-associate-case-test");
         request.setExcludeIds(List.of("gyq_associate_api_case_id_2"));
+        mvcResult = this.requestPostWithOkAndReturn(URL_CASE_PAGE_ASSOCIATE, request);
+        returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        resultHolder = JSON.parseObject(returnData, ResultHolder.class);
+        Assertions.assertNotNull(resultHolder);
+
+        List<ApiScenario> operationScenarios = new ArrayList<>();
+        ApiScenario apiScenario = new ApiScenario();
+        apiScenario.setId("gyq_associate_scenario_id_1");
+        apiScenario.setVersionId("11");
+        operationScenarios.add(apiScenario);
+        Mockito.when(scenarioProvider.getSelectScenarioCases(request, false)).thenReturn(operationScenarios);
+        Assertions.assertNotNull(resultHolder);
+        request.setSelectAll(false);
+        request.setProjectId("project-associate-case-test");
+        request.setSelectIds(List.of("gyq_associate_case_id_1"));
         mvcResult = this.requestPostWithOkAndReturn(URL_CASE_PAGE_ASSOCIATE, request);
         returnData = mvcResult.getResponse().getContentAsString(StandardCharsets.UTF_8);
         resultHolder = JSON.parseObject(returnData, ResultHolder.class);
@@ -450,7 +470,7 @@ public class FunctionalTestCaseControllerTests extends BaseTest {
         functionalCase.setPos(500L);
         functionalCase.setVersionId("12335");
         functionalCase.setRefId(functionalCase.getId());
-        functionalCase.setLastExecuteResult(FunctionalCaseExecuteResult.PENDING.name());
+        functionalCase.setLastExecuteResult(ExecStatus.PENDING.name());
         functionalCase.setPublicCase(false);
         functionalCase.setLatest(true);
         functionalCase.setCreateUser("gyq");
@@ -578,7 +598,7 @@ public class FunctionalTestCaseControllerTests extends BaseTest {
         testPlanCaseExecuteHistory.setCreateTime(System.currentTimeMillis());
         testPlanCaseExecuteHistoryMapper.insertSelective(testPlanCaseExecuteHistory);
         List<TestPlanCaseExecuteHistoryDTO> gyqReviewCaseTest = getPlanExecuteHistoryList("gyq_associate_function_case");
-        Assertions.assertTrue(StringUtils.isNotBlank(gyqReviewCaseTest.get(0).getContentText()));
+        Assertions.assertTrue(StringUtils.isNotBlank(gyqReviewCaseTest.getFirst().getContentText()));
         testPlanCaseExecuteHistory = new TestPlanCaseExecuteHistory();
         testPlanCaseExecuteHistory.setTestPlanCaseId("test_plan_associate_case_gyq_two");
         testPlanCaseExecuteHistory.setTestPlanId("associate_case_plan_gyq_two");
@@ -587,12 +607,17 @@ public class FunctionalTestCaseControllerTests extends BaseTest {
         testPlanCaseExecuteHistory.setStatus(FunctionalCaseReviewStatus.RE_REVIEWED.toString());
         testPlanCaseExecuteHistory.setId("testNoContent");
         testPlanCaseExecuteHistory.setCreateTime(System.currentTimeMillis());
-        String steps = "你好评论";
-        testPlanCaseExecuteHistory.setSteps(steps.getBytes());
+        FunctionalCaseStepDTO functionalCaseStepDTO = new FunctionalCaseStepDTO();
+        functionalCaseStepDTO.setNum(1);
+        functionalCaseStepDTO.setDesc("步骤一");
+        functionalCaseStepDTO.setResult("你好评论");
+        List<FunctionalCaseStepDTO> list = new ArrayList<>();
+        list.add(functionalCaseStepDTO);
+        testPlanCaseExecuteHistory.setSteps(JSON.toJSONString(list).getBytes());
         testPlanCaseExecuteHistory.setCreateTime(System.currentTimeMillis());
         testPlanCaseExecuteHistoryMapper.insertSelective(testPlanCaseExecuteHistory);
         gyqReviewCaseTest = getPlanExecuteHistoryList("gyq_associate_function_case");
-        Assertions.assertTrue(gyqReviewCaseTest.size()>1);
+        Assertions.assertTrue(gyqReviewCaseTest.size() > 1);
     }
 
     public List<TestPlanCaseExecuteHistoryDTO> getPlanExecuteHistoryList(String caseId) throws Exception {

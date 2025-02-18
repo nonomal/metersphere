@@ -19,9 +19,12 @@
           v-if="props.mode === 'rich'"
           v-model:raw="currentContent"
           v-model:commentIds="commentIds"
+          v-model:filed-ids="uploadFileIds"
           :upload-image="props.uploadImage"
           :preview-url="props.previewUrl"
           class="w-full"
+          :limit-length="1000"
+          :auto-height="false"
           placeholder="ms.comment.enterPlaceHolderTip"
         />
         <a-textarea
@@ -31,7 +34,7 @@
         ></a-textarea>
         <div class="mt-4 flex flex-row justify-end gap-[12px]">
           <a-button @click="cancelClick">{{ t('common.cancel') }}</a-button>
-          <a-button type="primary" :disabled="!currentContent" @click="publish">{{ t('common.publish') }}</a-button>
+          <a-button type="primary" :disabled="isDisabled" @click="publish">{{ t('common.publish') }}</a-button>
         </div>
       </div>
     </div>
@@ -39,8 +42,6 @@
 </template>
 
 <script lang="ts" setup>
-  import { defineModel, ref } from 'vue';
-
   import MsAvatar from '@/components/pure/ms-avatar/index.vue';
   import MsRichText from '@/components/pure/ms-rich-text/MsRichText.vue';
 
@@ -66,6 +67,7 @@
 
   const currentContent = defineModel<string>('defaultValue', { default: '' });
   const commentIds = defineModel<string[]>('noticeUserIds', { default: [] });
+  const uploadFileIds = defineModel<string[]>('filedIds', { default: [] });
   const userStore = useUserStore();
   const emit = defineEmits<{
     (event: 'publish', value: string): void;
@@ -100,6 +102,11 @@
     window.removeEventListener('keydown', handleGlobalKeyDown);
   });
 
+  const isDisabled = computed(() => {
+    // 此处如果富文本输入内容后就算手动清空，还是会触发文本行内容为<p style=""></p>
+    return !currentContent.value || currentContent.value === '<p style=""></p>';
+  });
+
   defineExpose({
     isActive,
   });
@@ -108,7 +115,13 @@
 <style scoped lang="less">
   .commentWrapper {
     z-index: 101;
+    background-color: var(--color-text-fff);
     box-shadow: 1px -1px 4px rgba(2 2 2 / 10%);
-    @apply absolute bottom-0 w-full bg-white px-4 py-4;
+    @apply absolute bottom-0 w-full px-4 py-4;
+  }
+  :deep(.rich-wrapper) {
+    .halo-rich-text-editor {
+      padding: 8px !important;
+    }
   }
 </style>

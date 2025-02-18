@@ -1,23 +1,26 @@
 package io.metersphere.plan.service;
 
-import io.metersphere.bug.domain.BugRelationCase;
 import io.metersphere.bug.domain.BugRelationCaseExample;
 import io.metersphere.bug.mapper.BugRelationCaseMapper;
 import io.metersphere.bug.service.BugCommonService;
 import io.metersphere.plan.dto.TestPlanBugCaseDTO;
+import io.metersphere.plan.dto.TestPlanCollectionDTO;
+import io.metersphere.plan.dto.TestPlanResourceExecResultDTO;
+import io.metersphere.plan.dto.request.BaseCollectionAssociateRequest;
 import io.metersphere.plan.dto.request.TestPlanBugPageRequest;
 import io.metersphere.plan.dto.response.TestPlanBugPageResponse;
 import io.metersphere.plan.mapper.ExtTestPlanBugMapper;
 import io.metersphere.plugin.platform.dto.SelectOption;
 import io.metersphere.system.dto.sdk.OptionDTO;
+import io.metersphere.system.dto.sdk.SessionUser;
 import io.metersphere.system.mapper.BaseUserMapper;
 import jakarta.annotation.Resource;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -45,33 +48,45 @@ public class TestPlanBugService extends TestPlanResourceService {
     }
 
     @Override
-    public int deleteBatchByTestPlanId(List<String> testPlanIdList) {
+    public void deleteBatchByTestPlanId(List<String> testPlanIdList) {
         BugRelationCaseExample example = new BugRelationCaseExample();
         example.createCriteria().andTestPlanIdIn(testPlanIdList);
-        List<BugRelationCase> bugRelationCases = bugRelationCaseMapper.selectByExample(example);
-        List<String> relateIdsByDirect = bugRelationCases.stream().filter(relatedCase -> StringUtils.isNotEmpty(relatedCase.getCaseId())).map(BugRelationCase::getId).toList();
-        List<String> relateIdsByPlan = bugRelationCases.stream().filter(relatedCase -> StringUtils.isEmpty(relatedCase.getCaseId())).map(BugRelationCase::getId).toList();
-        if (CollectionUtils.isNotEmpty(relateIdsByDirect)) {
-            // 缺陷-用例, 存在直接关联
-            BugRelationCaseExample updateExample = new BugRelationCaseExample();
-            updateExample.createCriteria().andIdIn(relateIdsByDirect);
-            BugRelationCase record = new BugRelationCase();
-            record.setTestPlanId(StringUtils.EMPTY);
-            record.setTestPlanCaseId(StringUtils.EMPTY);
-            bugRelationCaseMapper.updateByExampleSelective(record, updateExample);
-        }
-        if (CollectionUtils.isNotEmpty(relateIdsByPlan)) {
-            // 缺陷-用例, 计划关联
-            BugRelationCaseExample deleteExample = new BugRelationCaseExample();
-            deleteExample.createCriteria().andIdIn(relateIdsByPlan);
-            bugRelationCaseMapper.deleteByExample(deleteExample);
-        }
-        return bugRelationCases.size();
+        bugRelationCaseMapper.deleteByExample(example);
+    }
+
+    @Override
+    public Map<String, Long> caseExecResultCount(String testPlanId) {
+        return Map.of();
+    }
+
+    @Override
+    public long copyResource(String originalTestPlanId, String newTestPlanId, Map<String, String> oldCollectionIdToNewCollectionId, String operator, long operatorTime) {
+        return 0;
+    }
+
+    @Override
+    public List<TestPlanResourceExecResultDTO> selectDistinctExecResultByProjectId(String projectId) {
+        return List.of();
+    }
+
+    @Override
+    public List<TestPlanResourceExecResultDTO> selectLastExecResultByProjectId(String projectId) {
+        return List.of();
+    }
+
+    @Override
+    public List<TestPlanResourceExecResultDTO> selectDistinctExecResultByTestPlanIds(List<String> testPlanIds) {
+        return List.of();
+    }
+
+    @Override
+    public List<TestPlanResourceExecResultDTO> selectLastExecResultByTestPlanIds(List<String> testPlanIds) {
+        return List.of();
     }
 
 
     @Override
-    public long getNextOrder(String projectId) {
+    public long getNextOrder(String testPlanId) {
         return 0;
     }
 
@@ -93,7 +108,7 @@ public class TestPlanBugService extends TestPlanResourceService {
     private void parseCustomField(List<TestPlanBugPageResponse> bugList, String projectId) {
         // MS处理人会与第三方的值冲突, 分开查询
         List<SelectOption> headerOptions = bugCommonService.getHeaderHandlerOption(projectId);
-        Map<String, String> headerHandleUserMap = headerOptions.stream().collect(Collectors.toMap(SelectOption::getValue, SelectOption::getText));
+        Map<String, String> headerHandleUserMap = CollectionUtils.isEmpty(headerOptions) ? new HashMap<>() : headerOptions.stream().collect(Collectors.toMap(SelectOption::getValue, SelectOption::getText));
         List<SelectOption> localOptions = bugCommonService.getLocalHandlerOption(projectId);
         Map<String, String> localHandleUserMap = localOptions.stream().collect(Collectors.toMap(SelectOption::getValue, SelectOption::getText));
 
@@ -120,9 +135,19 @@ public class TestPlanBugService extends TestPlanResourceService {
         List<TestPlanBugCaseDTO> bugRelatedCases = extTestPlanBugMapper.getBugRelatedCase(bugIds, planId);
         Map<String, List<TestPlanBugCaseDTO>> bugRelateCaseMap = bugRelatedCases.stream().collect(Collectors.groupingBy(TestPlanBugCaseDTO::getBugId));
         bugList.forEach(bug -> {
-            bug.setRelateCase(bugRelateCaseMap.get(bug.getId()));
+            bug.setRelateCases(bugRelateCaseMap.get(bug.getId()));
             bug.setCreateUser(userMap.get(bug.getCreateUser()));
         });
         return bugList;
     }
+
+    @Override
+    public void associateCollection(String planId, Map<String, List<BaseCollectionAssociateRequest>> collectionAssociates, SessionUser user) {
+        // TODO: 暂不支持缺陷关联测试集
+    }
+
+	@Override
+	public void initResourceDefaultCollection(String planId, List<TestPlanCollectionDTO> defaultCollections) {
+		// 暂不支持缺陷关联测试集
+	}
 }

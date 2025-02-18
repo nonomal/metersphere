@@ -131,6 +131,8 @@
             b.num as num,
             b.title as name,
             b.handle_user handleUser,
+            b.create_user createUser,
+            createUser.name AS createUserName,
             b.`status`,
             bc.description as content,
             brc.test_plan_id testPlanId,
@@ -139,6 +141,7 @@
             bug_relation_case brc
                 INNER JOIN bug b ON brc.bug_id = b.id
                 INNER JOIN bug_content bc ON brc.bug_id = bc.bug_id
+        LEFT JOIN user createUser ON b.create_user = createUser.id
         left join test_plan tp on brc.test_plan_id = tp.id
         <where>
             <include refid="queryWhereConditionByProvider"/>
@@ -260,6 +263,8 @@
     <select id="getBugCountByIds" resultType="io.metersphere.bug.dto.CaseRelateBugDTO">
         SELECT
             bug.id as bugId,
+            bug.num as num,
+            bug.status as status,
             bug.title as title,
             bug_relation_case.case_type as caseType,
             bug_relation_case.case_id as caseId,
@@ -272,6 +277,7 @@
             <foreach collection="ids" item="id" separator="," open="(" close=")">
                 #{id}
             </foreach>
+        and bug_relation_case.test_plan_id = #{testPlanId}
         ORDER BY
             bug.pos DESC
     </select>
@@ -282,6 +288,8 @@
         b.num as num,
         b.title as name,
         b.handle_user handleUser,
+        b.create_user createUser,
+        createUser.name AS createUserName,
         b.`status`,
         bc.description as content,
         brc.test_plan_id testPlanId,
@@ -290,11 +298,12 @@
         bug_relation_case brc
         INNER JOIN bug b ON brc.bug_id = b.id
         INNER JOIN bug_content bc ON brc.bug_id = bc.bug_id
-        left join test_plan tp on brc.test_plan_id = tp.id
+        LEFT JOIN test_plan tp on brc.test_plan_id = tp.id
+        LEFT JOIN user createUser ON b.create_user = createUser.id
         <where>
+            b.deleted = false
             <if test="request.testPlanCaseId != null and request.testPlanCaseId != ''">
                 and brc.test_plan_case_id = #{request.testPlanCaseId}
-
             </if>
             <if test="request.keyword != null and request.keyword != ''">
                 and b.title like concat('%', #{request.keyword},'%')

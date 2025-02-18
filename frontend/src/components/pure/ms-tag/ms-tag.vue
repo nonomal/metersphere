@@ -14,9 +14,17 @@
     @close="emit('close')"
   >
     <slot name="icon"></slot>
-    <div class="one-line-text">
-      <slot></slot>
-    </div>
+    <a-tooltip :disabled="props.tooltipDisabled">
+      <div :class="`one-line-text max-w-[${props.maxWidth || '144px'}]`">
+        <slot></slot>
+      </div>
+      <template v-if="$slots.tooltipContent" #content>
+        <slot name="tooltipContent"></slot>
+      </template>
+      <template v-else #content>
+        <slot></slot>
+      </template>
+    </a-tooltip>
   </a-tag>
 </template>
 
@@ -39,6 +47,7 @@
       maxWidth?: string;
       noMargin?: boolean; // tag之间是否有间距
       closable?: boolean; // 是否可关闭
+      tooltipDisabled?: boolean; // 是否禁用tooltip
     }>(),
     {
       type: 'default',
@@ -66,7 +75,7 @@
   // 计算标签的颜色和背景颜色
   const typeList: Record<string, any> = {
     dark: {
-      'color': 'white',
+      'color': 'var(--color-text-fff)',
       'border-color': 'rgb(var(--#{}-5))',
       'background': 'rgb(var(--#{}-5))',
     },
@@ -86,7 +95,7 @@
     },
     default: {
       'color': 'var(--color-text-1)',
-      'background': props.theme !== 'outline' ? 'var(--color-text-n8)' : 'white',
+      'background': props.theme !== 'outline' ? 'var(--color-text-n8)' : 'var(--color-text-fff)',
       'border-color':
         props.theme === 'lightOutLine' || props.theme === 'outline'
           ? 'var(--color-text-input-border)'

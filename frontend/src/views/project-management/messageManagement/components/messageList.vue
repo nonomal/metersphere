@@ -8,7 +8,7 @@
     @toggle-full-screen="handleToggleFullScreen"
   >
     <template #headerLeft>
-      <div class="font-medium text-[var(--color-text-000)]">{{ t('project.messageManagement.config') }}</div>
+      <div class="font-medium text-[var(--color-text-1)]">{{ t('project.messageManagement.config') }}</div>
     </template>
     <template #headerRight>
       <MsSelect
@@ -54,7 +54,7 @@
           class="w-full"
           mode="remote"
           :options="defaultReceivers"
-          :remote-filter-func="(opts) => getReceiverOptions(opts, record.event)"
+          :remote-filter-func="(opts) => getReceiverOptions(opts, record.event, record.taskType)"
           :search-keys="['label']"
           allow-search
           :at-least-one="true"
@@ -109,8 +109,8 @@
             v-xpack
             type="button"
             @click="editRobot(record, dataIndex as string)"
-            >{{ t('common.setting') }}</MsButton
-          >
+            >{{ t('common.setting') }}
+          </MsButton>
         </div>
         <span v-else></span>
       </template>
@@ -225,6 +225,7 @@
     name: string;
     rowspan?: number;
     projectRobotConfigMap: Record<string, ProjectRobotConfig>;
+
     [key: string]: any;
   }
 
@@ -330,14 +331,22 @@
     }));
   }
 
-  function getReceiverOptions(options: SelectOptionData[], event: string) {
+  function getReceiverOptions(options: SelectOptionData[], event: string, taskType: string) {
     if (event === 'CREATE' || event === 'CASE_CREATE' || event === 'MOCK_CREATE') {
       // 创建事件的接收人不包含操作人、创建人、关注人
-      options = options.filter((e) => !['OPERATOR', 'CREATE_USER', 'FOLLOW_PEOPLE'].includes(e.id));
+      options = options.filter((e) => !['OPERATOR', 'CREATE_USER', 'FOLLOW_PEOPLE', 'HANDLE_USER'].includes(e.id));
     }
     if (event.indexOf('EXECUTE') === -1) {
       // 除执行事件，都不显示操作人
       options = options.filter((e) => !['OPERATOR'].includes(e.id));
+    }
+    if (taskType === 'BUG_SYNC_TASK') {
+      // 缺陷同步任务, 只显示操作人
+      options = options.filter((e) => !['CREATE_USER', 'FOLLOW_PEOPLE', 'HANDLE_USER'].includes(e.id));
+    }
+    if (taskType.indexOf('BUG') === -1) {
+      // 非缺陷任务，不显示处理人
+      options = options.filter((e) => !['HANDLE_USER'].includes(e.id));
     }
     return options;
   }
@@ -436,6 +445,11 @@
 </script>
 
 <style lang="less" scoped>
+  :deep(.arco-table-cell-expand-icon) {
+    .arco-table-cell-inline-icon {
+      margin-right: 8px;
+    }
+  }
   :deep(.gray-td-bg) {
     td {
       background-color: var(--color-text-n9);

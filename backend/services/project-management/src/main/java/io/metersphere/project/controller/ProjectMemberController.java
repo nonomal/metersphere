@@ -5,11 +5,16 @@ import com.github.pagehelper.PageHelper;
 import io.metersphere.project.dto.ProjectUserDTO;
 import io.metersphere.project.request.*;
 import io.metersphere.project.service.ProjectMemberService;
+import io.metersphere.sdk.constants.EmailInviteSource;
 import io.metersphere.sdk.constants.PermissionConstants;
 import io.metersphere.system.dto.CommentUserInfo;
+import io.metersphere.system.dto.request.UserInviteRequest;
 import io.metersphere.system.dto.sdk.OptionDTO;
 import io.metersphere.system.dto.user.UserExtendDTO;
+import io.metersphere.system.dto.user.response.UserInviteResponse;
+import io.metersphere.system.log.constants.OperationLogModule;
 import io.metersphere.system.security.CheckOwner;
+import io.metersphere.system.service.SimpleUserService;
 import io.metersphere.system.utils.PageUtils;
 import io.metersphere.system.utils.Pager;
 import io.metersphere.system.utils.SessionUtils;
@@ -19,6 +24,7 @@ import io.swagger.v3.oas.annotations.Parameters;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import org.apache.shiro.authz.annotation.Logical;
 import org.apache.shiro.authz.annotation.RequiresPermissions;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -35,6 +41,8 @@ public class ProjectMemberController {
 
     @Resource
     private ProjectMemberService projectMemberService;
+    @Resource
+    private SimpleUserService simpleUserService;
 
     @PostMapping("/list")
     @Operation(summary = "项目管理-成员-列表查询")
@@ -51,14 +59,14 @@ public class ProjectMemberController {
     @CheckOwner(resourceId = "#projectId", resourceType = "project")
     public List<UserExtendDTO> getMemberOption(@PathVariable String projectId,
                                                @Schema(description = "查询关键字，根据邮箱和用户名查询")
-                                            @RequestParam(value = "keyword", required = false) String keyword) {
+                                               @RequestParam(value = "keyword", required = false) String keyword) {
         return projectMemberService.getMemberOption(projectId, keyword);
     }
 
     @GetMapping("/get-role/option/{projectId}")
     @Operation(summary = "项目管理-成员-获取用户组下拉选项")
-    @RequiresPermissions(PermissionConstants.PROJECT_USER_READ)
-    @CheckOwner(resourceId = "#projectId", resourceType = "project")
+    //@RequiresPermissions(PermissionConstants.PROJECT_USER_READ)
+    @RequiresPermissions(value = {PermissionConstants.PROJECT_USER_READ, PermissionConstants.SYSTEM_ORGANIZATION_PROJECT_READ}, logical = Logical.OR)
     public List<OptionDTO> getRoleOption(@PathVariable String projectId) {
         return projectMemberService.getRoleOption(projectId);
     }
@@ -71,12 +79,19 @@ public class ProjectMemberController {
         projectMemberService.addMember(request, SessionUtils.getUserId());
     }
 
+    @PostMapping("/invite")
+    @Operation(summary = "系统设置-组织-成员-邀请用户注册")
+    @RequiresPermissions(PermissionConstants.PROJECT_USER_INVITE)
+    public UserInviteResponse invite(@Validated @RequestBody UserInviteRequest request) {
+        return simpleUserService.saveInviteRecord(request, EmailInviteSource.PROJECT.name(), SessionUtils.getUser());
+    }
+
     @PostMapping("/update")
     @Operation(summary = "项目管理-成员-编辑成员")
     @RequiresPermissions(PermissionConstants.PROJECT_USER_UPDATE)
     @CheckOwner(resourceId = "#request.getProjectId()", resourceType = "project")
     public void updateMember(@RequestBody ProjectMemberEditRequest request) {
-        projectMemberService.updateMember(request, SessionUtils.getUserId());
+        projectMemberService.updateMember(request, SessionUtils.getUserId(), "/project/member/update", OperationLogModule.PROJECT_MANAGEMENT_PERMISSION_MEMBER);
     }
 
     @GetMapping("/remove/{projectId}/{userId}")
@@ -111,5 +126,12 @@ public class ProjectMemberController {
     @Operation(summary = "项目管理-成员-获取评论用户@下拉选项")
     public List<CommentUserInfo> selectCommentUser(@PathVariable String projectId, @RequestParam(value = "keyword", required = false) String keyword) {
         return projectMemberService.selectCommentUser(projectId, keyword);
+    }
+
+    @PostMapping("/update-member")
+    @Operation(summary = "系统设置-系统-组织与项-项目-更新成员用户组")
+    @RequiresPermissions(PermissionConstants.ORGANIZATION_PROJECT_MEMBER_UPDATE)
+    public void updateProjectMemberRole(@RequestBody ProjectMemberEditRequest request) {
+        projectMemberService.updateMember(request, SessionUtils.getUserId(), "/project/member/update-member", OperationLogModule.SETTING_ORGANIZATION_PROJECT);
     }
 }

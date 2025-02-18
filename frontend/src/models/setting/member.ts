@@ -42,6 +42,7 @@ export interface AddOrUpdateMemberModel {
   memberIds?: string[];
   userRoleIds?: string[];
   projectIds?: string[];
+  memberId?: string;
 }
 // 添加组织成员到项目
 export interface BatchAddProjectModel {
@@ -58,3 +59,9 @@ export interface LinkItem {
   disabled?: boolean;
 }
 export type LinkList = LinkItem[];
+
+export interface InviteOrgMemberParams {
+  inviteEmails: string[];
+  userRoleIds: string[];
+  organizationId: string;
+}

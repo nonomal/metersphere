@@ -3,7 +3,6 @@
     :width="891"
     :visible="visible"
     unmount-on-close
-    :mask="false"
     destroy-on-close
     @confirm="handleAddOrUpdate"
     @cancel="handleCancel"
@@ -61,37 +60,7 @@
           <a-option value="PATH">{{ t('project.environmental.http.path') }}</a-option>
         </a-select>
       </a-form-item>
-      <!-- 接口模块选择 -->
-      <!-- <a-form-item
-        v-if="showApiModule"
-        class="mb-[16px]"
-        field="apiModule"
-        asterisk-position="end"
-        :label="t('project.environmental.http.apiModuleSelect')"
-        :rules="[{ required: true, message: t('project.environmental.http.hostNameRequired') }]"
-      >
-        <a-select v-model:model-value="form.apiModule" multiple :placeholder="t('common.pleaseSelect')">
-          <a-option value="none">{{ t('project.environmental.http.none') }}</a-option>
-        </a-select>
-      </a-form-item> -->
-      <a-form-item class="mb-[16px]" field="description" :label="t('project.environmental.http.description')">
-        <a-input v-model="form.description" />
-      </a-form-item>
-      <!-- 选择UI测试模块 -->
-      <!-- <a-form-item
-        v-if="showUIModule"
-        class="mb-[16px]"
-        field="enableCondition"
-        asterisk-position="end"
-        :label="t('project.environmental.http.uiModuleSelect')"
-        :rules="[{ required: true, message: t('project.environmental.http.hostNameRequired') }]"
-      >
-        <a-select v-model:model-value="form.uiModule" multiple :placeholder="t('common.pleaseSelect')">
-          <a-option value="none">{{ t('project.environmental.http.none') }}</a-option>
-        </a-select>
-      </a-form-item> -->
       <!-- 展示模块 -->
-      <!-- TODO 模块还没有加 -->
       <a-form-item
         v-if="form.type === 'MODULE'"
         class="mb-[16px]"
@@ -100,54 +69,17 @@
         :rules="[{ required: true, message: t('project.environmental.http.selectModule') }]"
         asterisk-position="end"
       >
-        <!-- TODO 先做普通树 放在下一个版本 -->
-        <!-- <ApiTree
-          v-model:focus-node-key="focusNodeKey"
-          :placeholder="t('project.environmental.http.selectApiModule')"
-          :selected-keys="selectedKeys"
-          :data="moduleTree"
-          :field-names="{
-            title: 'name',
-            key: 'id',
-            children: 'children',
-            count: 'count',
-          }"
+        <MsTreeSelect
+          v-model:model-value="form.moduleId"
+          v-model:data="envTree"
+          allow-clear
+          :multiple="true"
+          tree-check-strictly
           :tree-checkable="true"
-          :hide-more-action="true"
-        >
-          <template #tree-slot-title="nodeData">
-            <div class="inline-flex w-full">
-              <div class="one-line-text w-full text-[var(--color-text-1)]">{{ nodeData.name }}</div>
-            </div>
-          </template>
-          <template #tree-slot-extra="nodeData">
-            <span><MsTableMoreAction :list="moreActions" @select="handleMoreActionSelect($event, nodeData)" /></span>
-          </template>
-        </ApiTree> -->
-        <a-tree-select
-          v-model="form.moduleId"
-          :data="envTree"
-          class="w-full"
-          :tree-checkable="true"
-          :allow-search="true"
-          :field-names="{
-            title: 'name',
-            key: 'id',
-            children: 'children',
-          }"
-          tree-checked-strategy="child"
-          :tree-props="{
-            virtualListProps: {
-              height: 200,
-            },
-          }"
-        >
-          <template #tree-slot-title="node">
-            <a-tooltip :content="`${node.name}`" position="tl">
-              <div class="one-line-text w-[300px] text-[var(--color-text-1)]">{{ node.name }}</div>
-            </a-tooltip>
-          </template>
-        </a-tree-select>
+          show-contain-child-module
+          :placeholder="t('common.pleaseSelect')"
+          :field-names="{ title: 'name', key: 'id', children: 'children' }"
+        />
       </a-form-item>
       <!-- 路径 -->
       <a-form-item
@@ -170,6 +102,22 @@
           />
         </a-input-group>
       </a-form-item>
+      <a-form-item class="mb-[16px]" field="description" :label="t('common.desc')">
+        <a-textarea v-model="form.description" :max-length="1000" auto-size :placeholder="t('common.pleaseInput')" />
+      </a-form-item>
+      <!-- 选择UI测试模块 -->
+      <!-- <a-form-item
+        v-if="showUIModule"
+        class="mb-[16px]"
+        field="enableCondition"
+        asterisk-position="end"
+        :label="t('project.environmental.http.uiModuleSelect')"
+        :rules="[{ required: true, message: t('project.environmental.http.hostNameRequired') }]"
+      >
+        <a-select v-model:model-value="form.uiModule" multiple :placeholder="t('common.pleaseSelect')">
+          <a-option value="none">{{ t('project.environmental.http.none') }}</a-option>
+        </a-select>
+      </a-form-item> -->
       <httpHeader
         v-model:params="form.headers"
         :layout="activeLayout"
@@ -225,19 +173,19 @@
 </template>
 
 <script lang="ts" setup>
-  import { defineModel } from 'vue';
   import { Message, ValidatedError } from '@arco-design/web-vue';
 
   import MsDrawer from '@/components/pure/ms-drawer/index.vue';
-  import type { ActionsItem } from '@/components/pure/ms-table-more-action/types';
+  import MsTreeSelect from '@/components/pure/ms-tree-select/index.vue';
   import type { MsTreeNodeData } from '@/components/business/ms-tree/types';
 
   import { getEnvModules } from '@/api/modules/api-test/management';
   import { useI18n } from '@/hooks/useI18n';
   import { useAppStore } from '@/store';
   import useProjectEnvStore from '@/store/modules/setting/useProjectEnvStore';
-  import { getGenerateId } from '@/utils';
+  import { findNodeByKey, getGenerateId, mapTree } from '@/utils';
 
+  import type { SelectedModule } from '@/models/apiTest/management';
   import type { ModuleTreeNode } from '@/models/common';
   import { HttpForm } from '@/models/projectManagement/environmental';
   import { RequestAuthType } from '@/enums/apiEnum';
@@ -247,7 +195,6 @@
   const props = defineProps<{
     currentId: string;
     isCopy: boolean;
-    moduleTree: ModuleTreeNode[];
   }>();
   const appStore = useAppStore();
   const store = useProjectEnvStore();
@@ -310,6 +257,9 @@
 
   const visible = defineModel('visible', { required: true, type: Boolean, default: false });
 
+  const envTree = ref<MsTreeNodeData[]>([]);
+  const moduleTree = ref<MsTreeNodeData[]>([]);
+
   const { t } = useI18n();
 
   function resetForm() {
@@ -326,7 +276,7 @@
           modules = form.value.moduleId.map((item) => {
             return {
               moduleId: item,
-              containChildModule: false,
+              containChildModule: findNodeByKey<MsTreeNodeData>(envTree.value, item, 'id')?.containChildModule ?? false,
             };
           });
         }
@@ -381,11 +331,26 @@
     });
   };
 
-  const envTree = ref<ModuleTreeNode[]>([]);
-
   const title = ref<string>('');
 
-  function initHttpDetail() {
+  async function initModuleTree(selectedModules?: SelectedModule[]) {
+    try {
+      const res = await getEnvModules({
+        projectId: appStore.currentProjectId,
+        selectedModules,
+      });
+      moduleTree.value = res.moduleTree;
+      store.currentEnvDetailInfo.config.httpConfig.forEach((item) => {
+        if (item.id === props.currentId) {
+          item.moduleMatchRule.modules = res.selectedModules;
+        }
+      });
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.log(error);
+    }
+  }
+  async function initHttpDetail() {
     title.value = props.currentId ? t('project.environmental.http.edit') : t('project.environmental.http.add');
     if (props.isCopy) {
       title.value = t('project.environmental.http.copy');
@@ -394,6 +359,15 @@
       const currentItem = store.currentEnvDetailInfo.config.httpConfig.find(
         (item) => item.id === props.currentId
       ) as HttpForm;
+      await initModuleTree(currentItem.moduleMatchRule.modules);
+      envTree.value = mapTree<ModuleTreeNode>(moduleTree.value, (node) => {
+        return {
+          ...node,
+          containChildModule:
+            currentItem.moduleMatchRule.modules.find((item) => item.moduleId === node.id)?.containChildModule ?? false,
+          disabled: !!node.parent?.containChildModule,
+        };
+      });
       if (currentItem) {
         const { path, condition } = currentItem.pathMatchRule;
         const urlPath = currentItem.url.match(/\/\/(.*)/);
@@ -406,18 +380,9 @@
         };
       }
     } else {
+      await initModuleTree();
+      envTree.value = moduleTree.value;
       resetForm();
-    }
-  }
-
-  async function initModuleTree() {
-    try {
-      const res = await getEnvModules({
-        projectId: appStore.currentProjectId,
-      });
-      envTree.value = res.moduleTree;
-    } catch (error) {
-      console.log(error);
     }
   }
 
@@ -430,14 +395,19 @@
     }
   );
 
+  watch(
+    () => form.value.moduleId,
+    (newValue) => {
+      if (newValue) {
+        httpRef.value?.validateField('moduleId');
+      }
+    }
+  );
+
   const handleCancel = () => {
     visible.value = false;
     resetForm();
   };
-
-  onBeforeMount(() => {
-    initModuleTree();
-  });
 </script>
 
 <style lang="less" scoped>

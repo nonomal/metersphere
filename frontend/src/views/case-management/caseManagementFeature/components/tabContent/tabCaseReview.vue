@@ -13,8 +13,8 @@
       ></a-input-search>
     </div>
     <ms-base-table v-bind="propsRes" v-on="propsEvent">
-      <template #reviewName="{ record }">
-        <a-button type="text" class="px-0" @click="review(record)">{{ record.reviewName }}</a-button>
+      <template #reviewNum="{ record }">
+        <a-button type="text" class="px-0" @click="review(record)">{{ record.reviewNum }}</a-button>
       </template>
       <template #reviewStatus="{ record }">
         <MsStatusTag :status="record.reviewStatus || 'PREPARED'" />
@@ -33,7 +33,7 @@
         <MsIcon
           :type="statusIconMap[record.status]?.icon || ''"
           class="mr-1"
-          :class="[statusIconMap[record.status].color] || ''"
+          :class="statusIconMap[record.status]?.color"
         ></MsIcon>
         <span>{{ statusIconMap[record.status]?.statusText || '' }} </span>
       </template>
@@ -86,6 +86,7 @@
   const columns: MsTableColumn = [
     {
       title: 'ID',
+      slotName: 'reviewNum',
       dataIndex: 'reviewNum',
       sortIndex: 1,
       showTooltip: true,
@@ -132,7 +133,6 @@
     tableKey: TableKeyEnum.CASE_MANAGEMENT_TAB_REVIEW,
     scroll: { x: '100%' },
     heightUsed: 360,
-    enableDrag: true,
   });
 
   async function initData() {

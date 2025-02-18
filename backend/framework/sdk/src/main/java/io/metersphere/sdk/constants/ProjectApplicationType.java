@@ -14,6 +14,20 @@ public class ProjectApplicationType {
 
     }
 
+    /**
+     * 任务中心
+     */
+    public enum TASK {
+        /**
+         * 系统即时任务
+         */
+        TASK_RECORD,
+        /**
+         * 任务执行结果
+         */
+        TASK_CLEAN_REPORT,
+    }
+
     //接口测试
     public enum API {
         API_URL_REPEATABLE,
@@ -37,6 +51,8 @@ public class ProjectApplicationType {
     public enum CASE_RELATED_CONFIG {
         CASE_RELATED,
         CASE_ENABLE,
+        CRON_EXPRESSION,
+        SYNC_ENABLE,
     }
 
     public enum PLATFORM_DEMAND_CONFIG {

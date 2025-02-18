@@ -18,8 +18,7 @@
         :active-module="activeModule"
         :offspring-ids="offspringIds"
         class="flex-1 overflow-hidden !pl-0 !pr-[16px]"
-        :protocol="protocol"
-        :member-options="memberOptions"
+        :selected-protocols="selectedProtocols"
         read-only
       />
     </div>
@@ -38,7 +37,6 @@
   const props = defineProps<{
     visible: boolean;
     mode: 'pre' | 'post'; // pre: 前置依赖，post: 后置依赖
-    memberOptions: { label: string; value: string }[];
   }>();
 
   const { t } = useI18n();
@@ -50,15 +48,15 @@
   const folderTree = ref<ModuleTreeNode[]>([]);
   const activeModule = ref<string>('all');
   const offspringIds = ref<string[]>([]);
-  const protocol = ref('HTTP');
+  const selectedProtocols = ref<string[]>([]);
 
   function handleNodeSelect(keys: string[], _offspringIds: string[]) {
     [activeModule.value] = keys;
     offspringIds.value = _offspringIds;
   }
 
-  function handleProtocolChange(val: string) {
-    protocol.value = val;
+  function handleProtocolChange(val: string[]) {
+    selectedProtocols.value = val;
   }
 </script>
 

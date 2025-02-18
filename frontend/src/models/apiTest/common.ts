@@ -1,4 +1,5 @@
 import { Language } from '@/components/pure/ms-code-editor/types';
+import type { JsonSchema, JsonSchemaTableItem } from '@/components/pure/ms-json-schema/types';
 
 import {
   type FullResponseAssertionType,
@@ -118,37 +119,16 @@ export interface ExecuteBinaryBody {
   file?: RequestFileInfo;
   sendAsBody?: boolean; // 是否作为正文发送，只有 定义/mock 的响应体有此字段
 }
-// 接口请求-JsonSchema
-export interface JsonSchema {
-  example: Record<string, any>;
-  id: string;
-  title: string;
-  type: string;
-  description: string;
-  items: string;
-  mock: Record<string, any>;
-  properties: Record<string, any>;
-  additionalProperties: string;
-  required: string[];
-  pattern: string;
-  maxLength: number;
-  minLength: number;
-  minimum: number;
-  maximum: number;
-  schema: string;
-  format: string;
-  enumString: string[];
-  enumInteger: number[];
-  enumNumber: number[];
-  extensions: Record<string, any>;
-}
 
 // 接口请求json-body参数集合信息
 export interface ExecuteJsonBody {
   enableJsonSchema?: boolean;
   enableTransition?: boolean;
-  jsonSchema?: JsonSchema[];
+  jsonSchema?: JsonSchema;
   jsonValue: string;
+  // 前端渲染字段
+  jsonSchemaTableData?: JsonSchemaTableItem[];
+  jsonSchemaTableSelectedRowKeys?: string[];
 }
 // 执行请求配置
 export interface ExecuteOtherConfig {
@@ -204,6 +184,8 @@ export interface ResponseAssertionItem {
   expectedValue?: string;
   expression: string;
   enable?: boolean;
+  extractType?: RequestExtractExpressionEnum;
+  valid?: boolean;
 }
 // 断言-JSONPath断言子项
 export type ResponseJSONPathAssertionItem = ResponseAssertionItem;
@@ -212,19 +194,20 @@ export type ResponseRegexAssertionItem = Pick<ResponseAssertionItem, 'expression
 // 断言-Xpath断言子项
 export type ResponseXPathAssertionItem = Pick<ResponseAssertionItem, 'expression' | 'expectedValue'>;
 // 脚本公共配置
+export interface CommonScriptInfo {
+  id: string; // 公共脚本id
+  name: string; // 公共脚本名称
+  script: string; // 公共脚本内容
+  params: KeyValueParam[]; // 公共脚本参数
+  scriptLanguage: Language; // 脚本语言
+}
 export interface ScriptCommonConfig {
   enableCommonScript: boolean; // 是否启用公共脚本
   script: string; // 脚本内容
   scriptId: string; // 脚本id
   scriptName: string; // 脚本名称
   scriptLanguage: Language; // 脚本语言
-  commonScriptInfo: {
-    id: string; // 公共脚本id
-    name: string; // 公共脚本名称
-    script: string; // 公共脚本内容
-    params: KeyValueParam[]; // 公共脚本参数
-    scriptLanguage: Language; // 脚本语言
-  }; // 公共脚本信息
+  commonScriptInfo: CommonScriptInfo; // 公共脚本信息
 }
 // 断言-响应体断言
 export interface ResponseBodyAssertion {
@@ -242,9 +225,9 @@ export type ResponseScriptAssertion = ScriptCommonConfig;
 export interface ResponseVariableAssertion {
   variableAssertionItems: ResponseAssertionItem[];
 }
-// 执行请求-前后置条件处理器
+// 执行请求-前后置操作处理器
 export interface ExecuteConditionProcessorCommon {
-  id: number; // 处理器ID，前端列表渲染需要，后台无此字段
+  id: string | number; // 处理器ID，前端列表渲染需要，后台无此字段
   enable: boolean; // 是否启用
   name?: string; // 条件处理器名称
   processorType: RequestConditionProcessor;
@@ -253,9 +236,7 @@ export interface ExecuteConditionProcessorCommon {
   beforeStepScript: boolean; // 是否是步骤内前置脚本前
   assertionType?: RequestConditionProcessor;
 }
-// 执行请求-前后置条件-脚本处理器
-export type ScriptProcessor = ScriptCommonConfig & ExecuteConditionProcessorCommon;
-// 执行请求-前后置条件-SQL脚本处理器
+// 执行请求-前后置操作-SQL脚本处理器
 export interface SQLProcessor extends ExecuteConditionProcessorCommon {
   name: string; // 描述
   dataSourceId: string; // 数据源ID
@@ -266,7 +247,7 @@ export interface SQLProcessor extends ExecuteConditionProcessorCommon {
   variableNames: string; // 按列存储时的变量名集合,多个列可以使用逗号分隔
   extractParams: KeyValueParam[]; // 提取参数列表
 }
-// 执行请求-前后置条件-等待时间处理器
+// 执行请求-前后置操作-等待时间处理器
 export interface TimeWaitingProcessor extends ExecuteConditionProcessorCommon {
   delay: number; // 等待时间 单位：毫秒
 }
@@ -278,35 +259,25 @@ export interface ExpressionCommonConfig {
   enable: boolean; // 是否启用
   expression: string;
   extractType: ExpressionType; // 表达式类型
-  variableName: string;
-  variableType: RequestExtractEnvType;
-  resultMatchingRule: RequestExtractResultMatchingRule; // 结果匹配规则
-  resultMatchingRuleNum: number; // 匹配第几条结果
+  variableName?: string;
+  variableType?: RequestExtractEnvType;
+  resultMatchingRule?: RequestExtractResultMatchingRule; // 结果匹配规则
+  resultMatchingRuleNum?: number; // 匹配第几条结果
 }
 // 正则提取配置
 export interface RegexExtract extends ExpressionCommonConfig {
-  expressionMatchingRule: RequestExtractExpressionRuleType; // 正则表达式匹配规则
-  extractScope: RequestExtractScope; // 正则提取范围
+  expressionMatchingRule?: RequestExtractExpressionRuleType; // 正则表达式匹配规则
+  extractScope?: RequestExtractScope; // 正则提取范围
 }
 // JSONPath提取配置
 export type JSONPathExtract = ExpressionCommonConfig;
 // XPath提取配置
 export interface XPathExtract extends ExpressionCommonConfig {
-  responseFormat: ResponseBodyXPathAssertionFormat; // 响应格式
+  responseFormat?: ResponseBodyXPathAssertionFormat; // 响应格式
 }
-// 执行请求-前后置条件-参数提取处理器
+// 执行请求-前后置操作-参数提取处理器
 export interface ExtractProcessor extends ExecuteConditionProcessorCommon {
   extractors: (RegexExtract | JSONPathExtract | XPathExtract)[];
-}
-// 执行请求-前后置条件配置
-export type ExecuteConditionProcessor = Partial<
-  ScriptProcessor & SQLProcessor & TimeWaitingProcessor & ExtractProcessor
-> &
-  ExecuteConditionProcessorCommon;
-export interface ExecuteConditionConfig {
-  enableGlobal?: boolean; // 是否启用全局前/后置 默认为 true
-  processors: ExecuteConditionProcessor[];
-  activeItemId?: number;
 }
 // 执行请求-断言配置子项
 export type ExecuteAssertionItem = ResponseAssertionCommon &
@@ -320,6 +291,24 @@ export type ExecuteAssertionItem = ResponseAssertionCommon &
 export interface ExecuteAssertionConfig {
   enableGlobal?: boolean; // 是否启用全局断言，部分地方没有
   assertions: ExecuteAssertionItem[];
+}
+// 执行请求-前后置操作-脚本处理器
+export interface ScriptProcessorChild {
+  polymorphicName: string; // 协议多态名称，写死MsCommonElement
+  assertionConfig: ExecuteAssertionConfig;
+}
+export interface ScriptProcessor extends ScriptCommonConfig, ExecuteConditionProcessorCommon {
+  children: ScriptProcessorChild[]; // 协议共有的子项配置
+}
+// 执行请求-前后置操作配置
+export type ExecuteConditionProcessor = Partial<
+  ScriptProcessor & SQLProcessor & TimeWaitingProcessor & ExtractProcessor
+> &
+  ExecuteConditionProcessorCommon;
+export interface ExecuteConditionConfig {
+  enableGlobal?: boolean; // 是否启用全局前/后置 默认为 true
+  processors: ExecuteConditionProcessor[];
+  activeItemId?: number | string;
 }
 // 执行请求-共用配置子项
 export interface ExecuteCommonChild {
@@ -475,3 +464,12 @@ export type ApiCaseReportDetail = {
   scriptIdentifier: string;
   content: RequestResult;
 };
+// curl解析结果
+export interface CurlParseResult {
+  method: RequestMethods | string;
+  url: string;
+  headers: Record<string, any>;
+  body: Record<string, any> | string;
+  bodyType: RequestBodyFormat;
+  queryParams: Record<string, any>;
+}

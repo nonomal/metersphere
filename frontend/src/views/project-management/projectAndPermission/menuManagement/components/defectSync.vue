@@ -13,6 +13,7 @@
     :ok-permission="['PROJECT_APPLICATION_BUG:UPDATE']"
     @cancel="handleCancel(false)"
     @confirm="handleConfirm"
+    @close="handleCancel(false)"
   >
     <a-form ref="formRef" class="rounded-[4px]" :model="form" layout="vertical">
       <a-form-item field="platformKey" :label="t('project.menu.platformLabel')">
@@ -52,7 +53,7 @@
                 </a-tooltip>
               </div>
             </a-radio>
-            <a-radio v-xpack value="full">
+            <a-radio value="full">
               <div class="flex flex-row items-center gap-[4px]">
                 <span class="text-[var(--color-text-1)]">{{ t('project.menu.fullSync') }}</span>
                 <a-tooltip :content="t('project.menu.fullSyncTip')" position="top">
@@ -70,19 +71,7 @@
       </a-form-item>
       <!-- 同步频率 -->
       <a-form-item field="CRON_EXPRESSION" :label="t('project.menu.CRON_EXPRESSION')">
-        <a-select v-model="form.CRON_EXPRESSION">
-          <a-option v-for="data in frequencyOption" :key="data.value" :value="data.value">
-            <span class="text-[var(--color-text-2)]"> {{ data.label }}</span
-            ><span class="ml-1 text-[var(--color-text-n4)] hover:text-[rgb(var(--primary-5))]">
-              {{ data.extra }}
-            </span>
-          </a-option>
-          <!--          <a-option value="custom">
-            <div class="border-t-1 cursor-pointer text-[rgb(var(&#45;&#45;primary-5))]">{{
-              t('project.menu.defect.customLabel')
-            }}</div>
-          </a-option>-->
-        </a-select>
+        <MsCronSelect v-model:model-value="form.CRON_EXPRESSION" />
       </a-form-item>
     </a-form>
     <template v-if="platformOption.length" #footerLeft>
@@ -124,6 +113,7 @@
   import { computed } from 'vue';
   import { FormInstance, Message } from '@arco-design/web-vue';
 
+  import MsCronSelect from '@/components/pure/ms-cron-select/index.vue';
   import MsDrawer from '@/components/pure/ms-drawer/index.vue';
   import MsFormCreate from '@/components/pure/ms-form-create/ms-form-create.vue';
   import type { FormItem, FormRuleItem } from '@/components/pure/ms-form-create/types';
@@ -153,12 +143,6 @@
   const formCreateValue = ref<Record<string, any>>({});
   const currentVisible = ref<boolean>(props.visible);
   const platformOption = ref<PoolOption[]>([]);
-  const frequencyOption = ref([
-    { label: '0 0 0/1 * * ?', extra: '（每隔1小时）', value: '0 0 0/1 * * ?' },
-    { label: '0 0 0/6 * * ?', extra: '（每隔6小时）', value: '0 0 0/6 * * ?' },
-    { label: '0 0 0/12 * * ?', extra: '（每隔12小时）', value: '0 0 0/12 * * ?' },
-    { label: '0 0 0 * * ?', extra: '（每隔一天）', value: '0 0 0 * * ?' },
-  ]);
 
   const appStore = useAppStore();
   const licenseStore = useLicenseStore();
@@ -200,6 +184,7 @@
   const handleCancel = (shouldSearch: boolean) => {
     emit('cancel', shouldSearch);
     resetForm();
+    form.PLATFORM_KEY = '';
   };
   const handlePlatformChange = async (value: SelectValue) => {
     platformRules.value = [];
@@ -271,11 +256,7 @@
         await handlePlatformChange(res.platform_key);
         form.SYNC_ENABLE = res.sync_enable;
         form.PLATFORM_KEY = res.platform_key;
-        if (!isXpack.value) {
-          form.MECHANISM = 'increment';
-        } else {
-          form.MECHANISM = res.mechanism;
-        }
+        form.MECHANISM = res.mechanism;
         form.CRON_EXPRESSION = res.cron_expression;
       }
     } catch (e) {

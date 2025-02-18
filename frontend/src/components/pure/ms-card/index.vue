@@ -1,12 +1,12 @@
 <template>
-  <a-spin class="z-[100] !block" :loading="props.loading" :size="28">
+  <a-spin class="!block" :class="props.autoHeight ? '' : 'min-h-[500px]'" :loading="props.loading" :size="28">
     <div
       ref="fullRef"
       :class="[
         'ms-card',
         'relative',
+        'h-full',
         props.isFullscreen || isFullScreen ? 'ms-card--fullScreen' : '',
-        props.autoHeight ? '' : 'h-full min-h-[500px]',
         props.noContentPadding ? 'ms-card--noContentPadding' : 'p-[16px]',
         props.noBottomRadius ? 'ms-card--noBottomRadius' : '',
         !props.hideFooter && !props.simple ? 'pb-[24px]' : '',
@@ -14,9 +14,8 @@
     >
       <a-scrollbar v-if="!props.simple" :style="{ overflow: 'auto' }">
         <div class="ms-card-header" :style="props.headerMinWidth ? { minWidth: `${props.headerMinWidth}px` } : {}">
-          <div v-if="!props.hideBack" class="back-btn" @click="back"><icon-arrow-left /></div>
           <slot name="headerLeft">
-            <div class="font-medium text-[var(--color-text-000)]">{{ props.title }}</div>
+            <div class="font-medium text-[var(--color-text-1)]">{{ props.title }}</div>
             <div class="text-[var(--color-text-4)]">{{ props.subTitle }}</div>
           </slot>
           <div class="ml-auto flex items-center">
@@ -56,11 +55,18 @@
         </div>
         <slot name="footerRight">
           <div class="flex justify-end gap-[16px]">
-            <a-button type="secondary" @click="back">{{ t('mscard.defaultCancelText') }}</a-button>
-            <a-button v-if="!props.hideContinue && !props.isEdit" type="secondary" @click="emit('saveAndContinue')">
+            <a-button :disabled="props.loading" type="secondary" @click="back">
+              {{ t('mscard.defaultCancelText') }}
+            </a-button>
+            <a-button
+              v-if="!props.hideContinue && !props.isEdit"
+              :loading="props.loading"
+              type="secondary"
+              @click="emit('saveAndContinue')"
+            >
               {{ props.saveAndContinueText || t('mscard.defaultSaveAndContinueText') }}
             </a-button>
-            <a-button type="primary" @click="emit('save')">
+            <a-button :loading="props.loading" type="primary" @click="emit('save')">
               {{ props.saveText || t(props.isEdit ? 'mscard.defaultUpdate' : 'mscard.defaultConfirm') }}
             </a-button>
           </div>
@@ -91,6 +97,7 @@
         specialHeight: number; // 特殊高度，例如某些页面有面包屑，autoHeight 时无效
         hideBack: boolean; // 隐藏返回按钮
         autoHeight: boolean; // 内容区域高度是否自适应
+        autoWidth: boolean; // 内容区域宽度是否自适应
         otherWidth: number; // 该宽度为卡片外部同级容器的宽度
         headerMinWidth: number; // 卡片头部最小宽度
         minWidth: number; // 卡片内容最小宽度
@@ -114,6 +121,7 @@
       specialHeight: 0,
       hideBack: false,
       autoHeight: false,
+      autoWidth: false,
       hasBreadcrumb: false,
       noContentPadding: false,
       noBottomRadius: false,
@@ -142,7 +150,7 @@
     }
   );
 
-  const _specialHeight = props.hasBreadcrumb ? 32 + props.specialHeight : props.specialHeight; // 有面包屑的话，默认面包屑高度32
+  const _specialHeight = props.hasBreadcrumb ? 32 + props.specialHeight : props.specialHeight; // 有面包屑的话，默认面包屑高度24+8间距
 
   // TODO：卡片高度调整，写上数值的注释
   const cardOverHeight = computed(() => {
@@ -160,9 +168,9 @@
     }
     if (props.hideFooter) {
       // 没有底部
-      return props.noContentPadding ? 120 + _specialHeight : 168 + _specialHeight;
+      return props.noContentPadding ? 130 + _specialHeight : 168 + _specialHeight;
     }
-    return 230 + _specialHeight;
+    return 220 + _specialHeight;
   });
 
   const getComputedContentStyle = computed(() => {
@@ -173,11 +181,12 @@
         height: props.autoHeight ? 'auto' : `calc(100vh - ${cardOverHeight.value}px)`,
       };
     }
+    const width = props.otherWidth
+      ? `calc(100vw - ${menuWidth.value}px - ${props.otherWidth}px)`
+      : `calc(100vw - ${menuWidth.value}px - 48px)`; // 48px 为卡片左右内边距 32+ 页面右侧内边距16
     return {
       overflow: 'auto',
-      width: props.otherWidth
-        ? `calc(100vw - ${menuWidth.value}px - ${props.otherWidth}px)`
-        : `calc(100vw - ${menuWidth.value}px - 58px)`,
+      width: props.autoWidth ? 'auto' : width,
       height: props.autoHeight ? 'auto' : `calc(100vh - ${cardOverHeight.value}px)`,
     };
   });
@@ -193,9 +202,10 @@
 
 <style lang="less" scoped>
   .ms-card {
-    @apply relative overflow-hidden bg-white;
+    @apply relative overflow-hidden;
 
     border-radius: var(--border-radius-large);
+    background-color: var(--color-text-fff);
     box-shadow: 0 0 10px rgb(120 56 135 / 5%);
     &--noContentPadding {
       border-radius: var(--border-radius-large);
@@ -231,18 +241,18 @@
       @apply relative;
     }
     .ms-card-footer {
-      @apply fixed flex justify-between bg-white;
+      @apply fixed flex justify-between;
 
       right: 16px;
       bottom: 0;
       z-index: 100;
       padding: 24px;
       border-bottom: 0;
+      background-color: var(--color-text-fff);
+      box-shadow: var(--tw-ring-offset-shadow, 0 0 #00000000), var(--tw-ring-shadow, 0 0 #00000000), var(--tw-shadow);
 
       --tw-shadow: 0 -1px 4px rgb(2 2 2 / 10%);
       --tw-shadow-colored: 0 -1px 4px var(--tw-shadow-color);
-
-      box-shadow: var(--tw-ring-offset-shadow, 0 0 #00000000), var(--tw-ring-shadow, 0 0 #00000000), var(--tw-shadow);
     }
   }
   .ms-card--fullScreen {

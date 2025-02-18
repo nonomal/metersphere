@@ -484,73 +484,63 @@ public class TestPlanReportSummaryExample {
             return (Criteria) this;
         }
 
-        public Criteria andSummaryIsNull() {
-            addCriterion("summary is null");
+        public Criteria andPlanCountIsNull() {
+            addCriterion("plan_count is null");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryIsNotNull() {
-            addCriterion("summary is not null");
+        public Criteria andPlanCountIsNotNull() {
+            addCriterion("plan_count is not null");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryEqualTo(String value) {
-            addCriterion("summary =", value, "summary");
+        public Criteria andPlanCountEqualTo(Long value) {
+            addCriterion("plan_count =", value, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryNotEqualTo(String value) {
-            addCriterion("summary <>", value, "summary");
+        public Criteria andPlanCountNotEqualTo(Long value) {
+            addCriterion("plan_count <>", value, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryGreaterThan(String value) {
-            addCriterion("summary >", value, "summary");
+        public Criteria andPlanCountGreaterThan(Long value) {
+            addCriterion("plan_count >", value, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryGreaterThanOrEqualTo(String value) {
-            addCriterion("summary >=", value, "summary");
+        public Criteria andPlanCountGreaterThanOrEqualTo(Long value) {
+            addCriterion("plan_count >=", value, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryLessThan(String value) {
-            addCriterion("summary <", value, "summary");
+        public Criteria andPlanCountLessThan(Long value) {
+            addCriterion("plan_count <", value, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryLessThanOrEqualTo(String value) {
-            addCriterion("summary <=", value, "summary");
+        public Criteria andPlanCountLessThanOrEqualTo(Long value) {
+            addCriterion("plan_count <=", value, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryLike(String value) {
-            addCriterion("summary like", value, "summary");
+        public Criteria andPlanCountIn(List<Long> values) {
+            addCriterion("plan_count in", values, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryNotLike(String value) {
-            addCriterion("summary not like", value, "summary");
+        public Criteria andPlanCountNotIn(List<Long> values) {
+            addCriterion("plan_count not in", values, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryIn(List<String> values) {
-            addCriterion("summary in", values, "summary");
+        public Criteria andPlanCountBetween(Long value1, Long value2) {
+            addCriterion("plan_count between", value1, value2, "planCount");
             return (Criteria) this;
         }
 
-        public Criteria andSummaryNotIn(List<String> values) {
-            addCriterion("summary not in", values, "summary");
-            return (Criteria) this;
-        }
-
-        public Criteria andSummaryBetween(String value1, String value2) {
-            addCriterion("summary between", value1, value2, "summary");
-            return (Criteria) this;
-        }
-
-        public Criteria andSummaryNotBetween(String value1, String value2) {
-            addCriterion("summary not between", value1, value2, "summary");
+        public Criteria andPlanCountNotBetween(Long value1, Long value2) {
+            addCriterion("plan_count not between", value1, value2, "planCount");
             return (Criteria) this;
         }
     }

@@ -33,7 +33,7 @@
           status="secondary"
           @click="handleDelete"
         >
-          <MsIcon type="icon-icon_delete-trash_outlined" />
+          <MsIcon type="icon-icon_delete-trash_outlined1" />
           {{ t('common.delete') }}
         </MsButton>
       </div>
@@ -45,15 +45,15 @@
         class="mb-[16px]"
       >
         <template #titleRight>
-          <div class="flex items-center gap-[16px]">
+          <div class="flex items-center gap-[16px] overflow-hidden">
             <div class="flex items-center gap-[8px]">
               <div class="whitespace-nowrap text-[var(--color-text-4)]">{{ t('apiTestManagement.apiType') }}</div>
               <apiMethodName :method="props.definitionDetail.method" tag-size="small" is-tag />
             </div>
-            <div class="flex items-center gap-[8px]">
+            <div class="flex items-center gap-[8px] overflow-hidden">
               <div class="whitespace-nowrap text-[var(--color-text-4)]">{{ t('apiTestManagement.path') }}</div>
-              <a-tooltip :content="props.definitionDetail.url">
-                <div class="one-line-text">{{ props.definitionDetail.url }}</div>
+              <a-tooltip :content="props.definitionDetail.url || props.definitionDetail.path" position="tl">
+                <div class="one-line-text">{{ props.definitionDetail.url || props.definitionDetail.path }}</div>
               </a-tooltip>
             </div>
           </div>
@@ -68,6 +68,7 @@
           <a-input
             v-model:model-value="mockDetail.name"
             :placeholder="t('mockManagement.namePlaceholder')"
+            :max-length="255"
             class="w-[732px]"
           ></a-input>
         </a-form-item>
@@ -103,6 +104,7 @@
         v-model:matchRules="currentMatchRules"
         :key-options="currentKeyOptions"
         :disabled="isReadOnly"
+        :form-key="activeTab"
       />
       <template v-else>
         <div class="mb-[8px] flex items-center justify-between">
@@ -224,6 +226,7 @@
   } from '@/api/modules/api-test/management';
   import { requestBodyTypeMap } from '@/config/apiTest';
   import { useI18n } from '@/hooks/useI18n';
+  import useShortcutSave from '@/hooks/useShortcutSave';
   import useAppStore from '@/store/modules/app';
 
   import { ResponseDefinition } from '@/models/apiTest/common';
@@ -490,6 +493,18 @@
 
   const fileList = ref<MsFileItem[]>([]);
 
+  function showFirstHasDataTab() {
+    if (mockDetail.value.mockMatchRule.body.bodyType !== RequestBodyFormat.NONE) {
+      activeTab.value = RequestComposition.BODY;
+    } else if (mockDetail.value.mockMatchRule.header.matchRules.length > 0) {
+      activeTab.value = RequestComposition.HEADER;
+    } else if (mockDetail.value.mockMatchRule.query.matchRules.length > 0) {
+      activeTab.value = RequestComposition.QUERY;
+    } else if (mockDetail.value.mockMatchRule.rest.matchRules.length > 0) {
+      activeTab.value = RequestComposition.REST;
+    }
+  }
+
   async function initMockDetail() {
     try {
       loading.value = true;
@@ -500,7 +515,7 @@
       // form-data 的匹配规则含有文件类型，特殊处理
       const formDataMatch = res.mockMatchRule.body.formDataBody.matchRules.map((item) => {
         const newParamType =
-          currentBodyKeyOptions.value.find((e) => e.value === item.key)?.paramType || item.files
+          currentBodyKeyOptions.value.find((e) => e.value === item.key)?.paramType || item.files.length > 0
             ? RequestParamsType.FILE
             : defaultMatchRuleItem.paramType;
         item.paramType = newParamType;
@@ -542,15 +557,7 @@
         // 从表格的编辑按钮进入，给空表格添加默认行
         appendDefaultMatchRuleItem();
       }
-      if (mockDetail.value.mockMatchRule.body.bodyType !== RequestBodyFormat.NONE) {
-        activeTab.value = RequestComposition.BODY;
-      } else if (mockDetail.value.mockMatchRule.header.matchRules.length > 0) {
-        activeTab.value = RequestComposition.HEADER;
-      } else if (mockDetail.value.mockMatchRule.query.matchRules.length > 0) {
-        activeTab.value = RequestComposition.QUERY;
-      } else if (mockDetail.value.mockMatchRule.rest.matchRules.length > 0) {
-        activeTab.value = RequestComposition.REST;
-      }
+      showFirstHasDataTab();
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -558,22 +565,6 @@
       loading.value = false;
     }
   }
-
-  watch(
-    () => visible.value,
-    (val) => {
-      if (val) {
-        if (props.detailId) {
-          initMockDetail();
-        } else {
-          fileList.value = [];
-        }
-      }
-    },
-    {
-      immediate: true,
-    }
-  );
 
   async function handleFileChange(files: MsFileItem[], file?: MsFileItem) {
     try {
@@ -592,10 +583,10 @@
       } else {
         // 关联文件
         mockDetail.value.mockMatchRule.body.binaryBody.file = {
-          ...file,
-          fileId: file?.uid || '',
-          fileName: file?.originalName || '',
-          fileAlias: file?.name || '',
+          ...files[0],
+          fileId: files[0]?.uid || files[0]?.id || '',
+          fileName: files[0]?.originalName || '',
+          fileAlias: files[0]?.name || '',
           local: false,
         };
       }
@@ -730,6 +721,52 @@
       }
     });
   }
+
+  const { registerCatchSaveShortcut, removeCatchSaveShortcut } = useShortcutSave(() => {
+    handleSave();
+  });
+
+  watch(
+    () => visible.value,
+    async (val) => {
+      if (val) {
+        if (props.detailId) {
+          await initMockDetail();
+        } else {
+          fileList.value = [];
+          const { body } = props.definitionDetail;
+          mockDetail.value.mockMatchRule.body = {
+            ...mockDetail.value.mockMatchRule.body,
+            bodyType: body.bodyType,
+            binaryBody: cloneDeep(body.binaryBody),
+            jsonBody: cloneDeep(body.jsonBody),
+            xmlBody: cloneDeep(body.xmlBody),
+            rawBody: cloneDeep(body.rawBody),
+          };
+          showFirstHasDataTab();
+        }
+        if (!isReadOnly.value) {
+          registerCatchSaveShortcut();
+        }
+      } else {
+        removeCatchSaveShortcut();
+      }
+    },
+    {
+      immediate: true,
+    }
+  );
+
+  watch(
+    () => isReadOnly.value,
+    (val) => {
+      if (!val) {
+        registerCatchSaveShortcut();
+      } else {
+        removeCatchSaveShortcut();
+      }
+    }
+  );
 </script>
 
 <style lang="less" scoped></style>

@@ -1,5 +1,6 @@
 package io.metersphere.plan.dto.response;
 
+import io.metersphere.sdk.constants.TestPlanConstants;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
@@ -17,7 +18,7 @@ public class TestPlanDetailResponse extends TestPlanStatisticsResponse implement
     private static final long serialVersionUID = 1L;
 
     @Schema(description = "测试计划组Id")
-    private String groupId;
+    private String groupId = TestPlanConstants.TEST_PLAN_DEFAULT_GROUP_ID;
 
     @Schema(description = "测试计划组名称")
     private String groupName;
@@ -60,4 +61,10 @@ public class TestPlanDetailResponse extends TestPlanStatisticsResponse implement
 
     @Schema(description = "是否定时任务")
     private Boolean useSchedule;
+
+    @Schema(description = "关注标识")
+    private Boolean followFlag;
+
+    @Schema(description = "类型")
+    private String type;
 }

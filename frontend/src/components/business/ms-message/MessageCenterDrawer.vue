@@ -14,7 +14,7 @@
       </div>
     </template>
     <div class="flex h-full w-full">
-      <div class="flex h-full w-[180px] flex-col bg-white">
+      <div class="flex h-full w-[180px] flex-col bg-[var(--color-text-fff)]">
         <a-menu class="ms-message-menu" :default-selected-keys="[defaultModule]" @menu-item-click="clickModule">
           <a-menu-item :key="'all'">
             <div class="flex items-center justify-between">
@@ -60,7 +60,6 @@
             :item-border="false"
             class="w-full rounded-[var(--border-radius-small)]"
             :no-more-data="noMoreData"
-            raggable
             :virtual-list-props="{
               height: 'calc(100vh - 136px)',
             }"
@@ -108,7 +107,7 @@
                   {{ dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss') }}
                 </div>
               </div>
-              <div v-else class="ms-message-item">
+              <div v-else class="ms-message-item" @click.stop="setReadMessage(item)">
                 <MSAvatar v-if="item.avatar" :avatar="item.avatar" :word="item.userName" />
                 <div class="ml-[8px] flex flex-col">
                   <div class="flex items-center">
@@ -145,13 +144,20 @@
                       </div>
                     </a-tooltip>
 
-                    <MsButton v-else @click="handleNameClick(item)">
-                      <a-tooltip :content="item.resourceName" :mouse-enter-delay="300">
-                        <div class="one-line-text max-w-[300px]">
-                          {{ item.resourceName }}
-                        </div>
+                    <div v-else class="resource_template">
+                      <a-tooltip :content="item.content.split(':')[0]" :mouse-enter-delay="300">
+                        <div class="one-line-text max-w-[300px] text-[var(--color-text-2)]"
+                          >{{ item.content.split(':')[0] }}：</div
+                        >
                       </a-tooltip>
-                    </MsButton>
+                      <MsButton @click="handleNameClick(item)">
+                        <a-tooltip :content="item.resourceName" :mouse-enter-delay="300">
+                          <div class="one-line-text max-w-[300px]">
+                            {{ item.resourceName }}
+                          </div>
+                        </a-tooltip>
+                      </MsButton>
+                    </div>
                   </div>
                   <div class="flex items-center text-[var(--color-text-4)]">
                     {{ dayjs(item.createTime).format('YYYY-MM-DD HH:mm:ss') }}
@@ -179,6 +185,7 @@
   import MsList from '@/components/pure/ms-list/index.vue';
 
   import {
+    getMessageRead,
     getMessageReadAll,
     MessageHistoryItem,
     OptionItem,
@@ -212,7 +219,7 @@
   const userStore = useUserStore();
   const router = useRouter();
   const { t } = useI18n();
-  const { openNewPage, openNewPageWidthSingleParam } = useOpenNewPage();
+  const { openNewPage } = useOpenNewPage();
 
   const innerVisible = useVModel(props, 'visible', emit);
   const projectId = ref<string>(appStore.currentProjectId);
@@ -264,7 +271,7 @@
       current: pageNation.value.current || 1,
       pageSize: pageNation.value.pageSize,
     });
-    res.list.forEach((item) => messageHistoryList.value.push(item));
+    messageHistoryList.value = res.list || [];
     pageNation.value.total = res.total;
   }
 
@@ -302,6 +309,8 @@
       key = 'SCHEDULE';
     } else if (key === 'TEST_PLAN_MANAGEMENT') {
       key = 'TEST_PLAN';
+    } else if (key === 'JENKINS_TASK_MANAGEMENT') {
+      key = 'JENKINS';
     } else {
       key = '';
     }
@@ -372,6 +381,12 @@
         count = module.name;
       }
     }
+    if (type === 'JENKINS_TASK_MANAGEMENT') {
+      const module = options.value.find((item) => item.id === 'JENKINS');
+      if (module) {
+        count = module.name;
+      }
+    }
     const number = parseInt(count, 10);
     if (number > 99) {
       return '+99';
@@ -383,11 +398,12 @@
   const resourceTypeRouteMap: Record<string, string> = {
     [MessageResourceType.BUG_TASK]: BugManagementRouteEnum.BUG_MANAGEMENT_INDEX,
     [MessageResourceType.BUG_SYNC_TASK]: BugManagementRouteEnum.BUG_MANAGEMENT_INDEX,
-    [MessageResourceType.FUNCTIONAL_CASE_TASK]: CaseManagementRouteEnum.CASE_MANAGEMENT_CASE_DETAIL,
+    [MessageResourceType.FUNCTIONAL_CASE_TASK]: CaseManagementRouteEnum.CASE_MANAGEMENT_CASE,
     [MessageResourceType.CASE_REVIEW_TASK]: CaseManagementRouteEnum.CASE_MANAGEMENT_REVIEW_DETAIL,
     [MessageResourceType.API_DEFINITION_TASK]: ApiTestRouteEnum.API_TEST_MANAGEMENT,
     [MessageResourceType.API_SCENARIO_TASK]: ApiTestRouteEnum.API_TEST_SCENARIO,
     [MessageResourceType.TEST_PLAN_TASK]: TestPlanRouteEnum.TEST_PLAN_INDEX_DETAIL,
+    [MessageResourceType.JENKINS_TASK]: TestPlanRouteEnum.TEST_PLAN_INDEX_DETAIL,
   };
 
   // 点击名称跳转
@@ -409,15 +425,12 @@
     }
 
     const route = resourceTypeRouteMap[item.resourceType];
-    if (item.resourceType === MessageResourceType.FUNCTIONAL_CASE_TASK) {
-      openNewPageWidthSingleParam(route, 'edit', routeQuery);
-    } else {
-      openNewPage(route, routeQuery);
-    }
+    openNewPage(route, routeQuery);
   }
 
   // 全部标记为已读
   async function prepositionEdit() {
+    // 全读不需要类型KEY
     await getMessageReadAll(currentResourceType.value);
     messageHistoryList.value = [];
     pageNation.value.current = 1;
@@ -426,12 +439,25 @@
     await loadMessageHistoryList(position.value, currentResourceType.value);
   }
 
+  async function setReadMessage(item: MessageHistoryItem) {
+    if (item.status === 'READ') {
+      return;
+    }
+    try {
+      await getMessageRead(item.id);
+      loadMessageHistoryList(position.value, currentResourceType.value);
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
   watch(
     () => props.visible,
     (val) => {
       if (val) {
         messageHistoryList.value = [];
         pageNation.value.current = 1;
+        currentResourceType.value = '';
         // 左侧模块树加载
         loadModuleList();
         // 右边默认数据加载
@@ -439,14 +465,15 @@
         // 左侧消息总数
         loadTotalCount('');
       }
-    }
+    },
+    { immediate: true }
   );
 </script>
 
 <style lang="less">
   .ms-drawer {
     .ms-message-menu {
-      @apply bg-white;
+      background-color: var(--color-text-fff);
       .arco-menu-inner {
         padding: 16px;
       }
@@ -480,5 +507,8 @@
     flex-direction: column;
     box-sizing: border-box;
     line-height: 1.8715;
+  }
+  .resource_template {
+    display: flex;
   }
 </style>

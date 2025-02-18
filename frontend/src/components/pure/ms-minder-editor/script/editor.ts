@@ -1,28 +1,22 @@
 import '@7polo/kity/dist/kity';
-import 'hotbox-minder/hotbox';
 import '@7polo/kityminder-core';
-import clipboard from './runtime/clipboard';
 import clipboardMimetype from './runtime/clipboard-mimetype';
 import container from './runtime/container';
 import drag from './runtime/drag';
 import exportsRuntime from './runtime/exports';
 import fsm from './runtime/fsm';
 import history from './runtime/history';
-import hotbox from './runtime/hotbox';
 import input from './runtime/input';
 import jumping from './runtime/jumping';
 import minder from './runtime/minder';
-import node from './runtime/node';
-import priority from './runtime/priority';
-import progress from './runtime/progress';
 import receiver from './runtime/receiver';
-import tag from './runtime/tag';
 
 type EditMenuProps = {
   sequenceEnable: boolean;
   tagEnable: boolean;
   progressEnable: boolean;
   moveEnable: boolean;
+  [key: string]: any;
 };
 
 type Runtime = {
@@ -74,18 +68,12 @@ assemble(container);
 assemble(fsm);
 assemble(minder);
 assemble(receiver);
-assemble(hotbox);
 assemble(input);
 assemble(clipboardMimetype);
-assemble(clipboard);
 assemble(drag);
-assemble(node);
 assemble(history);
 assemble(jumping);
-assemble(priority);
-assemble(progress);
 assemble(exportsRuntime);
-assemble(tag);
 
 window.kityminder.Editor = KMEditor;
 

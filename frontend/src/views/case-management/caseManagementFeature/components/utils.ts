@@ -11,7 +11,7 @@ import { hasAnyPermission } from '@/utils/permission';
 
 import type { AssociatedList, CustomAttributes } from '@/models/caseManagement/featureCase';
 import { ModuleTreeNode } from '@/models/common';
-import { StatusType } from '@/enums/caseEnum';
+import { LastReviewResult, StatusType } from '@/enums/caseEnum';
 
 const { t } = useI18n();
 
@@ -21,34 +21,42 @@ export interface ReviewResult {
   statusText: string;
 }
 
-// 图标评审结果 TODO:TS 类型 key
-export const statusIconMap: Record<string, any> = {
-  UN_REVIEWED: {
-    key: 'UN_REVIEWED',
+// 图标评审结果
+export const statusIconMap: Record<
+  string,
+  {
+    key: LastReviewResult;
+    icon: StatusType;
+    statusText: string;
+    color: string;
+  }
+> = {
+  [LastReviewResult.UN_REVIEWED]: {
+    key: LastReviewResult.UN_REVIEWED,
     icon: StatusType.UN_REVIEWED,
     statusText: t('caseManagement.featureCase.notReviewed'),
     color: 'text-[var(--color-text-brand)]',
   },
-  UNDER_REVIEWED: {
-    key: 'UNDER_REVIEWED',
+  [LastReviewResult.UNDER_REVIEWED]: {
+    key: LastReviewResult.UNDER_REVIEWED,
     icon: StatusType.UNDER_REVIEWED,
     statusText: t('caseManagement.featureCase.reviewing'),
     color: 'text-[rgb(var(--link-6))]',
   },
-  PASS: {
-    key: 'PASS',
+  [LastReviewResult.PASS]: {
+    key: LastReviewResult.PASS,
     icon: StatusType.PASS,
     statusText: t('caseManagement.featureCase.passed'),
     color: '',
   },
-  UN_PASS: {
-    key: 'UN_PASS',
+  [LastReviewResult.UN_PASS]: {
+    key: LastReviewResult.UN_PASS,
     icon: StatusType.UN_PASS,
     statusText: t('caseManagement.featureCase.notPass'),
     color: '',
   },
-  RE_REVIEWED: {
-    key: 'RE_REVIEWED',
+  [LastReviewResult.RE_REVIEWED]: {
+    key: LastReviewResult.RE_REVIEWED,
     icon: StatusType.RE_REVIEWED,
     statusText: t('caseManagement.featureCase.retrial'),
     color: 'text-[rgb(var(--warning-6))]',
@@ -59,7 +67,7 @@ export const executionResultMap: Record<string, any> = {
   PENDING: {
     key: 'PENDING',
     icon: StatusType.PENDING,
-    statusText: t('caseManagement.featureCase.nonExecution'),
+    statusText: t('common.unExecute'),
     color: 'text-[var(--color-text-brand)]',
   },
   SUCCESS: {
@@ -71,13 +79,13 @@ export const executionResultMap: Record<string, any> = {
   BLOCKED: {
     key: 'BLOCKED',
     icon: StatusType.BLOCKED,
-    statusText: t('caseManagement.featureCase.chokeUp'),
-    color: 'text-[rgb(var(--warning-6))]',
+    statusText: t('common.block'),
+    color: 'text-[var(--color-fill-p-3)]',
   },
   ERROR: {
     key: 'ERROR',
     icon: StatusType.ERROR,
-    statusText: t('caseManagement.featureCase.failure'),
+    statusText: t('common.fail'),
     color: '',
   },
 };
@@ -99,7 +107,7 @@ export function convertToFile(fileInfo: AssociatedList): MsFileItem {
     type: `application/${type}`,
   });
   Object.defineProperty(file, 'size', { value: fileInfo.size });
-  const { id, createUserName, createTime, local, isUpdateFlag, associateId } = fileInfo;
+  const { id, createUserName, createTime, local, isUpdateFlag, associationId } = fileInfo;
   return {
     enable: fileInfo.enable || false,
     file,
@@ -114,17 +122,16 @@ export function convertToFile(fileInfo: AssociatedList): MsFileItem {
     local: !!local,
     deleteContent: local ? '' : 'caseManagement.featureCase.cancelLink',
     isUpdateFlag,
-    associateId,
+    associationId,
   };
 }
 
 // 返回用例等级
 export function getCaseLevels(customFields: CustomAttributes[]): CaseLevel {
-  const caseLevelItem = (customFields || []).find((it: any) => it.internal && it.fieldName === '用例等级');
-  return (
-    (caseLevelItem?.options.find((it: any) => it.value === caseLevelItem.defaultValue)?.text as CaseLevel) ||
-    ('P0' as CaseLevel)
+  const caseLevelItem = (customFields || []).find(
+    (it: any) => it.internal && it.internalFieldKey === 'functional_priority'
   );
+  return caseLevelItem?.options.find((it: any) => it.value === caseLevelItem.defaultValue)?.text as CaseLevel;
 }
 
 // 获取对应模块name
@@ -234,7 +241,7 @@ export function initFormCreate(customFields: CustomAttributes[], permission: str
       currentDefaultValue = item.defaultValue;
       // 处理多选情况
     } else if (multipleType.includes(item.type)) {
-      const tempValue = JSON.parse(item.defaultValue);
+      const tempValue = typeof item.defaultValue === 'string' ? JSON.parse(item.defaultValue) : item.defaultValue;
       const optionsIds = optionsValue.map((e: any) => e.value);
       currentDefaultValue = (optionsIds || []).filter((e: any) => tempValue.includes(e));
     } else if (memberType.includes(item.type)) {
@@ -248,7 +255,7 @@ export function initFormCreate(customFields: CustomAttributes[], permission: str
         // @desc 如果默认原本的成员被系统移除则过滤掉该用户不展示
         const optionsIds = optionsValue.map((e: any) => e.value);
         if (item.type === 'MULTIPLE_MEMBER') {
-          const tempValue = JSON.parse(item.defaultValue);
+          const tempValue = typeof item.defaultValue === 'string' ? JSON.parse(item.defaultValue) : item.defaultValue;
           currentDefaultValue = (optionsIds || []).filter((e: any) => tempValue.includes(e));
         } else {
           currentDefaultValue = (optionsIds || []).find((e: any) => item.defaultValue === e) || '';
@@ -280,10 +287,6 @@ export function initFormCreate(customFields: CustomAttributes[], permission: str
 }
 
 export function makeColumns(optionsMap: Record<string, any>, columnData: MsTableColumn) {
-  // const optionsMap: Record<string, any> = {
-  //   status: statusFilterOptions.value,
-  //   handleUser: handleUserFilterOptions.value,
-  // };
   return columnData.map((e) => {
     if (Object.prototype.hasOwnProperty.call(optionsMap, e.dataIndex as string)) {
       return {
@@ -296,4 +299,17 @@ export function makeColumns(optionsMap: Record<string, any>, columnData: MsTable
     }
     return { ...e };
   });
+}
+
+export function getPlatName(platformKey: string) {
+  switch (platformKey) {
+    case 'zentao':
+      return t('caseManagement.featureCase.zentao');
+    case 'jira':
+      return t('caseManagement.featureCase.jira');
+    case 'tapd':
+      return t('caseManagement.featureCase.tapd');
+    default:
+      break;
+  }
 }

@@ -7,7 +7,6 @@ import io.metersphere.sdk.util.CommonBeanFactory;
 import io.metersphere.sdk.util.Translator;
 import io.metersphere.system.domain.User;
 import io.metersphere.system.dto.sdk.TemplateCustomFieldDTO;
-import io.metersphere.system.utils.SessionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.HashMap;
@@ -21,19 +20,26 @@ import java.util.stream.Collectors;
 public class CustomFieldMemberValidator extends AbstractCustomFieldValidator {
 
     protected Map<String, String> userIdMap;
-    protected Map<String, String> userNameMap;
+    protected Map<String, String> userEmailMap;
+    protected Map<String, String> userIdEmailMap;
 
     public CustomFieldMemberValidator() {
+    }
+
+    public CustomFieldMemberValidator(String projectId) {
         this.isKVOption = true;
         ProjectApplicationService projectApplicationService = CommonBeanFactory.getBean(ProjectApplicationService.class);
-        List<User> memberOption = projectApplicationService.getProjectUserList(SessionUtils.getCurrentProjectId());
+        List<User> memberOption = projectApplicationService.getProjectUserList(projectId);
         userIdMap = memberOption.stream()
                 .collect(
                         Collectors.toMap(user -> user.getId().toLowerCase(), User::getId)
                 );
-        userNameMap = new HashMap<>();
+        userEmailMap = new HashMap<>();
         memberOption.stream()
-                .forEach(user -> userNameMap.put(user.getEmail().toLowerCase(), user.getId()));
+                .forEach(user -> userEmailMap.put(user.getEmail().toLowerCase(), user.getId()));
+        userIdEmailMap = new HashMap<>();
+        memberOption.stream()
+                .forEach(user -> userIdEmailMap.put(user.getId(), user.getEmail().toLowerCase()));
     }
 
     @Override
@@ -43,7 +49,7 @@ public class CustomFieldMemberValidator extends AbstractCustomFieldValidator {
             return;
         }
         value = value.toLowerCase();
-        if (userIdMap.containsKey(value) || userNameMap.containsKey(value)) {
+        if (userIdMap.containsKey(value) || userEmailMap.containsKey(value)) {
             return;
         }
         throw new CustomFieldValidateException(String.format(Translator.get("custom_field_member_tip"), customField.getFieldName()));
@@ -55,9 +61,19 @@ public class CustomFieldMemberValidator extends AbstractCustomFieldValidator {
         if (userIdMap.containsKey(keyOrValue)) {
             return userIdMap.get(keyOrValue);
         }
-        if (userNameMap.containsKey(keyOrValue)) {
-            return userNameMap.get(keyOrValue);
+        if (userEmailMap.containsKey(keyOrValue)) {
+            return userEmailMap.get(keyOrValue);
         }
         return keyOrValue;
     }
+
+    @Override
+    public Object parse2Value(String keyOrValue, TemplateCustomFieldDTO customField) {
+        keyOrValue = keyOrValue.toLowerCase();
+        if (userIdEmailMap.containsKey(keyOrValue)) {
+            return userIdEmailMap.get(keyOrValue);
+        }
+        return keyOrValue;
+    }
+
 }

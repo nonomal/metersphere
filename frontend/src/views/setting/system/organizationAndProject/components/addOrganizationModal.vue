@@ -32,7 +32,12 @@
             { maxLength: 255, message: t('common.nameIsTooLang') },
           ]"
         >
-          <a-input v-model="form.name" :placeholder="t('system.organization.organizationNamePlaceholder')" />
+          <a-input
+            v-model="form.name"
+            :max-length="255"
+            show-word-limit
+            :placeholder="t('system.organization.organizationNamePlaceholder')"
+          />
         </a-form-item>
         <a-form-item
           field="userIds"
@@ -46,7 +51,7 @@
             :type="UserRequestTypeEnum.SYSTEM_ORGANIZATION_ADMIN"
           />
         </a-form-item>
-        <a-form-item field="description" :label="t('system.organization.description')">
+        <a-form-item field="description" :label="t('common.desc')">
           <a-textarea
             v-model="form.description"
             allow-clear

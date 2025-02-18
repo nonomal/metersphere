@@ -13,7 +13,6 @@ import java.util.List;
 public class TestPlanCaseBatchRunRequest extends BasePlanCaseBatchRequest {
 
     @Schema(description = "项目Id")
-    @NotBlank(message = "{test_plan.project_id.not_blank}")
     private String projectId;
 
     @Schema(description = "最终执行结果")
@@ -26,7 +25,7 @@ public class TestPlanCaseBatchRunRequest extends BasePlanCaseBatchRequest {
     @Schema(description = "评论@的人的Id, 多个以';'隔开")
     private String notifier;
 
-    @Schema(description = "测试计划执行评论副文本的文件id集合")
+    @Schema(description = "测试计划执行评论富文本的文件id集合")
     private List<String> planCommentFileIds;
 
 

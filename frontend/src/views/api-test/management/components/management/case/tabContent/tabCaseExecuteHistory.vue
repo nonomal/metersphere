@@ -12,8 +12,22 @@
       />-->
     </div>
     <ms-base-table v-bind="propsRes" no-disable v-on="propsEvent">
-      <template #[FilterSlotNameEnum.API_TEST_CASE_API_REPORT_EXECUTE_RESULT]="{ filterContent }">
-        <ExecutionStatus :module-type="ReportEnum.API_REPORT" :status="filterContent.value" />
+      <template #num="{ record }">
+        <div class="flex items-center justify-start">
+          <span type="text" class="px-0">{{ record.num }}</span>
+          <a-tooltip v-if="record.testPlanNum" :content="record.testPlanNum">
+            <MsTag
+              class="ml-2"
+              :self-style="{
+                border: `1px solid ${color}`,
+                color: color,
+                backgroundColor: 'var(--color-text-fff)',
+              }"
+            >
+              {{ record.testPlanNum }}
+            </MsTag>
+          </a-tooltip>
+        </div>
       </template>
       <template #triggerMode="{ record }">
         <span>{{ t(TriggerModeLabel[record.triggerMode as keyof typeof TriggerModeLabel]) }}</span>
@@ -21,35 +35,38 @@
       <template #status="{ record }">
         <ExecutionStatus :status="record.status" :module-type="ReportEnum.API_REPORT" />
       </template>
+      <template #executeStatus="{ record }">
+        <ExecStatus :status="record.execStatus" />
+      </template>
       <template #operation="{ record, rowIndex }">
-        <div v-if="record.historyDeleted">
-          <a-tooltip :content="t('project.executionHistory.cleared')" position="top">
-            <MsButton
-              :disabled="
-                record.historyDeleted ||
-                !hasAnyPermission(['PROJECT_API_DEFINITION_CASE:READ+EXECUTE', 'PROJECT_API_REPORT:READ'])
-              "
-              class="!mr-0"
-              @click="showResult(record, rowIndex)"
-              >{{ t('apiScenario.executeHistory.execution.operation') }}
-            </MsButton>
-          </a-tooltip>
-        </div>
-        <div v-else>
+        <a-tooltip
+          v-if="record.execStatus !== ExecuteStatusEnum.PENDING"
+          :content="t('common.executionResultCleaned')"
+          position="top"
+          :disabled="!record.resultDeleted"
+        >
           <MsButton
             :disabled="
-              record.historyDeleted ||
+              record.resultDeleted ||
               !hasAnyPermission(['PROJECT_API_DEFINITION_CASE:READ+EXECUTE', 'PROJECT_API_REPORT:READ'])
             "
             class="!mr-0"
             @click="showResult(record, rowIndex)"
             >{{ t('apiScenario.executeHistory.execution.operation') }}
           </MsButton>
-        </div>
+        </a-tooltip>
       </template>
     </ms-base-table>
   </div>
-  <caseAndScenarioReportDrawer v-model:visible="showResponse" :report-id="activeReportId" />
+  <caseExecuteResultDrawer
+    v-if="showResponse"
+    :id="activeReport.id"
+    v-model:visible="showResponse"
+    :user-name="activeReport.createUser"
+    :status="activeReport.execStatus"
+    :result="activeReport.status"
+    :resource-name="activeReport.name"
+  />
 </template>
 
 <script setup lang="ts">
@@ -59,27 +76,33 @@
   import MsBaseTable from '@/components/pure/ms-table/base-table.vue';
   import { MsTableColumn } from '@/components/pure/ms-table/type';
   import useTable from '@/components/pure/ms-table/useTable';
-  import caseAndScenarioReportDrawer from '@/views/api-test/components/caseAndScenarioReportDrawer.vue';
+  import MsTag from '@/components/pure/ms-tag/ms-tag.vue';
   import ExecutionStatus from '@/views/api-test/report/component/reportStatus.vue';
+  import ExecStatus from '@/views/taskCenter/component/execStatus.vue';
 
   import { getApiCaseExecuteHistory } from '@/api/modules/api-test/management';
   import { useI18n } from '@/hooks/useI18n';
   import useAppStore from '@/store/modules/app';
   import { hasAnyPermission } from '@/utils/permission';
 
-  import { ApiCaseExecuteHistoryItem } from '@/models/apiTest/management';
+  import { ExecuteHistoryItem } from '@/models/apiTest/scenario';
   import { ReportEnum, ReportStatus, TriggerModeLabel } from '@/enums/reportEnum';
   import { FilterSlotNameEnum } from '@/enums/tableFilterEnum';
+  import { ExecuteStatusEnum } from '@/enums/taskCenter';
 
   import { triggerModeOptions } from '@/views/api-test/report/utils';
+
+  const caseExecuteResultDrawer = defineAsyncComponent(
+    () => import('@/views/taskCenter/component/caseExecuteResultDrawer.vue')
+  );
 
   const appStore = useAppStore();
   const { t } = useI18n();
   const statusList = computed(() => {
-    return Object.keys(ReportStatus[ReportEnum.API_REPORT]).map((key) => {
+    return Object.keys(ReportStatus).map((key) => {
       return {
         value: key,
-        label: t(ReportStatus[ReportEnum.API_REPORT][key].label),
+        label: t(ReportStatus[key].label),
       };
     });
   });
@@ -100,7 +123,7 @@
       dataIndex: 'num',
       slotName: 'num',
       sortIndex: 1,
-      width: 150,
+      width: 280,
     },
     {
       title: 'apiTestManagement.executeMethod',
@@ -117,7 +140,13 @@
       width: 150,
     },
     {
-      title: 'apiTestManagement.executeResult',
+      title: 'ms.taskCenter.executeStatus',
+      dataIndex: 'executeStatus',
+      slotName: 'executeStatus',
+      width: 150,
+    },
+    {
+      title: 'report.result',
       dataIndex: 'status',
       slotName: 'status',
       sortable: {
@@ -126,13 +155,14 @@
       },
       filterConfig: {
         options: statusList.value,
-        filterSlotName: FilterSlotNameEnum.API_TEST_CASE_API_REPORT_EXECUTE_RESULT,
+        filterSlotName: FilterSlotNameEnum.API_TEST_CASE_API_REPORT_STATUS,
       },
       width: 150,
     },
     {
       title: 'apiTestManagement.taskOperator',
       dataIndex: 'operationUser',
+      showTooltip: true,
       width: 100,
     },
     {
@@ -170,22 +200,25 @@
     })
   );
 
-  function loadExecuteList() {
+  function loadExecuteList(sourceId?: string) {
     setLoadListParams({
       projectId: appStore.currentProjectId,
       keyword: keyword.value,
-      id: props.sourceId,
+      id: sourceId ?? props.sourceId,
     });
     loadList();
   }
 
   const activeReportIndex = ref<number>(0);
-  const activeReportId = ref('');
-  async function showResult(record: ApiCaseExecuteHistoryItem, rowIndex: number) {
-    activeReportId.value = record.id;
+  const activeReport = ref<ExecuteHistoryItem>({} as ExecuteHistoryItem);
+
+  async function showResult(record: ExecuteHistoryItem, rowIndex: number) {
+    activeReport.value = record;
     activeReportIndex.value = rowIndex;
     showResponse.value = true;
   }
+
+  const color = 'rgb(var(--primary-7))';
 
   onBeforeMount(() => {
     loadExecuteList();

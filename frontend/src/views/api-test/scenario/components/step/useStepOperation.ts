@@ -3,7 +3,7 @@ import { cloneDeep } from 'lodash-es';
 
 import type { MsTreeExpandedData, MsTreeNodeData } from '@/components/business/ms-tree/types';
 
-import { getScenarioStep } from '@/api/modules/api-test/scenario';
+import { getScenarioStep, scenarioCopyStepFiles } from '@/api/modules/api-test/scenario';
 import { useI18n } from '@/hooks/useI18n';
 import useModal from '@/hooks/useModal';
 import useAppStore from '@/store/modules/app';
@@ -12,6 +12,7 @@ import { deleteNode, findNodeByKey, handleTreeDragDrop, mapTree } from '@/utils'
 import type { Scenario, ScenarioStepItem } from '@/models/apiTest/scenario';
 import { ScenarioStepRefType, ScenarioStepType } from '@/enums/apiEnum';
 
+import type { RequestParam } from '../common/customApiDrawer.vue';
 import getStepType from '../common/stepType/utils';
 import { parseRequestBodyFiles } from '@/views/api-test/components/utils';
 
@@ -57,9 +58,31 @@ export default function useStepOperation({
     try {
       appStore.showLoading();
       const res = await getScenarioStep(step.copyFromStepId || step.id);
-      let parseRequestBodyResult;
+      let parseRequestBodyResult: Record<string, any> = {
+        uploadFileIds: [],
+        linkFileIds: [],
+        deleteFileIds: [], // 存储对比已保存的文件后，需要删除的文件 id 集合
+        unLinkFileIds: [], // 存储对比已保存的文件后，需要取消关联的文件 id 集合
+      };
+      let newFileRes;
       if (step.config.protocol === 'HTTP' && res.body) {
-        parseRequestBodyResult = parseRequestBodyFiles(res.body); // 解析请求体中的文件，将详情中的文件 id 集合收集，更新时以判断文件是否删除以及是否新上传的文件
+        if ((step.copyFromStepId || step.refType === ScenarioStepRefType.COPY) && step.isNew) {
+          // 复制的步骤需要复制文件
+          const fileIds = parseRequestBodyFiles((res as RequestParam).body, [], [], []).uploadFileIds;
+          if (fileIds.length > 0) {
+            newFileRes = await scenarioCopyStepFiles({
+              copyFromStepId: step.copyFromStepId,
+              resourceId: step.resourceId,
+              stepType: step.stepType,
+              refType: step.refType,
+              isTempFile: false, // 复制未保存的步骤时 true
+              fileIds,
+            });
+          }
+          parseRequestBodyFiles(res.body, [], [], [], newFileRes);
+        } else {
+          parseRequestBodyResult = parseRequestBodyFiles(res.body, [], [], [], newFileRes); // 解析请求体中的文件，将详情中的文件 id 集合收集，更新时以判断文件是否删除以及是否新上传的文件
+        }
       }
       stepDetails.value[step.id] = {
         ...res,
@@ -68,9 +91,12 @@ export default function useStepOperation({
         method: step.config.method || '',
         ...parseRequestBodyResult,
       };
-      scenario.value.stepFileParam[step.id] = {
-        ...parseRequestBodyResult,
-      };
+      if (!step.copyFromStepId && step.refType !== ScenarioStepRefType.COPY) {
+        // 复制的步骤文件都是新的，不需要记录，等详情抽屉关闭时会处理
+        scenario.value.stepFileParam[step.id] = {
+          ...parseRequestBodyResult,
+        };
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.log(error);
@@ -81,10 +107,10 @@ export default function useStepOperation({
 
   /**
    * 处理步骤选中事件
-   * @param _selectedKeys 选中的 key集合
    * @param step 点击的步骤节点
    */
-  async function handleStepSelect(_selectedKeys: Array<string | number>, step: ScenarioStepItem) {
+  async function handleStepSelect(step: ScenarioStepItem) {
+    activeStep.value = step;
     const _stepType = getStepType(step);
     const offspringIds: string[] = [];
     mapTree(step.children || [], (e) => {
@@ -94,7 +120,6 @@ export default function useStepOperation({
     selectedKeys.value = [step.uniqueId, ...offspringIds];
     if (_stepType.isCopyApi || _stepType.isQuoteApi || step.stepType === ScenarioStepType.CUSTOM_REQUEST) {
       // 复制 api、引用 api、自定义 api打开抽屉
-      activeStep.value = step;
       if (
         step.isQuoteScenarioStep ||
         (stepDetails.value[step.id] === undefined && step.copyFromStepId) ||
@@ -106,7 +131,6 @@ export default function useStepOperation({
       }
       customApiDrawerVisible.value = true;
     } else if (step.stepType === ScenarioStepType.API_CASE) {
-      activeStep.value = step;
       if (
         step.isQuoteScenarioStep ||
         (_stepType.isCopyCase && stepDetails.value[step.id] === undefined && step.copyFromStepId) ||
@@ -119,7 +143,6 @@ export default function useStepOperation({
       }
       customCaseDrawerVisible.value = true;
     } else if (step.stepType === ScenarioStepType.SCRIPT) {
-      activeStep.value = step;
       if (
         step.isQuoteScenarioStep ||
         (stepDetails.value[step.id] === undefined && step.copyFromStepId) ||
@@ -198,11 +221,13 @@ export default function useStepOperation({
       }
       loading.value = true;
       const offspringIds: string[] = [];
-      mapTree(cloneDeep(dragNode.children || []), (e) => {
+      const realStep = findNodeByKey<ScenarioStepItem>(steps.value, dragNode.uniqueId, 'uniqueId');
+      if (!realStep) return;
+      mapTree(cloneDeep(realStep.children || []), (e) => {
         offspringIds.push(e.uniqueId);
         return e;
       });
-      const stepIdAndOffspringIds = [dragNode.uniqueId, ...offspringIds];
+      const stepIdAndOffspringIds = [realStep.uniqueId, ...offspringIds];
       if (dropPosition === 0) {
         // 拖拽到节点内
         if (selectedKeys.value.includes(dropNode.uniqueId)) {
@@ -212,7 +237,7 @@ export default function useStepOperation({
       } else if (dropNode.parent && selectedKeys.value.includes(dropNode.parent.uniqueId)) {
         // 释放位置的节点的父节点已选中，则需要把拖动的节点及其子孙节点也需要选中（因为父级选中子级也会展示选中状态）
         selectedKeys.value = selectedKeys.value.concat(stepIdAndOffspringIds);
-      } else if (dragNode.parent && selectedKeys.value.includes(dragNode.parent.uniqueId)) {
+      } else if (realStep.parent && selectedKeys.value.includes(realStep.parent.uniqueId)) {
         // 如果被拖动的节点的父节点在选中的节点中，则需要把被拖动的节点及其子孙节点从选中的节点中移除
         selectedKeys.value = selectedKeys.value.filter((e) => {
           for (let i = 0; i < stepIdAndOffspringIds.length; i++) {
@@ -225,7 +250,7 @@ export default function useStepOperation({
           return true;
         });
       }
-      const dragResult = handleTreeDragDrop(steps.value, dragNode, dropNode, dropPosition, 'uniqueId');
+      const dragResult = handleTreeDragDrop(steps.value, realStep, dropNode, dropPosition, 'uniqueId');
       if (dragResult) {
         Message.success(t('common.moveSuccess'));
         scenario.value.unSaved = true;

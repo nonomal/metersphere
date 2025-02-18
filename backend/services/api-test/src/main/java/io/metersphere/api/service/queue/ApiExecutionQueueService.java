@@ -6,7 +6,7 @@ import io.metersphere.sdk.util.JSON;
 import jakarta.annotation.Resource;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.data.redis.core.ListOperations;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,34 +22,37 @@ public class ApiExecutionQueueService {
     public static final String QUEUE_DETAIL_PREFIX = "queue:detail:";
 
     @Resource
-    private RedisTemplate<String, String> redisTemplate;
+    private StringRedisTemplate stringRedisTemplate;
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void insertQueue(ExecutionQueue queue, List<ExecutionQueueDetail> queues) {
         // 保存队列信息
-        redisTemplate.opsForValue().setIfAbsent(QUEUE_PREFIX + queue.getQueueId(), JSON.toJSONString(queue), 1, TimeUnit.DAYS);
+        stringRedisTemplate.opsForValue().setIfAbsent(QUEUE_PREFIX + queue.getQueueId(), JSON.toJSONString(queue), 1, TimeUnit.DAYS);
         // 保存队列详情信息
-        queues.forEach(n -> redisTemplate.opsForList().rightPush(QUEUE_DETAIL_PREFIX + queue.getQueueId(), JSON.toJSONString(n)));
+        List<String> queueStrItems = queues.stream().map(JSON::toJSONString).toList();
+        stringRedisTemplate.opsForList().rightPushAll(QUEUE_DETAIL_PREFIX + queue.getQueueId(), queueStrItems);
+        stringRedisTemplate.expire(QUEUE_DETAIL_PREFIX + queue.getQueueId(), 1, TimeUnit.DAYS);
+    }
+
+    public void insertQueue(ExecutionQueue queue) {
+        // 保存队列信息
+        stringRedisTemplate.opsForValue().setIfAbsent(QUEUE_PREFIX + queue.getQueueId(), JSON.toJSONString(queue), 1, TimeUnit.DAYS);
+    }
+
+    public void insertQueueDetail(String queueId, List<ExecutionQueueDetail> queueDetails) {
+        // 保存队列详情信息
+        List<String> queueStrItems = queueDetails.stream().map(JSON::toJSONString).toList();
+        stringRedisTemplate.opsForList().rightPushAll(QUEUE_DETAIL_PREFIX + queueId, queueStrItems);
+        stringRedisTemplate.expire(QUEUE_DETAIL_PREFIX + queueId, 1, TimeUnit.DAYS);
     }
 
     /**
      * 获取下一个节点
      */
-    public ExecutionQueueDetail getNextDetail(String queueId) throws Exception {
+    public ExecutionQueueDetail getNextDetail(String queueId) {
         String queueKey = QUEUE_DETAIL_PREFIX + queueId;
-        ListOperations<String, String> listOps = redisTemplate.opsForList();
+        ListOperations<String, String> listOps = stringRedisTemplate.opsForList();
         String queueDetail = listOps.leftPop(queueKey);
-        if (StringUtils.isBlank(queueDetail)) {
-            // 重试3次获取
-            for (int i = 0; i < 3; i++) {
-                queueDetail = redisTemplate.opsForList().leftPop(queueKey);
-                if (StringUtils.isNotBlank(queueDetail)) {
-                    break;
-                }
-                Thread.sleep(1000);
-            }
-        }
-
         if (StringUtils.isNotBlank(queueDetail)) {
             Long size = size(queueId);
             if (size == null || size == 0) {
@@ -66,8 +69,8 @@ public class ApiExecutionQueueService {
     }
 
     public void deleteQueue(String queueId) {
-        redisTemplate.delete(QUEUE_DETAIL_PREFIX + queueId);
-        redisTemplate.delete(QUEUE_PREFIX + queueId);
+        stringRedisTemplate.delete(QUEUE_DETAIL_PREFIX + queueId);
+        stringRedisTemplate.delete(QUEUE_PREFIX + queueId);
     }
 
     /**
@@ -76,7 +79,7 @@ public class ApiExecutionQueueService {
     public List<ExecutionQueueDetail> getDetails(String queueId) {
         String queueKey = QUEUE_DETAIL_PREFIX + queueId;
         List<ExecutionQueueDetail> details = new LinkedList<>();
-        ListOperations<String, String> listOps = redisTemplate.opsForList();
+        ListOperations<String, String> listOps = stringRedisTemplate.opsForList();
         Long listSize = listOps.size(queueKey);
         if (listSize == null) {
             return details;
@@ -94,7 +97,7 @@ public class ApiExecutionQueueService {
      * 获取队列信息
      */
     public ExecutionQueue getQueue(String queueId) {
-        String queue = redisTemplate.opsForValue().get(QUEUE_PREFIX + queueId);
+        String queue = stringRedisTemplate.opsForValue().get(QUEUE_PREFIX + queueId);
         if (StringUtils.isNotBlank(queue)) {
             return JSON.parseObject(queue, ExecutionQueue.class);
         }
@@ -102,7 +105,7 @@ public class ApiExecutionQueueService {
     }
 
     public Long size(String queueId) {
-        ListOperations<String, String> listOps = redisTemplate.opsForList();
+        ListOperations<String, String> listOps = stringRedisTemplate.opsForList();
 
         String queueKey = QUEUE_DETAIL_PREFIX + queueId;
         return listOps.size(queueKey);

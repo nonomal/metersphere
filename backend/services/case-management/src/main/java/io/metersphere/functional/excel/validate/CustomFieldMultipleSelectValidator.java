@@ -4,6 +4,7 @@ package io.metersphere.functional.excel.validate;
 import io.metersphere.functional.excel.exception.CustomFieldValidateException;
 import io.metersphere.sdk.util.JSON;
 import io.metersphere.sdk.util.Translator;
+import io.metersphere.system.domain.CustomFieldOption;
 import io.metersphere.system.dto.sdk.TemplateCustomFieldDTO;
 import org.apache.commons.lang3.StringUtils;
 
@@ -11,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * @author wx
@@ -48,4 +50,21 @@ public class CustomFieldMultipleSelectValidator extends CustomFieldSelectValidat
         }
         return JSON.toJSONString(keyOrValues);
     }
+
+    @Override
+    public Object parse2Value(String keyOrValuesStr, TemplateCustomFieldDTO customField) {
+        if (StringUtils.isBlank(keyOrValuesStr) || StringUtils.equals(keyOrValuesStr, "[]")) {
+            return StringUtils.EMPTY;
+        }
+        List list = JSON.parseArray(keyOrValuesStr);
+        List<String> result = new ArrayList<>();
+        Map<String, String> optionValueMap = customField.getOptions().stream().collect(Collectors.toMap(CustomFieldOption::getValue, CustomFieldOption::getText));
+        list.forEach(item -> {
+            if (optionValueMap.containsKey(item)) {
+                result.add(optionValueMap.get(item));
+            }
+        });
+        return String.join(",", JSON.parseArray(JSON.toJSONString(result)));
+    }
+
 }

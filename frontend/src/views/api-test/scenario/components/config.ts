@@ -1,4 +1,6 @@
-import { Scenario, ScenarioStepConfig } from '@/models/apiTest/scenario';
+import { useI18n } from '@/hooks/useI18n';
+
+import { type CsvVariable, Scenario, ScenarioStepConfig } from '@/models/apiTest/scenario';
 import {
   ApiScenarioStatus,
   RequestAssertionCondition,
@@ -6,6 +8,15 @@ import {
   ScenarioStepLoopTypeEnum,
   WhileConditionType,
 } from '@/enums/apiEnum';
+
+const { t } = useI18n();
+
+// 场景状态选项
+export const scenarioStatusOptions = [
+  { label: t('apiTestManagement.processing'), value: ApiScenarioStatus.UNDERWAY },
+  { label: t('apiTestManagement.deprecate'), value: ApiScenarioStatus.DEPRECATED },
+  { label: t('apiTestManagement.done'), value: ApiScenarioStatus.COMPLETED },
+];
 
 // 循环控制器
 export const defaultLoopController = {
@@ -180,3 +191,38 @@ export const conditionOptions = [
     label: 'apiScenario.notNull',
   },
 ];
+
+// 场景-常规参数默认值
+export const defaultNormalParamItem = {
+  key: '',
+  paramType: 'CONSTANT',
+  value: '',
+  description: '',
+  tags: [],
+  enable: true,
+};
+
+// 场景-csv参数默认值
+export const defaultCsvParamItem: CsvVariable = {
+  id: '',
+  scenarioId: '',
+  name: '',
+  scope: 'SCENARIO',
+  enable: false,
+  encoding: 'UTF-8',
+  random: false,
+  variableNames: '',
+  ignoreFirstLine: false,
+  delimiter: ',',
+  allowQuotedData: false,
+  recycleOnEof: true,
+  stopThreadOnEof: false,
+  settingVisible: false,
+  file: {
+    fileId: '',
+    fileName: '',
+    local: false,
+    fileAlias: '',
+    delete: false,
+  },
+};

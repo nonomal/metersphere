@@ -1,3 +1,5 @@
+import type { MinderJsonNode } from '@/components/pure/ms-minder-editor/props';
+
 import MSR from '@/api/http/index';
 import {
   AddReviewModuleUrl,
@@ -13,15 +15,20 @@ import {
   EditReviewUrl,
   FollowReviewUrl,
   GetAssociatedIdsUrl,
+  GetCasePlanCollectionMinderUrl,
+  GetCasePlanMinderUrl,
   getCaseReviewerListUrl,
   GetCaseReviewHistoryListUrl,
+  GetCaseReviewMinderUrl,
   GetReviewDetailCasePageUrl,
   GetReviewDetailModuleCountUrl,
   GetReviewDetailModuleTreeUrl,
   GetReviewDetailUrl,
+  GetReviewerAndStatusUrl,
   GetReviewListUrl,
   GetReviewModulesUrl,
   GetReviewUsersUrl,
+  MinderReviewCaseUrl,
   MoveReviewModuleUrl,
   MoveReviewUrl,
   ReviewModuleCountUrl,
@@ -37,14 +44,18 @@ import {
   BatchChangeReviewerParams,
   BatchMoveReviewParams,
   BatchReviewCaseParams,
+  CasePlanMinderParams,
   CaseReviewFunctionalCaseUserItem,
+  CaseReviewMinderParams,
   CommitReviewResultParams,
   CopyReviewParams,
   CopyReviewResponse,
   FollowReviewParams,
+  MinderReviewCaseParams,
   Review,
   ReviewCaseItem,
   ReviewDetailCaseListQueryParams,
+  ReviewerAndStatus,
   ReviewHistoryItem,
   ReviewItem,
   ReviewListQueryParams,
@@ -201,4 +212,27 @@ export const saveCaseReviewResult = (data: CommitReviewResultParams) => {
 // 评审详情-获取用例的评审人
 export const getCaseReviewerList = (reviewId: string, caseId: string) => {
   return MSR.get<CaseReviewFunctionalCaseUserItem[]>({ url: `${getCaseReviewerListUrl}/${reviewId}/${caseId}` });
+};
+
+// 获取评审脑图
+export function getCaseReviewMinder(data: CaseReviewMinderParams) {
+  return MSR.post<CommonList<MinderJsonNode>>({ url: `${GetCaseReviewMinderUrl}`, data });
+}
+
+// 获取测试计划用例脑图
+export function getCasePlanMinder(treeType: 'MODULE' | 'COLLECTION', data: CasePlanMinderParams) {
+  if (treeType === 'COLLECTION') {
+    return MSR.post<CommonList<MinderJsonNode>>({ url: `${GetCasePlanCollectionMinderUrl}`, data });
+  }
+  return MSR.post<CommonList<MinderJsonNode>>({ url: `${GetCasePlanMinderUrl}`, data });
+}
+
+// 脑图-获取用例评审最终结果和每个评审人最终的评审结果
+export const getReviewerAndStatus = (reviewId: string, caseId: string) => {
+  return MSR.get<ReviewerAndStatus>({ url: `${GetReviewerAndStatusUrl}/${reviewId}/${caseId}` });
+};
+
+// 评审详情-脑图评审用例
+export const minderReviewCase = (data: MinderReviewCaseParams) => {
+  return MSR.post({ url: MinderReviewCaseUrl, data });
 };

@@ -1,14 +1,15 @@
 <template>
   <div class="flex items-center justify-start">
-    <MsIcon :type="getExecutionResult().icon" :class="getExecutionResult()?.color" size="14" />
+    <MsIcon :type="getExecutionResult().icon || '-'" :class="getExecutionResult()?.color" size="14" />
     <span class="ml-1">{{ t(getExecutionResult().label) }}</span>
     <a-tooltip v-if="props.scriptIdentifier" :content="getMsg()">
       <MsTag
         class="ml-2"
+        :tooltip-disabled="true"
         :self-style="{
           border: `1px solid ${methodColor}`,
           color: methodColor,
-          backgroundColor: 'white',
+          backgroundColor: 'var(--color-text-fff)',
         }"
       >
         {{ t('report.detail.script.error') }}
@@ -39,83 +40,26 @@
 
   // TODO: Record<string,any>
   const iconTypeStatus: Record<string, any> = {
-    [ReportEnum.API_REPORT]: {
-      SUCCESS: {
-        icon: 'icon-icon_succeed_colorful',
-        label: 'report.successful',
-      },
-      ERROR: {
-        icon: 'icon-icon_close_colorful',
-        label: 'report.failure',
-      },
-      FAKE_ERROR: {
-        icon: 'icon-icon_warning_colorful',
-        label: 'report.fake.error',
-      },
-      STOPPED: {
-        icon: 'icon-icon_block_filled',
-        label: 'report.stopped',
-        color: '!text-[var(--color-text-input-border)]',
-      },
-      RUNNING: {
-        icon: 'icon-icon_testing',
-        label: 'report.status.running',
-        color: '!text-[rgb(var(--link-6))]',
-      },
-      // RERUNNING: {
-      //   icon: 'icon-icon_testing',
-      //   label: 'report.status.rerunning',
-      //   color: '!text-[rgb(var(--link-6))]',
-      // },
-      PENDING: {
-        icon: 'icon-icon_block_filled',
-        label: 'report.status.pending',
-        color: '!text-[var(--color-text-input-border)]',
-      },
-      null: {
-        icon: 'icon-icon_block_filled',
-        label: 'report.status.pending',
-        color: '!text-[var(--color-text-input-border)]',
-      },
+    SUCCESS: {
+      icon: 'icon-icon_succeed_colorful',
+      label: 'common.success',
     },
-    [ReportEnum.API_SCENARIO_REPORT]: {
-      SUCCESS: {
-        icon: 'icon-icon_succeed_colorful',
-        label: 'report.successful',
-      },
-      ERROR: {
-        icon: 'icon-icon_close_colorful',
-        label: 'report.failure',
-      },
-      FAKE_ERROR: {
-        icon: 'icon-icon_warning_colorful',
-        label: 'report.fake.error',
-      },
-      STOPPED: {
-        icon: 'icon-icon_block_filled',
-        label: 'report.stopped',
-        color: '!text-[var(--color-text-input-border)]',
-      },
-      RUNNING: {
-        icon: 'icon-icon_testing',
-        label: 'report.status.running',
-        color: '!text-[rgb(var(--link-6))]',
-      },
-      // RERUNNING: {
-      //   icon: 'icon-icon_testing',
-      //   label: 'report.status.rerunning',
-      //   color: '!text-[rgb(var(--link-6))]',
-      // },
-      PENDING: {
-        icon: 'icon-icon_wait',
-        label: 'report.status.pending',
-        color: '!text-[var(--color-text-input-border)]',
-      },
+    ERROR: {
+      icon: 'icon-icon_close_colorful',
+      label: 'common.fail',
+    },
+    FAKE_ERROR: {
+      icon: 'icon-icon_warning_colorful',
+      label: 'common.fakeError',
+    },
+    DEFAULT: {
+      label: '-',
+      color: '!text-[var(--color-text-input-border)]',
     },
   };
 
   function getExecutionResult(): IconType {
-    return iconTypeStatus[props.moduleType]?.[props.status];
+    return iconTypeStatus[props.status] ? iconTypeStatus[props.status] : iconTypeStatus.DEFAULT;
   }
   const methodColor = 'rgb(var(--warning-7))';
 

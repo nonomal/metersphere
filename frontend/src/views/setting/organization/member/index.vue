@@ -7,8 +7,17 @@
           class="mr-3"
           type="primary"
           @click="addOrEditMember('add')"
-          >{{ t('organization.member.addMember') }}</a-button
         >
+          {{ t('organization.member.addMember') }}
+        </a-button>
+        <a-button
+          v-permission="['ORGANIZATION_MEMBER:READ+INVITE']"
+          type="outline"
+          class="mr-3"
+          @click="inviteVisible = true"
+        >
+          {{ t('system.user.emailInvite') }}
+        </a-button>
       </div>
       <a-input-search
         v-model="keyword"
@@ -33,23 +42,32 @@
           v-if="!record.showProjectSelect"
           :tag-list="record.projectIdNameMap || []"
           theme="outline"
+          allow-edit
+          show-table
           @click="changeUserOrProject(record, 'project')"
         >
         </MsTagGroup>
-        <a-select
+        <MsSelect
           v-else
-          v-model="record.selectProjectList"
-          multiple
-          :max-tag-count="2"
-          size="small"
-          class="w-[260px]"
-          :popup-visible="record.showProjectSelect"
-          @change="(value) => selectUserOrProject(value, record, 'project')"
-          @popup-visible-change="visibleChange($event, record, 'project')"
-        >
-          <a-option v-for="item of projectOptions" :key="item.id" :value="item.id">{{ item.name }}</a-option>
-        </a-select>
-        <span v-if="(record.projectIdNameMap || []).length === 0">-</span>
+          v-model:model-value="record.selectProjectList"
+          v-model:loading="dialogLoading"
+          :max-tag-count="1"
+          class="w-full"
+          :options="projectOptions"
+          :search-keys="['name']"
+          value-key="id"
+          label-key="name"
+          allow-search
+          :multiple="true"
+          :placeholder="t('common.pleaseSelect')"
+          :fallback-option="
+              (val) => ({
+                label: projectOptions.find((e) => e.id === val)?.name || (val as string),
+                value: val,
+              })
+            "
+          @popup-visible-change="(value) => visibleChange(value, record, 'project')"
+        />
       </template>
       <template #userRoleIdNameMap="{ record }">
         <MsTagGroup
@@ -57,22 +75,33 @@
           :tag-list="record.userRoleIdNameMap || []"
           type="primary"
           theme="outline"
+          allow-edit
+          show-table
           @click="changeUserOrProject(record, 'user')"
         >
         </MsTagGroup>
-        <a-select
+        <MsSelect
           v-else
-          v-model="record.selectUserList"
-          multiple
-          :max-tag-count="2"
-          class="w-[260px]"
-          :popup-visible="record.showUserSelect"
-          @change="(value) => selectUserOrProject(value, record, 'user')"
+          v-model:model-value="record.selectUserList"
+          v-model:loading="dialogLoading"
+          :max-tag-count="1"
+          class="w-full"
+          :options="userGroupOptions"
+          :search-keys="['name']"
+          value-key="id"
+          label-key="name"
+          allow-search
+          :multiple="true"
+          :placeholder="t('common.pleaseSelect')"
+          :at-least-one="true"
+          :fallback-option="
+              (val) => ({
+                label: userGroupOptions.find((e) => e.id === val)?.name || (val as string),
+                value: val,
+              })
+            "
           @popup-visible-change="(value) => visibleChange(value, record, 'user')"
-        >
-          <a-option v-for="item of userGroupOptions" :key="item.id" :value="item.id">{{ item.name }}</a-option>
-        </a-select>
-        <span v-if="(record.userRoleIdNameMap || []).length === 0">-</span>
+        />
       </template>
       <template #enable="{ record }">
         <div v-if="record.enable" class="flex items-center">
@@ -85,9 +114,9 @@
         </div>
       </template>
       <template #action="{ record }">
-        <MsButton v-permission="['ORGANIZATION_MEMBER:READ+UPDATE']" @click="addOrEditMember('edit', record)">{{
-          t('organization.member.edit')
-        }}</MsButton>
+        <MsButton v-permission="['ORGANIZATION_MEMBER:READ+UPDATE']" @click="addOrEditMember('edit', record)">
+          {{ t('organization.member.edit') }}
+        </MsButton>
         <MsRemoveButton
           v-permission="['ORGANIZATION_MEMBER:READ+DELETE']"
           position="br"
@@ -114,6 +143,11 @@
     @add-project="addProjectOrAddUserGroup"
     @add-user-group="addProjectOrAddUserGroup"
   />
+  <inviteModal
+    v-model:visible="inviteVisible"
+    :user-group-options="userGroupOptions"
+    range="organization"
+  ></inviteModal>
 </template>
 
 <script setup lang="ts">
@@ -132,7 +166,9 @@
   import MsTagGroup from '@/components/pure/ms-tag/ms-tag-group.vue';
   import MSBatchModal from '@/components/business/ms-batch-modal/index.vue';
   import MsRemoveButton from '@/components/business/ms-remove-button/MsRemoveButton.vue';
+  import MsSelect from '@/components/business/ms-select';
   import AddMemberModal from './components/addMemberModal.vue';
+  import inviteModal from '@/views/setting/system/components/inviteModal.vue';
 
   import {
     addOrUpdate,
@@ -149,7 +185,7 @@
   import { hasAnyPermission } from '@/utils/permission';
 
   import type { TableQueryParams } from '@/models/common';
-  import type { AddOrUpdateMemberModel, BatchAddProjectModel, LinkList, MemberItem } from '@/models/setting/member';
+  import type { AddOrUpdateMemberModel, LinkList, MemberItem } from '@/models/setting/member';
   import { TableKeyEnum } from '@/enums/tableEnum';
 
   const tableStore = useTableStore();
@@ -162,21 +198,28 @@
   );
   const columns: MsTableColumn = [
     {
-      title: 'organization.member.tableColunmEmail',
+      title: 'system.user.userName',
       dataIndex: 'email',
-      width: 200,
-      showInTable: true,
       showTooltip: true,
-      ellipsis: true,
       sortIndex: 0,
-      showDrag: false,
+      width: 200,
     },
     {
       title: 'organization.member.tableColunmName',
       dataIndex: 'name',
       showInTable: true,
       showTooltip: true,
-      ellipsis: true,
+      showDrag: false,
+      sortIndex: 1,
+      width: 300,
+    },
+    {
+      title: 'organization.member.tableColunmEmail',
+      dataIndex: 'email',
+      width: 150,
+      showInTable: true,
+      showTooltip: true,
+      sortIndex: 2,
       showDrag: false,
     },
     {
@@ -185,7 +228,6 @@
       showInTable: true,
       width: 200,
       showTooltip: true,
-      ellipsis: true,
       showDrag: true,
     },
     {
@@ -194,20 +236,25 @@
       dataIndex: 'projectIdNameMap',
       showInTable: true,
       showDrag: true,
+      isTag: true,
+      allowEditTag: true,
     },
     {
       title: 'organization.member.tableColunmUsergroup',
       slotName: 'userRoleIdNameMap',
       dataIndex: 'userRoleIdNameMap',
       showInTable: true,
+      isTag: true,
       showDrag: true,
+      allowEditTag: true,
+      width: 300,
     },
     {
       title: 'organization.member.tableColunmStatus',
       slotName: 'enable',
       dataIndex: 'enable',
       showInTable: true,
-      width: 200,
+      width: 100,
       showDrag: true,
     },
     {
@@ -240,7 +287,7 @@
     getMemberList,
     {
       tableKey: TableKeyEnum.ORGANIZATION_MEMBER,
-      scroll: { x: 1600 },
+      scroll: { x: '100%' },
       selectable: hasAnyPermission(['ORGANIZATION_MEMBER:READ+ADD', 'ORGANIZATION_MEMBER:READ+UPDATE']),
       heightUsed: 288,
       showSetting: true,
@@ -254,6 +301,7 @@
     }
   );
   const keyword = ref('');
+  const dialogLoading = ref(false);
   const tableSelected = ref<(string | number)[]>([]);
   // 跨页多选
   const selectedData = ref<string[] | undefined>([]);
@@ -286,6 +334,7 @@
       initData();
       resetSelector();
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       deleteLoading.value = false;
@@ -362,6 +411,7 @@
   // 列表编辑更新用户组和项目
   const updateUserOrProject = async (record: MemberItem) => {
     try {
+      dialogLoading.value = true;
       const params = {
         organizationId: lastOrganizationId.value,
         projectIds: [...record.selectProjectList],
@@ -373,10 +423,12 @@
       initData();
       resetSelector();
     } catch (error) {
+      // eslint-disable-next-line no-console
       console.log(error);
     } finally {
       record.showUserSelect = false;
       record.showProjectSelect = false;
+      dialogLoading.value = false;
     }
   };
   // 编辑模式和下拉选择切换
@@ -396,17 +448,6 @@
     }
     record.selectProjectList = (record.projectIdNameMap || []).map((item) => item.id);
     record.selectUserList = (record.userRoleIdNameMap || []).map((item) => item.id);
-  };
-  // 用户和项目选择改变的回调
-  const selectUserOrProject = (value: any, record: MemberItem, type: string) => {
-    if (!hasAnyPermission(['ORGANIZATION_MEMBER:READ+UPDATE'])) {
-      return;
-    }
-    if (type === 'project') {
-      record.selectProjectList = value;
-    } else {
-      record.selectUserList = value;
-    }
   };
   // 面板切换的回调
   const visibleChange = (visible: boolean, record: MemberItem, type: string) => {
@@ -440,6 +481,8 @@
       }
     }
   };
+
+  const inviteVisible = ref(false);
 
   onBeforeMount(() => {
     initData();

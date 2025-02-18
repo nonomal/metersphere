@@ -26,7 +26,7 @@
           {{ t('common.confirmDelete') }}
         </a-button>
         <a-button
-          v-if="props.record?.status === 'COMPLETED'"
+          v-if="showArchive"
           :loading="confirmLoading"
           class="ml-3"
           type="primary"
@@ -48,14 +48,15 @@
   import { useI18n } from '@/hooks/useI18n';
   import { characterLimit } from '@/utils';
 
-  import type { TestPlanDetail, TestPlanItem } from '@/models/testPlan/testPlan';
+  import type { CreateTask, TestPlanDetail, TestPlanItem } from '@/models/testPlan/testPlan';
+  import { testPlanTypeEnum } from '@/enums/testPlanEnum';
 
   const { t } = useI18n();
 
   const props = defineProps<{
     visible: boolean;
-    // isScheduled: boolean; // TODO 这个版本不做有无定时任务区分
     record: TestPlanItem | TestPlanDetail | undefined; // 表record
+    scheduleConfig?: CreateTask;
   }>();
 
   const emit = defineEmits<{
@@ -71,16 +72,16 @@
 
   const confirmLoading = ref<boolean>(false);
 
+  // 计划组删除
   async function confirmHandler(isDelete: boolean) {
     try {
       confirmLoading.value = true;
       if (isDelete) {
         await deletePlan(props.record?.id);
-        emit('success', true);
       } else {
         await archivedPlan(props.record?.id);
-        emit('success', false);
       }
+      emit('success', isDelete);
       Message.success(isDelete ? t('common.deleteSuccess') : t('common.batchArchiveSuccess'));
       showModalVisible.value = false;
     } catch (error) {
@@ -91,16 +92,31 @@
   }
 
   const contentTip = computed(() => {
+    let deleteMessage;
+    const planType =
+      props.record?.type === testPlanTypeEnum.GROUP
+        ? `${t('testPlan.testPlanIndex.testPlanGroup')}`
+        : `${t('testPlan.testPlanIndex.plan')}`;
+
     switch (props.record && props.record.status) {
       case 'ARCHIVED':
-        return t('testPlan.testPlanIndex.deleteArchivedPlan');
+        deleteMessage = t('testPlan.testPlanIndex.deleteArchivedPlan');
+        break;
       case 'UNDERWAY':
-        return t('testPlan.testPlanIndex.deleteRunningPlan');
+        deleteMessage = t('testPlan.testPlanIndex.deleteRunningPlan');
+        break;
       case 'COMPLETED':
-        return t('testPlan.testPlanIndex.deleteCompletedPlan');
+        deleteMessage = t('testPlan.testPlanGroup.planGroupDeleteContent');
+        break;
       default:
-        return t('testPlan.testPlanIndex.deletePendingPlan');
+        deleteMessage = t('testPlan.testPlanIndex.deletePendingPlan');
     }
+    const scheduledMessage = props.scheduleConfig ? t('testPlan.testPlanIndex.scheduledTask') : '';
+    return `${planType}${deleteMessage}${scheduledMessage}${t('testPlan.testPlanIndex.operateWithCaution')}`;
+  });
+
+  const showArchive = computed(() => {
+    return props.record?.status === 'COMPLETED' && props.record.groupId && props.record.groupId === 'NONE';
   });
 </script>
 

@@ -1,7 +1,7 @@
 <template>
-  <MsBaseTable v-bind="propsRes" v-on="propsEvent">
+  <MsBaseTable v-bind="propsRes" :row-class="getRowClass" v-on="propsEvent" @enable-change="enableChange">
     <template #revokeDelete="{ record }">
-      <a-tooltip background-color="#FFFFFF">
+      <a-tooltip class="ms-tooltip-white">
         <template #content>
           <div class="flex flex-row">
             <span class="text-[var(--color-text-1)]">{{
@@ -15,7 +15,7 @@
             >
           </div>
         </template>
-        <MsIcon v-if="record.deleted" type="icon-icon_alarm_clock" class="ml-[4px] text-[rgb(var(--danger-6))]" />
+        <MsIcon v-if="record.deleted" type="icon-icon_delete_countdown" class="ml-[4px] text-[rgb(var(--danger-6))]" />
       </a-tooltip>
     </template>
     <template #creator="{ record }">
@@ -35,43 +35,41 @@
         v-if="hasAnyPermission(['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE'])"
         class="primary-color"
         @click="showProjectDrawer(record)"
-        >{{ record.projectCount }}</span
       >
+        {{ record.projectCount }}
+      </span>
       <span v-else>{{ record.projectCount }}</span>
     </template>
     <template #operation="{ record }">
       <template v-if="record.deleted">
-        <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+RECOVER']" @click="handleRevokeDelete(record)">{{
-          t('common.revokeDelete')
-        }}</MsButton>
+        <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+RECOVER']" @click="handleRevokeDelete(record)">
+          {{ t('common.revokeDelete') }}
+        </MsButton>
       </template>
       <template v-else-if="!record.enable">
-        <MsButton
-          v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE']"
-          @click="handleEnableOrDisableOrg(record)"
-          >{{ t('common.enable') }}</MsButton
-        >
-        <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+DELETE']" @click="handleDelete(record)">{{
-          t('common.delete')
-        }}</MsButton>
+        <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+DELETE']" @click="handleDelete(record)">
+          {{ t('common.delete') }}
+        </MsButton>
       </template>
       <template v-else>
-        <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE']" @click="showOrganizationModal(record)">{{
-          t('common.edit')
-        }}</MsButton>
-        <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+ADD_MEMBER']" @click="showAddUserModal(record)">{{
-          t('system.organization.addMember')
-        }}</MsButton>
+        <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE']" @click="showOrganizationModal(record)">
+          {{ t('common.edit') }}
+        </MsButton>
+        <MsButton v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+ADD_MEMBER']" @click="showAddUserModal(record)">
+          {{ t('system.organization.addMember') }}
+        </MsButton>
         <MsButton
-          v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE']"
-          @click="handleEnableOrDisableOrg(record, false)"
-          >{{ t('common.end') }}</MsButton
+          v-if="record.switchAndEnter && licenseStore.hasLicense()"
+          :disabled="appStore.currentOrgId === record.id"
+          @click="enterOrganization(record.id)"
         >
+          {{ t('system.project.enterOrganization') }}
+        </MsButton>
         <MsTableMoreAction
           v-permission="['SYSTEM_ORGANIZATION_PROJECT:READ+DELETE']"
           :list="tableActions"
           @select="handleMoreAction($event, record)"
-        ></MsTableMoreAction>
+        />
       </template>
     </template>
   </MsBaseTable>
@@ -81,12 +79,7 @@
     :visible="orgVisible"
     @cancel="handleAddOrgModalCancel"
   />
-  <AddUserModal
-    :organization-id="currentOrganizationId"
-    :visible="userVisible"
-    @cancel="handleAddUserModalCancel"
-    @submit="fetchData"
-  />
+  <AddUserModal v-model:visible="userVisible" :organization-id="currentOrganizationId" @submit="fetchData" />
   <ProjectDrawer v-bind="currentProjectDrawer" @cancel="handleProjectDrawerCancel" />
   <UserDrawer v-bind="currentUserDrawer" @request-fetch-data="fetchData" @cancel="handleUserDrawerCancel" />
 </template>
@@ -118,11 +111,19 @@
   import { useI18n } from '@/hooks/useI18n';
   import useModal from '@/hooks/useModal';
   import { useTableStore } from '@/store';
+  import useAppStore from '@/store/modules/app';
+  import useLicenseStore from '@/store/modules/setting/license';
   import { characterLimit } from '@/utils';
   import { hasAnyPermission } from '@/utils/permission';
 
   import { CreateOrUpdateSystemOrgParams, OrgProjectTableItem } from '@/models/setting/system/orgAndProject';
   import { ColumnEditTypeEnum, TableKeyEnum } from '@/enums/tableEnum';
+
+  import { enterOrganization } from '@/views/setting/utils';
+
+  const licenseStore = useLicenseStore();
+
+  const appStore = useAppStore();
 
   export interface SystemOrganizationProps {
     keyword: string;
@@ -144,6 +145,15 @@
       'SYSTEM_ORGANIZATION_PROJECT:READ+DELETE',
     ])
   );
+
+  const operationWidth = computed(() => {
+    if (hasOperationPermission.value) {
+      return 250;
+    }
+    if (hasAnyPermission(['SYSTEM_ORGANIZATION_PROJECT:READ'])) {
+      return 100;
+    }
+  });
 
   const organizationColumns: MsTableColumn = [
     {
@@ -173,9 +183,10 @@
       title: 'system.organization.status',
       dataIndex: 'enable',
       disableTitle: 'common.end',
+      permission: ['SYSTEM_ORGANIZATION_PROJECT:READ+UPDATE'],
     },
     {
-      title: 'system.organization.description',
+      title: 'common.desc',
       dataIndex: 'description',
       showTooltip: true,
     },
@@ -183,7 +194,7 @@
       title: 'system.organization.creator',
       slotName: 'creator',
       dataIndex: 'createUser',
-      width: 125,
+      width: 200,
       showTooltip: false,
     },
     {
@@ -200,7 +211,7 @@
       slotName: 'operation',
       dataIndex: 'operation',
       fixed: 'right',
-      width: hasOperationPermission.value ? 230 : 50,
+      width: operationWidth.value,
     },
   ];
 
@@ -252,10 +263,10 @@
     },
   ];
 
-  const handleEnableOrDisableOrg = async (record: any, isEnable = true) => {
+  const handleEnableOrDisableOrg = async (record: OrgProjectTableItem, isEnable = true) => {
     const title = isEnable ? t('system.organization.enableTitle') : t('system.organization.endTitle');
     const content = isEnable ? t('system.organization.enableContent') : t('system.organization.endContent');
-    const okText = isEnable ? t('common.confirmStart') : t('common.confirmEnd');
+    const okText = isEnable ? t('common.confirmStart') : t('common.confirmClose');
     openModal({
       type: 'info',
       cancelText: t('common.cancel'),
@@ -276,7 +287,11 @@
     });
   };
 
-  const showOrganizationModal = (record: any) => {
+  function enableChange(record: OrgProjectTableItem, newValue: string | number | boolean) {
+    handleEnableOrDisableOrg(record, newValue as boolean);
+  }
+
+  const showOrganizationModal = (record: OrgProjectTableItem) => {
     currentOrganizationId.value = record.id;
     orgVisible.value = true;
     currentUpdateOrganization.value = {
@@ -287,7 +302,7 @@
     };
   };
 
-  const showAddUserModal = (record: any) => {
+  const showAddUserModal = (record: OrgProjectTableItem) => {
     currentOrganizationId.value = record.id;
     userVisible.value = true;
   };
@@ -310,13 +325,15 @@
     currentUserDrawer.currentName = record.name;
   };
 
+  function getRowClass(record: TableData) {
+    return record.id === currentUserDrawer.organizationId ? 'selected-row-class' : '';
+  }
+
   const handleUserDrawerCancel = () => {
     currentUserDrawer.visible = false;
+    currentUserDrawer.organizationId = '';
   };
 
-  const handleAddUserModalCancel = () => {
-    userVisible.value = false;
-  };
   const handleAddOrgModalCancel = (shouldSearch: boolean) => {
     orgVisible.value = false;
     if (shouldSearch) {
